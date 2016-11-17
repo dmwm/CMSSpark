@@ -32,6 +32,7 @@ from pyspark.sql import HiveContext
 from pyspark.sql import DataFrame
 from pyspark.sql.window import Window
 from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField, StringType, BooleanType, LongType
+from pyspark.sql import functions as F
 from pyspark.sql.functions import udf, from_unixtime, date_format, regexp_extract, when, lit, lag, lead, coalesce, sum, rowNumber
 
 class OptionParser():
@@ -309,13 +310,18 @@ def run(dpath, bpath, fpath, verbose=None, yarn=None):
     jtype = 'inner' # 'left_outer' # 'inner'
 #    dbdf = ddf.join(bdf, ddf.dataset_id == bdf.dataset_id, how=jtype)
 #    ndf = dbdf.join(dbdf, [dbdf.block_id == fdf.block_id, dbdf.dataset_id == fdf.dataset_id], how=jtype)
-    ndf = fdf.join(ddf, fdf.f_dataset_id == ddf.d_dataset_id, how=jtype).select('d_dataset', 'd_last_modification_date', 'f_event_count').distinct().where('d_dataset like "%/RAW"')
-#    print('ndf size', ndf.count())
-#    for row in ndf.head(5):
-#        print(row)
-    rdf = ndf.groupBy('d_dataset').sum('f_event_count').collect()
+    ndf = fdf.join(ddf, fdf.f_dataset_id == ddf.d_dataset_id, how=jtype)\
+             .select('d_dataset', 'd_last_modification_date', 'f_event_count','f_file_size')\
+             .distinct().where('d_dataset like "%/RAW"')
+    rdf = ndf.groupBy('d_dataset')\
+            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_last_modification_date':'max'})\
+            .withColumnRenamed('sum(f_event_count)', 'evt')\
+            .withColumnRenamed('sum(f_file_size)', 'size')\
+            .withColumnRenamed('max(d_last_modification_date)', 'date')\
+            .collect()
+    print("events,mod_time,size,name")
     for row in rdf:
-        print('%s,%s' % (row['sum(f_event_count)'], row['d_dataset']))
+        print('%s,%s,%s,%s' % (row['evt'], row['date'], row['size'], row['d_dataset']))
 
     ctx.stop()
     if  verbose:
