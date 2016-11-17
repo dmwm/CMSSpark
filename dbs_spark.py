@@ -313,7 +313,10 @@ def run(dpath, bpath, fpath, verbose=None, yarn=None):
     print('ndf size', ndf.count())
     for row in ndf.head(5):
         print(row)
-    tot = ndf.groupBy('d_dataset').sum('f_event_count').collect()
+    rdf = ndf.groupBy('d_dataset').sum('f_event_count').alias('tot_evt')
+    tot = 0
+    for row in rdf:
+        tot += rdf['tot_evt']
     print("total size:", tot)
 
     ctx.stop()
