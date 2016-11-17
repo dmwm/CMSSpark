@@ -310,14 +310,12 @@ def run(dpath, bpath, fpath, verbose=None, yarn=None):
 #    dbdf = ddf.join(bdf, ddf.dataset_id == bdf.dataset_id, how=jtype)
 #    ndf = dbdf.join(dbdf, [dbdf.block_id == fdf.block_id, dbdf.dataset_id == fdf.dataset_id], how=jtype)
     ndf = fdf.join(ddf, fdf.f_dataset_id == ddf.d_dataset_id, how=jtype).select('d_dataset', 'd_last_modification_date', 'f_event_count').distinct().where('d_dataset like "%/RAW"')
-    print('ndf size', ndf.count())
-    for row in ndf.head(5):
-        print(row)
-    rdf = ndf.groupBy('d_dataset').sum('f_event_count').alias('tot_evt')
-    tot = 0
+#    print('ndf size', ndf.count())
+#    for row in ndf.head(5):
+#        print(row)
+    rdf = ndf.groupBy('d_dataset').sum('f_event_count').collect()
     for row in rdf:
-        tot += rdf['tot_evt']
-    print("total size:", tot)
+        print('%s,%s' % (row['sum(f_event_count)'], row['d_dataset']))
 
     ctx.stop()
     if  verbose:
