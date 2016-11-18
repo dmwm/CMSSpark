@@ -321,7 +321,7 @@ def run(dpath, bpath, fpath, verbose=None, yarn=None):
             .collect()
     print("events,mod_time,size,name")
     for row in rdf:
-        print('%s,%s,%s,%s' % (row['evt'], row['date'], row['size'], row['d_dataset']))
+        print('%s,%s,%s,%s' % (row['d_dataset'], row['size'], row['evt'], row['date']))
 
     ctx.stop()
     if  verbose:
