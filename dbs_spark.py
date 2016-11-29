@@ -245,19 +245,29 @@ def run(dpath, bpath, fpath, verbose=None, yarn=None):
     fdf.registerTempTable('fdf')
 
     # join tables, final dataframe (ndf) is a joint table from datasets-blocks-files tables
-    jtype = 'inner' # 'left_outer' # 'inner'
+    jtype = 'outer' # 'left_outer' # 'inner'
 #    dbdf = ddf.join(bdf, ddf.dataset_id == bdf.dataset_id, how=jtype)
 #    ndf = dbdf.join(dbdf, [dbdf.block_id == fdf.block_id, dbdf.dataset_id == fdf.dataset_id], how=jtype)
+
+#    ndf = fdf.join(ddf, fdf.f_dataset_id == ddf.d_dataset_id, how=jtype)\
+#             .select('d_dataset', 'd_last_modification_date', 'f_event_count','f_file_size')\
+#             .distinct().where('d_dataset like "%/RAW"')
+#    rdf = ndf.groupBy('d_dataset')\
+#            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_last_modification_date':'max'})\
+#            .withColumnRenamed('sum(f_event_count)', 'evt')\
+#            .withColumnRenamed('sum(f_file_size)', 'size')\
+#            .withColumnRenamed('max(d_last_modification_date)', 'date')\
+#            .collect()
     ndf = fdf.join(ddf, fdf.f_dataset_id == ddf.d_dataset_id, how=jtype)\
-             .select('d_dataset', 'd_last_modification_date', 'f_event_count','f_file_size')\
-             .distinct().where('d_dataset like "%/RAW"')
+             .select('d_dataset', 'd_creation_date', 'f_event_count','f_file_size')\
+             .distinct()
     rdf = ndf.groupBy('d_dataset')\
-            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_last_modification_date':'max'})\
+            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
             .withColumnRenamed('sum(f_event_count)', 'evt')\
             .withColumnRenamed('sum(f_file_size)', 'size')\
-            .withColumnRenamed('max(d_last_modification_date)', 'date')\
+            .withColumnRenamed('max(d_creation_date)', 'date')\
             .collect()
-    print("events,mod_time,size,name")
+    print("dataset,size,evt,date")
     for row in rdf:
         print('%s,%s,%s,%s' % (row['d_dataset'], row['size'], row['evt'], row['date']))
 
