@@ -19,6 +19,7 @@ import sys
 import time
 import json
 import argparse
+from types import NoneType
 
 from pyspark import SparkContext
 from pyspark.sql import Row
@@ -45,6 +46,11 @@ class OptionParser():
         msg = "Input files location on HDFS, default %s" % fpath
         self.parser.add_argument("--fpath", action="store",
             dest="fpath", default=fpath, help=msg)
+        fout = 'dbs_datasets.csv'
+        self.parser.add_argument("--fout", action="store",
+            dest="fout", default=fout, help='Output file name, default %s' % fout)
+        self.parser.add_argument("--tier", action="store",
+            dest="tier", default="", help='Select datasets for given data-tier')
         self.parser.add_argument("--no-log4j", action="store_true",
             dest="no-log4j", default=False, help="Disable spark log4j messages")
         self.parser.add_argument("--yarn", action="store_true",
@@ -202,7 +208,7 @@ def schema_files():
             StructField("f_last_modified_by", StringType(), True)
         ])
 
-def run(dpath, bpath, fpath, verbose=None, yarn=None):
+def run(dpath, bpath, fpath, fout, verbose=None, yarn=None, tier=None):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
@@ -249,27 +255,33 @@ def run(dpath, bpath, fpath, verbose=None, yarn=None):
 #    dbdf = ddf.join(bdf, ddf.dataset_id == bdf.dataset_id, how=jtype)
 #    ndf = dbdf.join(dbdf, [dbdf.block_id == fdf.block_id, dbdf.dataset_id == fdf.dataset_id], how=jtype)
 
-#    ndf = fdf.join(ddf, fdf.f_dataset_id == ddf.d_dataset_id, how=jtype)\
-#             .select('d_dataset', 'd_last_modification_date', 'f_event_count','f_file_size')\
-#             .distinct().where('d_dataset like "%/RAW"')
-#    rdf = ndf.groupBy('d_dataset')\
-#            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_last_modification_date':'max'})\
-#            .withColumnRenamed('sum(f_event_count)', 'evt')\
-#            .withColumnRenamed('sum(f_file_size)', 'size')\
-#            .withColumnRenamed('max(d_last_modification_date)', 'date')\
-#            .collect()
     ndf = fdf.join(ddf, fdf.f_dataset_id == ddf.d_dataset_id, how=jtype)\
              .select('d_dataset', 'd_creation_date', 'f_event_count','f_file_size')\
              .distinct()
+    if  tier:
+        ndf = ndf.where('d_dataset like "%%/%s"' % tier)
     rdf = ndf.groupBy('d_dataset')\
             .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
-            .withColumnRenamed('sum(f_event_count)', 'evt')\
+            .withColumnRenamed('sum(f_event_count)', 'evts')\
             .withColumnRenamed('sum(f_file_size)', 'size')\
             .withColumnRenamed('max(d_creation_date)', 'date')\
             .collect()
-    print("dataset,size,evt,date")
-    for row in rdf:
-        print('%s,%s,%s,%s' % (row['d_dataset'], row['size'], row['evt'], row['date']))
+    tot_size = 0
+    tot_evts = 0
+    with open(fout, 'w') as ostream:
+        ostream.write("dataset,size,evts,date\n")
+        for row in rdf:
+            size = row['size']
+            evts = row['evts']
+            if  isinstance(size, NoneType):
+                size = 0
+            if  isinstance(evts, NoneType):
+                evts = 0
+            ostream.write('%s,%s,%s,%s\n' % (row['d_dataset'], size, evts, row['date']))
+            tot_size += float(size)
+            tot_evts += int(evts)
+    out = dict(tier=tier, size=tot_size, evts=tot_evts)
+    print(json.dumps(out))
 
     ctx.stop()
     if  verbose:
@@ -281,7 +293,7 @@ def main():
     optmgr  = OptionParser()
     opts = optmgr.parser.parse_args()
     time0 = time.time()
-    results = run(opts.dpath, opts.bpath, opts.fpath, opts.verbose, opts.yarn)
+    results = run(opts.dpath, opts.bpath, opts.fpath, opts.fout, opts.verbose, opts.yarn, opts.tier)
 
 if __name__ == '__main__':
     main()
