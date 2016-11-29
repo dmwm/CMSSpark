@@ -51,7 +51,7 @@ class OptionParser():
         self.parser.add_argument("--fout", action="store",
             dest="fout", default=fout, help='Output file name, default %s' % fout)
         self.parser.add_argument("--tier", action="store",
-            dest="tier", default="", help='Select datasets for given data-tier')
+            dest="tier", default="", help='Select datasets for given data-tier, use comma-separated list if you want to handle multiple data-tiers')
         self.parser.add_argument("--no-log4j", action="store_true",
             dest="no-log4j", default=False, help="Disable spark log4j messages")
         self.parser.add_argument("--yarn", action="store_true",
