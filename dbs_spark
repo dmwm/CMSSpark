@@ -26,8 +26,9 @@ droot=$PWD
 conf=""
 # look if we requested to show full log output
 if [[ "$@" =~ "--no-log4j" ]]; then
+    conf=" --conf spark.ui.showConsoleProgress=false "
     if [ -n "$LOG4J_CONF" ] && [ -f $LOG4J_CONF ]; then
-        conf="--conf spark.driver.extraJavaOptions=\"-Dlog4j.configuration=file:$LOG4J_CONF\""
+        conf="$conf --conf spark.driver.extraJavaOptions=\"-Dlog4j.configuration=file:$LOG4J_CONF\""
     fi
 fi
 
