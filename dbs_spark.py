@@ -16,12 +16,13 @@ https://spark.apache.org/docs/0.9.0/api/pyspark/index.html
 # system modules
 import os
 import sys
+import gzip
 import time
 import json
 import argparse
 from types import NoneType
 
-from pyspark import SparkContext
+from pyspark import SparkContext, StorageLevel
 from pyspark.sql import Row
 from pyspark.sql import SQLContext
 from pyspark.sql import HiveContext
@@ -57,6 +58,29 @@ class OptionParser():
             dest="yarn", default=False, help="run job on analytics cluster via yarn resource manager")
         self.parser.add_argument("--verbose", action="store_true",
             dest="verbose", default=False, help="verbose output")
+
+class GzipFile(gzip.GzipFile):
+    def __enter__(self):
+        "Context manager enter method"
+        if self.fileobj is None:
+            raise ValueError("I/O operation on closed GzipFile object")
+        return self
+
+    def __exit__(self, *args):
+        "Context manager exit method"
+        self.close()
+
+def fopen(fin, mode='r'):
+    "Return file descriptor for given file"
+    if  fin.endswith('.gz'):
+        stream = gzip.open(fin, mode)
+        # if we use old python we switch to custom gzip class to support
+        # context manager and with statements
+        if  not hasattr(stream, "__exit__"):
+            stream = GzipFile(fin, mode)
+    else:
+        stream = open(fin, mode)
+    return stream
 
 class SparkLogger(object):
     "Control Spark Logger"
@@ -258,8 +282,27 @@ def run(dpath, bpath, fpath, fout, verbose=None, yarn=None, tier=None):
     ndf = fdf.join(ddf, fdf.f_dataset_id == ddf.d_dataset_id, how=jtype)\
              .select('d_dataset', 'd_creation_date', 'f_event_count','f_file_size')\
              .distinct()
+    ndf.persist(StorageLevel.MEMORY_AND_DISK)
+    tiers = tier.split(',')
+    if  tiers:
+        for tier in tiers:
+            tdf = ndf.where('d_dataset like "%%/%s"' % tier)
+            tier_stats(tier, tdf, fout)
+            tdf.unpersist()
+    else:
+        tier_stats(None, ndf, fout)
+
+    ctx.stop()
+    if  verbose:
+        logger.info("Elapsed time %s" % htime(time.time()-time0))
+    return out
+
+def tier_stats(tier, ndf, fout):
+    "Collect tier stats and write them out"
     if  tier:
         ndf = ndf.where('d_dataset like "%%/%s"' % tier)
+        fdir, fname = os.path.split(fout)
+        fout = os.path.join(fdir, '%s_%s' % (tier, fname))
     rdf = ndf.groupBy('d_dataset')\
             .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
             .withColumnRenamed('sum(f_event_count)', 'evts')\
@@ -268,7 +311,7 @@ def run(dpath, bpath, fpath, fout, verbose=None, yarn=None, tier=None):
             .collect()
     tot_size = 0
     tot_evts = 0
-    with open(fout, 'w') as ostream:
+    with fopen(fout, 'w') as ostream:
         ostream.write("dataset,size,evts,date\n")
         for row in rdf:
             size = row['size']
@@ -280,13 +323,9 @@ def run(dpath, bpath, fpath, fout, verbose=None, yarn=None, tier=None):
             ostream.write('%s,%s,%s,%s\n' % (row['d_dataset'], size, evts, row['date']))
             tot_size += float(size)
             tot_evts += int(evts)
-    out = dict(tier=tier, size=tot_size, evts=tot_evts)
-    print(json.dumps(out))
-
-    ctx.stop()
-    if  verbose:
-        logger.info("Elapsed time %s" % htime(time.time()-time0))
-    return out
+    if  not tier:
+        tier = 'ALL'
+    print('%s,%s,%s' % (tier, tot_size, tot_evts))
 
 def main():
     "Main function"
