@@ -46,13 +46,13 @@ elif [[  $1 =~ -?-yarn(-cluster)?$ ]]; then
     # Temp solution to have a wrapper for python27 on spark cluster
     # once CERN IT will resolve python version we can remove PYSPARK_PYTHON
     PYSPARK_PYTHON='/afs/cern.ch/user/v/valya/public/python27' \
-        spark-submit --jars $avrojar,$sparkexjar \
-            --master yarn-client \
-            --driver-class-path '/usr/lib/hive/lib/*' \
-            --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
-            -executor-memory 5g \
-            --jars $jars \
-            $conf $droot/dbs_spark.py ${1+"$@"}
+    spark-submit --jars $avrojar,$sparkexjar \
+        --master yarn-client \
+        --driver-class-path '/usr/lib/hive/lib/*' \
+        --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
+        -executor-memory 5g \
+        --jars $jars \
+        $conf $droot/dbs_spark.py ${1+"$@"}
 else
     # submit spark job with our file, please note
     # that user may increase memory options if necessary
