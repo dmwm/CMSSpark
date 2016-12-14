@@ -51,7 +51,7 @@ elif [[  $1 =~ -?-yarn(-cluster)?$ ]]; then
         --master yarn-client \
         --driver-class-path '/usr/lib/hive/lib/*' \
         --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
-        -executor-memory 5g \
+        --executor-memory 5g \
         --jars $jars \
         $conf $droot/dbs_spark.py ${1+"$@"}
 else
