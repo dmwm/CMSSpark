@@ -35,29 +35,26 @@ class OptionParser():
         self.parser = argparse.ArgumentParser(prog='PROG')
         year = time.strftime("%Y", time.localtime())
         hdir = 'hdfs:///project/awg/cms/CMS_DBS3_PROD_GLOBAL/test'
-        dpath = '%s/datasets' % hdir
-        msg = "Input datasets location on HDFS, default %s" % dpath
-        self.parser.add_argument("--dpath", action="store",
-            dest="dpath", default=dpath, help=msg)
-        bpath = '%s/blocks' % hdir
-        msg = "Input blocks location on HDFS, default %s" % bpath
-        self.parser.add_argument("--bpath", action="store",
-            dest="bpath", default=bpath, help=msg)
-        fpath = '%s/files' % hdir
-        msg = "Input files location on HDFS, default %s" % fpath
-        self.parser.add_argument("--fpath", action="store",
-            dest="fpath", default=fpath, help=msg)
+        msg = 'Location of DBS folders on HDFS, default %s' % hdir
+        self.parser.add_argument("--hdir", action="store",
+            dest="hdir", default=hdir, help=msg)
         fout = 'dbs_datasets.csv'
         self.parser.add_argument("--fout", action="store",
             dest="fout", default=fout, help='Output file name, default %s' % fout)
         self.parser.add_argument("--tier", action="store",
             dest="tier", default="", help='Select datasets for given data-tier, use comma-separated list if you want to handle multiple data-tiers')
+        self.parser.add_argument("--era", action="store",
+            dest="era", default="", help='Select datasets for given acquisition era')
         self.parser.add_argument("--no-log4j", action="store_true",
             dest="no-log4j", default=False, help="Disable spark log4j messages")
         self.parser.add_argument("--yarn", action="store_true",
             dest="yarn", default=False, help="run job on analytics cluster via yarn resource manager")
         self.parser.add_argument("--verbose", action="store_true",
             dest="verbose", default=False, help="verbose output")
+
+def apath(hdir, name):
+    "Helper function to construct attribute path"
+    return os.path.join(hdir, name)
 
 class GzipFile(gzip.GzipFile):
     def __enter__(self):
@@ -107,6 +104,70 @@ class SparkLogger(object):
     def warning(self, msg):
         "Print message via Spark Logger to warning stream"
         self.lprint('warning', msg)
+
+def schema_processing_eras():
+    """
+    ==> /data/wma/dbs/hdfs/large/processing_eras.attrs <==
+    processing_era_id,processing_version,creation_date,create_by,description
+
+    ==> /data/wma/dbs/hdfs/large/processing_eras.csv <==
+    1,0,null,null,null
+
+ PROCESSING_ERA_ID NOT NULL NUMBER(38)
+ PROCESSING_ERA_NAME NOT NULL VARCHAR2(120)
+ CREATION_DATE NOT NULL INTEGER
+ CREATE_BY NOT NULL VARCHAR2(500)
+ DESCRIPTION NOT NULL VARCHAR2(40)
+    """
+    return StructType([
+            StructField("processing_era_id", IntegerType(), True),
+            StructField("processing_version", StringType(), True),
+            StructField("creation_date", IntegerType(), True),
+            StructField("create_by", StringType(), True),
+            StructField("description", StringType(), True)
+        ])
+
+def schema_acquisition_eras():
+    """
+    ==> /data/wma/dbs/hdfs/large/acquisition_eras.attrs <==
+    acquisition_era_id,acquisition_era_name,start_date,end_date,creation_date,create_by,description
+
+    ==> /data/wma/dbs/hdfs/large/acquisition_eras.csv <==
+    202,DBS2_UNKNOWN_ACQUISION_ERA,0,null,null,null,null
+
+ ACQUISITION_ERA_ID NOT NULL NUMBER(38)
+ ACQUISITION_ERA_NAME NOT NULL VARCHAR2(120)
+ START_DATE NOT NULL INTEGER
+ END_DATE NOT NULL INTEGER
+ CREATION_DATE NOT NULL INTEGER
+ CREATE_BY NOT NULL VARCHAR2(500)
+ DESCRIPTION NOT NULL VARCHAR2(40)
+    """
+    return StructType([
+            StructField("acquisition_era_id", IntegerType(), True),
+            StructField("acquisition_era_name", StringType(), True),
+            StructField("start_date", IntegerType(), True),
+            StructField("end_date", IntegerType(), True),
+            StructField("creation_date", IntegerType(), True),
+            StructField("create_by", StringType(), True),
+            StructField("description", StringType(), True)
+        ])
+
+def schema_dataset_access_types():
+    """
+    ==> /data/wma/dbs/hdfs/large/dataset_access_types.attrs <==
+    dataset_access_type_id,dataset_access_type
+
+    ==> /data/wma/dbs/hdfs/large/dataset_access_types.csv <==
+    1,VALID
+
+ DATASET_ACCESS_TYPE_ID NOT NULL NUMBER(38)
+ DATASET_ACCESS_TYPE NOT NULL VARCHAR2(100)
+    """
+    return StructType([
+            StructField("dataset_access_type_id", IntegerType(), True),
+            StructField("dataset_access_type", StringType(), True)
+        ])
 
 def schema_datasets():
     """
@@ -232,15 +293,14 @@ def schema_files():
             StructField("f_last_modified_by", StringType(), True)
         ])
 
-def run(dpath, bpath, fpath, fout, verbose=None, yarn=None, tier=None):
+def run(paths, fout, verbose=None, yarn=None, tier=None, era=None):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
     """
-    if  verbose:
-        print("### datasets", dpath)
-        print("### blocks", bpath)
-        print("### files", fpath)
+    print("Use the following data on HDFS")
+    for key, val in paths.items():
+        print(val)
     # output
     out = []
 
@@ -259,38 +319,55 @@ def run(dpath, bpath, fpath, fout, verbose=None, yarn=None, tier=None):
 
     sqlContext = HiveContext(ctx)
 
+    daf = sqlContext.read.format('com.databricks.spark.csv')\
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
+                        .load(paths['dapath'], schema = schema_dataset_access_types())
     ddf = sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(dpath, schema = schema_datasets())
+                        .load(paths['dpath'], schema = schema_datasets())
     bdf = sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(bpath, schema = schema_blocks())
+                        .load(paths['bpath'], schema = schema_blocks())
     fdf = sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(fpath, schema = schema_files())
+                        .load(paths['fpath'], schema = schema_files())
+    aef = sqlContext.read.format('com.databricks.spark.csv')\
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
+                        .load(paths['apath'], schema = schema_acquisition_eras())
+    pef = sqlContext.read.format('com.databricks.spark.csv')\
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
+                        .load(paths['ppath'], schema = schema_processing_eras())
 
     # Register temporary tables to be able to use sqlContext.sql
+    daf.registerTempTable('daf')
     ddf.registerTempTable('ddf')
     bdf.registerTempTable('bdf')
     fdf.registerTempTable('fdf')
+    aef.registerTempTable('aef')
+    pef.registerTempTable('pef')
 
     # join tables, final dataframe (ndf) is a joint table from datasets-blocks-files tables
-    jtype = 'outer' # 'left_outer' # 'inner'
 #    dbdf = ddf.join(bdf, ddf.dataset_id == bdf.dataset_id, how=jtype)
 #    ndf = dbdf.join(dbdf, [dbdf.block_id == fdf.block_id, dbdf.dataset_id == fdf.dataset_id], how=jtype)
 
-    ndf = fdf.join(ddf, fdf.f_dataset_id == ddf.d_dataset_id, how=jtype)\
-             .select('d_dataset', 'd_creation_date', 'f_event_count','f_file_size')\
-             .distinct()
-    ndf.persist(StorageLevel.MEMORY_AND_DISK)
+    cols = ['d_dataset','d_creation_date','d_is_dataset_valid','f_event_count','f_file_size','dataset_access_type','acquisition_era_name']
+    join1 = ddf.join(daf, ddf.d_dataset_access_type_id == daf.dataset_access_type_id)
+    join2 = join1.join(fdf, join1.d_dataset_id == fdf.f_dataset_id)
+    join3 = join2.join(aef, join2.d_acquisition_era_id == aef.acquisition_era_id, how='left_outer')
+    fjoin = join3.select(cols).where('d_is_dataset_valid = 1').distinct()
+    if  era:
+        fjoin = fjoin.where('acquisition_era_name like "%s"' % era.replace('*', '%%'))
+    fjoin.persist(StorageLevel.MEMORY_AND_DISK)
+    if  verbose:
+        for row in fjoin.head(5):
+            print("### row", row)
     tiers = tier.split(',')
     if  tiers:
         for tier in tiers:
-            tdf = ndf.where('d_dataset like "%%/%s"' % tier)
-            tier_stats(tier, tdf, fout)
-            tdf.unpersist()
+            xdf = fjoin.where('d_dataset like "%%/%s"' % tier)
+            tier_stats(tier, xdf, fout)
     else:
-        tier_stats(None, ndf, fout)
+        tier_stats(None, fjoin, fout)
 
     ctx.stop()
     if  verbose:
@@ -331,8 +408,15 @@ def main():
     "Main function"
     optmgr  = OptionParser()
     opts = optmgr.parser.parse_args()
+    print("Input arguments: %s" % opts)
     time0 = time.time()
-    results = run(opts.dpath, opts.bpath, opts.fpath, opts.fout, opts.verbose, opts.yarn, opts.tier)
+    paths = {'dpath':apath(opts.hdir, 'datasets'),
+             'bpath':apath(opts.hdir, 'blocks'),
+             'fpath':apath(opts.hdir, 'files'),
+             'apath':apath(opts.hdir, 'acquisition_eras'),
+             'ppath':apath(opts.hdir, 'processing_eras'),
+             'dapath':apath(opts.hdir, 'dataset_access_types')}
+    results = run(paths, opts.fout, opts.verbose, opts.yarn, opts.tier, opts.era)
 
 if __name__ == '__main__':
     main()
