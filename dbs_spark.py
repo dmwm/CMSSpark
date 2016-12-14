@@ -354,9 +354,12 @@ def run(paths, fout, verbose=None, yarn=None, tier=None, era=None):
     join1 = ddf.join(daf, ddf.d_dataset_access_type_id == daf.dataset_access_type_id)
     join2 = join1.join(fdf, join1.d_dataset_id == fdf.f_dataset_id)
     join3 = join2.join(aef, join2.d_acquisition_era_id == aef.acquisition_era_id, how='left_outer')
-    fjoin = join3.select(cols).where('d_is_dataset_valid = 1').distinct()
+    join4 = join3.select(cols).where('d_is_dataset_valid = 1')
     if  era:
-        fjoin = fjoin.where('acquisition_era_name like "%s"' % era.replace('*', '%%'))
+        join5 = join4.where('acquisition_era_name like "%s"' % era.replace('*', '%%'))
+    else:
+        join5 = join4
+    fjoin = join5.distinct()
     fjoin.persist(StorageLevel.MEMORY_AND_DISK)
     if  verbose:
         for row in fjoin.head(5):
@@ -364,8 +367,7 @@ def run(paths, fout, verbose=None, yarn=None, tier=None, era=None):
     tiers = tier.split(',')
     if  tiers:
         for tier in tiers:
-            xdf = fjoin.where('d_dataset like "%%/%s"' % tier)
-            tier_stats(tier, xdf, fout)
+            tier_stats(tier, fjoin, fout)
     else:
         tier_stats(None, fjoin, fout)
 
@@ -377,10 +379,12 @@ def run(paths, fout, verbose=None, yarn=None, tier=None, era=None):
 def tier_stats(tier, ndf, fout):
     "Collect tier stats and write them out"
     if  tier:
-        ndf = ndf.where('d_dataset like "%%/%s"' % tier)
+        xdf = ndf.where('d_dataset like "%%/%s"' % tier).distinct()
         fdir, fname = os.path.split(fout)
         fout = os.path.join(fdir, '%s_%s' % (tier, fname))
-    rdf = ndf.groupBy('d_dataset')\
+    else:
+        xdf = ndf
+    rdf = xdf.groupBy('d_dataset')\
             .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
             .withColumnRenamed('sum(f_event_count)', 'evts')\
             .withColumnRenamed('sum(f_file_size)', 'size')\
