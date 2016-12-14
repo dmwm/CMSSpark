@@ -45,6 +45,10 @@ class OptionParser():
             dest="tier", default="", help='Select datasets for given data-tier, use comma-separated list if you want to handle multiple data-tiers')
         self.parser.add_argument("--era", action="store",
             dest="era", default="", help='Select datasets for given acquisition era')
+        self.parser.add_argument("--patterns", action="store",
+            dest="patterns", default="", help='Select datasets patterns')
+        self.parser.add_argument("--antipatterns", action="store",
+            dest="antipatterns", default="", help='Select datasets antipatterns')
         self.parser.add_argument("--no-log4j", action="store_true",
             dest="no-log4j", default=False, help="Disable spark log4j messages")
         self.parser.add_argument("--yarn", action="store_true",
@@ -293,7 +297,7 @@ def schema_files():
             StructField("f_last_modified_by", StringType(), True)
         ])
 
-def run(paths, fout, verbose=None, yarn=None, tier=None, era=None):
+def run(paths, fout, verbose=None, yarn=None, tier=None, era=None, patterns=[], antipatterns=[]):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
@@ -354,11 +358,16 @@ def run(paths, fout, verbose=None, yarn=None, tier=None, era=None):
     join1 = ddf.join(daf, ddf.d_dataset_access_type_id == daf.dataset_access_type_id)
     join2 = join1.join(fdf, join1.d_dataset_id == fdf.f_dataset_id)
     join3 = join2.join(aef, join2.d_acquisition_era_id == aef.acquisition_era_id, how='left_outer')
-    join4 = join3.select(cols).where('d_is_dataset_valid = 1')
+#    join4 = join3.select(cols).where('d_is_dataset_valid = 1')
+    join4 = join3.select(cols).where('dataset_access_type = "VALID"')
     if  era:
         join5 = join4.where('acquisition_era_name like "%s"' % era.replace('*', '%%'))
     else:
         join5 = join4
+    for name in patterns:
+        join5 = join5.where('d_dataset LIKE "%%%s%%"' % name.replace('*', ''))
+    for name in antipatterns:
+        join5 = join5.where('d_dataset NOT LIKE "%%%s%%"' % name.replace('*', ''))
     fjoin = join5.distinct()
     fjoin.persist(StorageLevel.MEMORY_AND_DISK)
     if  verbose:
@@ -420,7 +429,14 @@ def main():
              'apath':apath(opts.hdir, 'acquisition_eras'),
              'ppath':apath(opts.hdir, 'processing_eras'),
              'dapath':apath(opts.hdir, 'dataset_access_types')}
-    results = run(paths, opts.fout, opts.verbose, opts.yarn, opts.tier, opts.era)
+    fout = opts.fout
+    verbose = opts.verbose
+    yarn = opts.yarn
+    tier = opts.tier
+    era = opts.era
+    patterns = opts.patterns.split(',') if opts.patterns else []
+    antipatterns = opts.antipatterns.split(',') if opts.antipatterns else []
+    results = run(paths, fout, verbose, yarn, tier, era, patterns, antipatterns)
 
 if __name__ == '__main__':
     main()
