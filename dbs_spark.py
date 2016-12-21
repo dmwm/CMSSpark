@@ -21,6 +21,7 @@ import time
 import json
 import argparse
 from types import NoneType
+from subprocess import Popen, PIPE
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import Row
@@ -34,7 +35,7 @@ class OptionParser():
         "User based option parser"
         self.parser = argparse.ArgumentParser(prog='PROG')
         year = time.strftime("%Y", time.localtime())
-        hdir = 'hdfs:///project/awg/cms/CMS_DBS3_PROD_GLOBAL/test'
+        hdir = 'hdfs:///project/awg/cms/CMS_DBS3_PROD_GLOBAL'
         msg = 'Location of DBS folders on HDFS, default %s' % hdir
         self.parser.add_argument("--hdir", action="store",
             dest="hdir", default=hdir, help=msg)
@@ -297,6 +298,57 @@ def schema_files():
             StructField("f_last_modified_by", StringType(), True)
         ])
 
+def files(path, verbose=0):
+    "Return list of files for given HDFS path"
+    merged = "hadoop fs -ls %s/merged | awk '{print $8}'" % path
+    initial = "hadoop fs -ls %s/initial | awk '{print $8}'" % path
+    if  verbose:
+        print("Lookup merged area: %s" % merged)
+    pipe = Popen(merged, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+    pipe.wait()
+    if  pipe.stderr.read(): # we experience an error
+        if  verbose:
+            print("Lookup inital area: %s" % inital)
+        pipe = Popen(initial, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+        pipe.wait()
+    fnames = [f for f in pipe.stdout.read().split('\n') if f.find('part') != -1]
+    return fnames
+
+def unionAll(dfs):
+    """
+    Unions snapshots in one dataframe
+
+    :param item: list of dataframes
+    :returns: union of dataframes
+    """
+    return reduce(DataFrame.unionAll, dfs)
+
+def htime(seconds):
+    "Convert given seconds into human readable form of N hour(s), N minute(s), N second(s)"
+    minutes, secs = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+    def htimeformat(msg, key, val):
+        "Helper function to proper format given message/key/val"
+        if  val:
+            if  msg:
+                msg += ', '
+            msg += '%d %s' % (val, key)
+            if  val > 1:
+                msg += 's'
+        return msg
+
+    out = ''
+    out = htimeformat(out, 'day', days)
+    out = htimeformat(out, 'hour', hours)
+    out = htimeformat(out, 'minute', minutes)
+    out = htimeformat(out, 'second', secs)
+    return out
+
+def elapsed_time(time0):
+    "Return elapsed time from given time stamp"
+    return htime(time.time()-time0)
+
 def run(paths, fout, verbose=None, yarn=None, tier=None, era=None, patterns=[], antipatterns=[]):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
@@ -323,24 +375,30 @@ def run(paths, fout, verbose=None, yarn=None, tier=None, era=None, patterns=[], 
 
     sqlContext = HiveContext(ctx)
 
-    daf = sqlContext.read.format('com.databricks.spark.csv')\
+    daf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(paths['dapath'], schema = schema_dataset_access_types())
-    ddf = sqlContext.read.format('com.databricks.spark.csv')\
+                        .load(path, schema = schema_dataset_access_types()) \
+                        for path in files(paths['dapath'])])
+    ddf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(paths['dpath'], schema = schema_datasets())
-    bdf = sqlContext.read.format('com.databricks.spark.csv')\
+                        .load(path, schema = schema_datasets()) \
+                        for path in files(paths['dpath'])])
+    bdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(paths['bpath'], schema = schema_blocks())
-    fdf = sqlContext.read.format('com.databricks.spark.csv')\
+                        .load(path, schema = schema_blocks()) \
+                        for path in files(paths['bpath'])])
+    fdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(paths['fpath'], schema = schema_files())
-    aef = sqlContext.read.format('com.databricks.spark.csv')\
+                        .load(path, schema = schema_files()) \
+                        for path in files(paths['fpath'])])
+    aef = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(paths['apath'], schema = schema_acquisition_eras())
-    pef = sqlContext.read.format('com.databricks.spark.csv')\
+                        .load(path, schema = schema_acquisition_eras()) \
+                        for path in files(paths['apath'])])
+    pef = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(paths['ppath'], schema = schema_processing_eras())
+                        .load(path, schema = schema_processing_eras()) \
+                        for path in files(paths['ppath'])])
 
     # Register temporary tables to be able to use sqlContext.sql
     daf.registerTempTable('daf')
@@ -350,15 +408,11 @@ def run(paths, fout, verbose=None, yarn=None, tier=None, era=None, patterns=[], 
     aef.registerTempTable('aef')
     pef.registerTempTable('pef')
 
-    # join tables, final dataframe (ndf) is a joint table from datasets-blocks-files tables
-#    dbdf = ddf.join(bdf, ddf.dataset_id == bdf.dataset_id, how=jtype)
-#    ndf = dbdf.join(dbdf, [dbdf.block_id == fdf.block_id, dbdf.dataset_id == fdf.dataset_id], how=jtype)
-
+    # join tables
     cols = ['d_dataset','d_creation_date','d_is_dataset_valid','f_event_count','f_file_size','dataset_access_type','acquisition_era_name']
     join1 = ddf.join(daf, ddf.d_dataset_access_type_id == daf.dataset_access_type_id)
     join2 = join1.join(fdf, join1.d_dataset_id == fdf.f_dataset_id)
     join3 = join2.join(aef, join2.d_acquisition_era_id == aef.acquisition_era_id, how='left_outer')
-#    join4 = join3.select(cols).where('d_is_dataset_valid = 1')
     join4 = join3.select(cols).where('dataset_access_type = "VALID"')
     if  era:
         join5 = join4.where('acquisition_era_name like "%s"' % era.replace('*', '%%'))
@@ -382,7 +436,7 @@ def run(paths, fout, verbose=None, yarn=None, tier=None, era=None, patterns=[], 
 
     ctx.stop()
     if  verbose:
-        logger.info("Elapsed time %s" % htime(time.time()-time0))
+        logger.info("Elapsed time %s" % elapsed_time(time0))
     return out
 
 def tier_stats(tier, ndf, fout):
