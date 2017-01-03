@@ -46,10 +46,15 @@ class OptionParser():
             dest="tier", default="", help='Select datasets for given data-tier, use comma-separated list if you want to handle multiple data-tiers')
         self.parser.add_argument("--era", action="store",
             dest="era", default="", help='Select datasets for given acquisition era')
+        self.parser.add_argument("--cdate", action="store",
+            dest="cdate", default="", help='Select datasets starting given creation date in YYYYMMDD format')
         self.parser.add_argument("--patterns", action="store",
             dest="patterns", default="", help='Select datasets patterns')
         self.parser.add_argument("--antipatterns", action="store",
             dest="antipatterns", default="", help='Select datasets antipatterns')
+        msg = 'Perform action over DBS info on HDFS: tier_stats, dataset_stats'
+        self.parser.add_argument("--action", action="store",
+            dest="action", default="tier_stats", help=msg)
         self.parser.add_argument("--no-log4j", action="store_true",
             dest="no-log4j", default=False, help="Disable spark log4j messages")
         self.parser.add_argument("--yarn", action="store_true",
@@ -303,14 +308,17 @@ def files(path, verbose=0):
     merged = "hadoop fs -ls %s/merged | awk '{print $8}'" % path
     initial = "hadoop fs -ls %s/initial | awk '{print $8}'" % path
     if  verbose:
+        print("Lookup initial area: %s" % initial)
         print("Lookup merged area: %s" % merged)
-    pipe = Popen(merged, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+#    pipe = Popen(merged, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+#    pipe.wait()
+#    if  pipe.stderr.read(): # we experience an error
+#        if  verbose:
+#            print("Lookup inital area: %s" % inital)
+#        pipe = Popen(initial, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+#        pipe.wait()
+    pipe = Popen(initial, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
     pipe.wait()
-    if  pipe.stderr.read(): # we experience an error
-        if  verbose:
-            print("Lookup inital area: %s" % inital)
-        pipe = Popen(initial, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
-        pipe.wait()
     fnames = [f for f in pipe.stdout.read().split('\n') if f.find('part') != -1]
     return fnames
 
@@ -349,7 +357,19 @@ def elapsed_time(time0):
     "Return elapsed time from given time stamp"
     return htime(time.time()-time0)
 
-def run(paths, fout, verbose=None, yarn=None, tier=None, era=None, patterns=[], antipatterns=[]):
+def unix_tstamp(date):
+    "Convert given date into unix seconds since epoch"
+    if  not isinstance(date, str):
+        raise NotImplementedError('Given date %s is not in string YYYYMMDD format' % date)
+    if  len(date) == 8:
+        return int(time.mktime(time.strptime(date, '%Y%m%d')))
+    elif len(date) == 10: # seconds since epoch
+        return int(date)
+    else:
+        raise NotImplementedError('Given date %s is not in string YYYYMMDD format' % date)
+
+def run(paths, fout, action,
+        verbose=None, yarn=None, tier=None, era=None, cdate=None, patterns=[], antipatterns=[]):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
@@ -378,27 +398,27 @@ def run(paths, fout, verbose=None, yarn=None, tier=None, era=None, patterns=[], 
     daf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
                         .load(path, schema = schema_dataset_access_types()) \
-                        for path in files(paths['dapath'])])
+                        for path in files(paths['dapath'], verbose)])
     ddf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
                         .load(path, schema = schema_datasets()) \
-                        for path in files(paths['dpath'])])
+                        for path in files(paths['dpath'], verbose)])
     bdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
                         .load(path, schema = schema_blocks()) \
-                        for path in files(paths['bpath'])])
+                        for path in files(paths['bpath'], verbose)])
     fdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
                         .load(path, schema = schema_files()) \
-                        for path in files(paths['fpath'])])
+                        for path in files(paths['fpath'], verbose)])
     aef = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
                         .load(path, schema = schema_acquisition_eras()) \
-                        for path in files(paths['apath'])])
+                        for path in files(paths['apath'], verbose)])
     pef = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
                         .load(path, schema = schema_processing_eras()) \
-                        for path in files(paths['ppath'])])
+                        for path in files(paths['ppath'], verbose)])
 
     # Register temporary tables to be able to use sqlContext.sql
     daf.registerTempTable('daf')
@@ -409,45 +429,78 @@ def run(paths, fout, verbose=None, yarn=None, tier=None, era=None, patterns=[], 
     pef.registerTempTable('pef')
 
     # join tables
-    cols = ['d_dataset','d_creation_date','d_is_dataset_valid','f_event_count','f_file_size','dataset_access_type','acquisition_era_name']
+    cols = ['*']
     join1 = ddf.join(daf, ddf.d_dataset_access_type_id == daf.dataset_access_type_id)
-    join2 = join1.join(fdf, join1.d_dataset_id == fdf.f_dataset_id)
-    join3 = join2.join(aef, join2.d_acquisition_era_id == aef.acquisition_era_id, how='left_outer')
-    join4 = join3.select(cols).where('dataset_access_type = "VALID"')
+    join3 = fdf.join(join1, join1.d_dataset_id == fdf.f_dataset_id)
+    joins = join3
+    joins.persist(StorageLevel.MEMORY_AND_DISK)
+
+    # construct conditions
+    cond = 'dataset_access_type = "VALID"'
+#    cond = 'd_is_dataset_valid = 1'
     if  era:
-        join5 = join4.where('acquisition_era_name like "%s"' % era.replace('*', '%%'))
-    else:
-        join5 = join4
+        cond += ' AND acquisition_era_name like "%s"' % era.replace('*', '%')
+    cond_pat = []
     for name in patterns:
-        join5 = join5.where('d_dataset LIKE "%%%s%%"' % name.replace('*', ''))
+        if  name.find('*') != -1:
+            cond_pat.append('d_dataset LIKE "%s"' % name.replace('*', '%'))
+        else:
+            cond_pat.append('d_dataset="%s"' % name)
+    if  cond_pat:
+        cond += ' AND (%s)' % ' OR '.join(cond_pat)
     for name in antipatterns:
-        join5 = join5.where('d_dataset NOT LIKE "%%%s%%"' % name.replace('*', ''))
-    fjoin = join5.distinct()
-    fjoin.persist(StorageLevel.MEMORY_AND_DISK)
+        if  name.find('*') != -1:
+            cond += ' AND d_dataset NOT LIKE "%s"' % name.replace('*', '%')
+        else:
+            cond += ' AND d_dataset!="%s"' % name
+    if  cdate:
+        dates = cdate.split('-')
+        if  len(dates) == 2:
+            cond += ' AND d_creation_date > %s AND d_creation_date < %s' \
+                    % (unix_tstamp(dates[0]), unix_tstamp(dates[1]))
+            joins = joins.where(joins.d_creation_date>unix_tstamp(dates[0]))
+        elif len(dates) == 1:
+            cond += ' AND d_creation_date > %s' % unix_tstamp(dates[0])
+        else:
+            raise NotImplementedError("Given dates are not supported, please either provide YYYYMMDD date or use dash to define a dates range.")
+
     if  verbose:
-        for row in fjoin.head(5):
-            print("### row", row)
-    tiers = tier.split(',')
-    if  tiers:
-        for tier in tiers:
-            tier_stats(tier, fjoin, fout)
+        print("Applied condition %s" % cond)
+
+    if  action == 'tier_stats':
+        # process dataframe
+        tiers = tier.split(',')
+        if  tiers:
+            gen_cond = cond
+            for tier in tiers:
+                cond = gen_cond + ' AND d_dataset like "%%/%s"' % tier
+                fjoin = joins.where(cond).distinct().select(cols)
+                tier_stats(tier, fjoin, fout, verbose)
+        else:
+            fjoin = joins.where(cond).distinct().select(cols)
+            tier_stats(None, fjoin, fout, verbose)
+    elif action == 'dataset_stats':
+        fjoin = joins.where(cond).distinct().select(cols)
+        dataset_stats(fjoin, fout, verbose)
     else:
-        tier_stats(None, fjoin, fout)
+        raise NotImplementedError()
 
     ctx.stop()
     if  verbose:
         logger.info("Elapsed time %s" % elapsed_time(time0))
     return out
 
-def tier_stats(tier, ndf, fout):
+def tier_stats(tier, ndf, fout, verbose=None):
     "Collect tier stats and write them out"
+    if  verbose:
+        print("### Final dataframe, total size %s" % ndf.count())
+        ndf.explain(extended=False)
+        for row in ndf.head(5):
+            print("### row", row)
     if  tier:
-        xdf = ndf.where('d_dataset like "%%/%s"' % tier).distinct()
         fdir, fname = os.path.split(fout)
         fout = os.path.join(fdir, '%s_%s' % (tier, fname))
-    else:
-        xdf = ndf
-    rdf = xdf.groupBy('d_dataset')\
+    rdf = ndf.groupBy('d_dataset')\
             .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
             .withColumnRenamed('sum(f_event_count)', 'evts')\
             .withColumnRenamed('sum(f_file_size)', 'size')\
@@ -471,6 +524,30 @@ def tier_stats(tier, ndf, fout):
         tier = 'ALL'
     print('%s,%s,%s' % (tier, tot_size, tot_evts))
 
+def dataset_stats(ndf, fout, verbose=None):
+    "Collect dataset stats and write them out"
+    if  verbose:
+        print("### Final dataframe, total size %s" % ndf.count())
+        ndf.explain(extended=False)
+        for row in ndf.head(5):
+            print("### row", row)
+    rdf = ndf.groupBy('d_dataset')\
+            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
+            .withColumnRenamed('sum(f_event_count)', 'evts')\
+            .withColumnRenamed('sum(f_file_size)', 'size')\
+            .withColumnRenamed('max(d_creation_date)', 'date')\
+            .collect()
+    with fopen(fout, 'w') as ostream:
+        ostream.write("dataset,size,evts,date\n")
+        for row in rdf:
+            size = row['size']
+            evts = row['evts']
+            if  isinstance(size, NoneType):
+                size = 0
+            if  isinstance(evts, NoneType):
+                evts = 0
+            ostream.write('%s,%s,%s,%s\n' % (row['d_dataset'], size, evts, row['date']))
+
 def main():
     "Main function"
     optmgr  = OptionParser()
@@ -488,9 +565,11 @@ def main():
     yarn = opts.yarn
     tier = opts.tier
     era = opts.era
+    cdate = opts.cdate
+    action = opts.action
     patterns = opts.patterns.split(',') if opts.patterns else []
     antipatterns = opts.antipatterns.split(',') if opts.antipatterns else []
-    results = run(paths, fout, verbose, yarn, tier, era, patterns, antipatterns)
+    results = run(paths, fout, action, verbose, yarn, tier, era, cdate, patterns, antipatterns)
 
 if __name__ == '__main__':
     main()
