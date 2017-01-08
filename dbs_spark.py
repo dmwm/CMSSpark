@@ -182,7 +182,7 @@ def schema_dataset_access_types():
 def schema_datasets():
     """
     ==> /data/wma/dbs/hdfs/large/datasets.attrs <==
-    dataset_id,dataset,is_dataset_valid,primary_ds_id,processed_ds_id,data_tier_id,datset_access_type_id,acquitiion_era_id,processing_era_id,physics_group_id,xtcrosssection,prep_id,createion_date,create_by,last_modification_date,last_modified_by
+    dataset_id,dataset,is_dataset_valid,primary_ds_id,processed_ds_id,data_tier_id,datset_access_type_id,acqusition_era_id,processing_era_id,physics_group_id,xtcrosssection,prep_id,createion_date,create_by,last_modification_date,last_modified_by
 
     ==> /data/wma/dbs/hdfs/large/datasets.csv <==
     48,/znn4j_1600ptz3200-alpgen/CMSSW_1_4_9-CSA07-4157/GEN-SIM,1,15537,17760,109,81,202,1,37,null,null,1206050276,/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=aresh/CN=669724/CN=Aresh Vedaee,1261148491,/DC=org/DC=doegrids/OU=People/CN=Si Xie 523253
@@ -429,15 +429,30 @@ def run(paths, fout, action,
     pef.registerTempTable('pef')
 
     # join tables
-    cols = ['*']
+    cols = ['*'] # to select all fields from table
+    cols = ['d_dataset','d_creation_date','d_is_dataset_valid','f_event_count','f_file_size','dataset_access_type','acquisition_era_name']
     join1 = ddf.join(daf, ddf.d_dataset_access_type_id == daf.dataset_access_type_id)
-    join3 = fdf.join(join1, join1.d_dataset_id == fdf.f_dataset_id)
-    joins = join3
+    join2 = fdf.join(join1, join1.d_dataset_id == fdf.f_dataset_id)
+    join3 = aef.join(join2, join2.d_acquisition_era_id == aef.acquisition_era_id)
+    joins = join3.select(cols)
+
+    # another way to join tables is to use plain SQL and passes statemtn into sqlContext.sql(stmt)
+    # for example
+#    stmt = 'SELECT %s FROM ddf JOIN fdf on ddf.d_dataset_id = fdf.f_dataset_id JOIN daf ON ddf.d_dataset_access_type_id = daf.dataset_access_type_id JOIN aef ON ddf.d_acquisition_era_id = aef.acquisition_era_id' % ','.join(cols)
+#    print(stmt)
+#    joins = sqlContext.sql(stmt)
+
+    # keep joins table around
     joins.persist(StorageLevel.MEMORY_AND_DISK)
 
+    # print out rows
+    if  verbose:
+        print("### First rows of joint table, nrows", joins.count())
+        for row in joins.head(5):
+            print("### row", row)
+
     # construct conditions
-    cond = 'dataset_access_type = "VALID"'
-#    cond = 'd_is_dataset_valid = 1'
+    cond = 'dataset_access_type = "VALID" AND d_is_dataset_valid = 1'
     if  era:
         cond += ' AND acquisition_era_name like "%s"' % era.replace('*', '%')
     cond_pat = []
