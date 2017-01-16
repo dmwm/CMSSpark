@@ -305,19 +305,10 @@ def schema_files():
 
 def files(path, verbose=0):
     "Return list of files for given HDFS path"
-    merged = "hadoop fs -ls %s/merged | awk '{print $8}'" % path
-    initial = "hadoop fs -ls %s/initial | awk '{print $8}'" % path
+    hpath = "hadoop fs -ls %s | awk '{print $8}'" % path
     if  verbose:
-        print("Lookup initial area: %s" % initial)
-        print("Lookup merged area: %s" % merged)
-#    pipe = Popen(merged, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
-#    pipe.wait()
-#    if  pipe.stderr.read(): # we experience an error
-#        if  verbose:
-#            print("Lookup inital area: %s" % inital)
-#        pipe = Popen(initial, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
-#        pipe.wait()
-    pipe = Popen(initial, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+        print("Lookup area: %s" % hpath)
+    pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
     pipe.wait()
     fnames = [f for f in pipe.stdout.read().split('\n') if f.find('part') != -1]
     return fnames
@@ -431,16 +422,17 @@ def run(paths, fout, action,
     # join tables
     cols = ['*'] # to select all fields from table
     cols = ['d_dataset','d_creation_date','d_is_dataset_valid','f_event_count','f_file_size','dataset_access_type','acquisition_era_name']
-    join1 = ddf.join(daf, ddf.d_dataset_access_type_id == daf.dataset_access_type_id)
-    join2 = fdf.join(join1, join1.d_dataset_id == fdf.f_dataset_id)
-    join3 = aef.join(join2, join2.d_acquisition_era_id == aef.acquisition_era_id)
-    joins = join3.select(cols)
+#    join1 = ddf.join(daf, ddf.d_dataset_access_type_id == daf.dataset_access_type_id)
+#    join2 = fdf.join(join1, join1.d_dataset_id == fdf.f_dataset_id)
+#    join3 = aef.join(join2, join2.d_acquisition_era_id == aef.acquisition_era_id)
+#    joins = join3.select(cols)
 
     # another way to join tables is to use plain SQL and passes statemtn into sqlContext.sql(stmt)
     # for example
-#    stmt = 'SELECT %s FROM ddf JOIN fdf on ddf.d_dataset_id = fdf.f_dataset_id JOIN daf ON ddf.d_dataset_access_type_id = daf.dataset_access_type_id JOIN aef ON ddf.d_acquisition_era_id = aef.acquisition_era_id' % ','.join(cols)
-#    print(stmt)
-#    joins = sqlContext.sql(stmt)
+#    cols = ['dataset_access_type','d_is_dataset_valid','d_dataset','d_creation_date','f_event_count','f_file_size']
+    stmt = 'SELECT %s FROM ddf JOIN fdf on ddf.d_dataset_id = fdf.f_dataset_id JOIN daf ON ddf.d_dataset_access_type_id = daf.dataset_access_type_id JOIN aef ON ddf.d_acquisition_era_id = aef.acquisition_era_id' % ','.join(cols)
+    print(stmt)
+    joins = sqlContext.sql(stmt)
 
     # keep joins table around
     joins.persist(StorageLevel.MEMORY_AND_DISK)
@@ -569,12 +561,12 @@ def main():
     opts = optmgr.parser.parse_args()
     print("Input arguments: %s" % opts)
     time0 = time.time()
-    paths = {'dpath':apath(opts.hdir, 'datasets'),
-             'bpath':apath(opts.hdir, 'blocks'),
-             'fpath':apath(opts.hdir, 'files'),
-             'apath':apath(opts.hdir, 'acquisition_eras'),
-             'ppath':apath(opts.hdir, 'processing_eras'),
-             'dapath':apath(opts.hdir, 'dataset_access_types')}
+    paths = {'dpath':apath(opts.hdir, 'DATASETS'),
+             'bpath':apath(opts.hdir, 'BLOCKS'),
+             'fpath':apath(opts.hdir, 'FILES'),
+             'apath':apath(opts.hdir, 'ACQUISITION_ERAS'),
+             'ppath':apath(opts.hdir, 'PROCESSING_ERAS'),
+             'dapath':apath(opts.hdir, 'DATASET_ACCESS_TYPES')}
     fout = opts.fout
     verbose = opts.verbose
     yarn = opts.yarn
