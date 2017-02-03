@@ -35,7 +35,7 @@ class OptionParser():
         "User based option parser"
         self.parser = argparse.ArgumentParser(prog='PROG')
         year = time.strftime("%Y", time.localtime())
-        hdir = 'hdfs:///project/awg/cms/CMS_DBS3_PROD_GLOBAL'
+        hdir = 'hdfs:///project/awg/cms/CMS_DBS3_PROD_GLOBAL/current'
         msg = 'Location of DBS folders on HDFS, default %s' % hdir
         self.parser.add_argument("--hdir", action="store",
             dest="hdir", default=hdir, help=msg)
@@ -471,8 +471,8 @@ def run(paths, fout, action,
         else:
             raise NotImplementedError("Given dates are not supported, please either provide YYYYMMDD date or use dash to define a dates range.")
 
-    if  verbose:
-        print("Applied condition %s" % cond)
+#    if  verbose:
+    print("Applied condition %s" % cond)
 
     if  action == 'tier_stats':
         # process dataframe
@@ -507,16 +507,22 @@ def tier_stats(tier, ndf, fout, verbose=None):
     if  tier:
         fdir, fname = os.path.split(fout)
         fout = os.path.join(fdir, '%s_%s' % (tier, fname))
+#    rdf = ndf.groupBy('d_dataset')\
+#            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
+#            .withColumnRenamed('sum(f_event_count)', 'evts')\
+#            .withColumnRenamed('sum(f_file_size)', 'size')\
+#            .withColumnRenamed('max(d_creation_date)', 'date')\
+#            .collect()
     rdf = ndf.groupBy('d_dataset')\
-            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
+            .agg({'f_event_count':'sum', 'f_file_size':'sum'})\
             .withColumnRenamed('sum(f_event_count)', 'evts')\
             .withColumnRenamed('sum(f_file_size)', 'size')\
-            .withColumnRenamed('max(d_creation_date)', 'date')\
             .collect()
     tot_size = 0
     tot_evts = 0
     with fopen(fout, 'w') as ostream:
-        ostream.write("dataset,size,evts,date\n")
+#        ostream.write("dataset,size,evts,date\n")
+        ostream.write("dataset,size,evts\n")
         for row in rdf:
             size = row['size']
             evts = row['evts']
@@ -524,7 +530,8 @@ def tier_stats(tier, ndf, fout, verbose=None):
                 size = 0
             if  isinstance(evts, NoneType):
                 evts = 0
-            ostream.write('%s,%s,%s,%s\n' % (row['d_dataset'], size, evts, row['date']))
+#            ostream.write('%s,%s,%s,%s\n' % (row['d_dataset'], size, evts, row['date']))
+            ostream.write('%s,%s,%s\n' % (row['d_dataset'], size, evts))
             tot_size += float(size)
             tot_evts += int(evts)
     if  not tier:
@@ -538,14 +545,20 @@ def dataset_stats(ndf, fout, verbose=None):
         ndf.explain(extended=False)
         for row in ndf.head(5):
             print("### row", row)
+#    rdf = ndf.groupBy('d_dataset')\
+#            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
+#            .withColumnRenamed('sum(f_event_count)', 'evts')\
+#            .withColumnRenamed('sum(f_file_size)', 'size')\
+#            .withColumnRenamed('max(d_creation_date)', 'date')\
+#            .collect()
     rdf = ndf.groupBy('d_dataset')\
-            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
+            .agg({'f_event_count':'sum', 'f_file_size':'sum'})\
             .withColumnRenamed('sum(f_event_count)', 'evts')\
             .withColumnRenamed('sum(f_file_size)', 'size')\
-            .withColumnRenamed('max(d_creation_date)', 'date')\
             .collect()
     with fopen(fout, 'w') as ostream:
-        ostream.write("dataset,size,evts,date\n")
+#        ostream.write("dataset,size,evts,date\n")
+        ostream.write("dataset,size,evts\n")
         for row in rdf:
             size = row['size']
             evts = row['evts']
@@ -553,7 +566,8 @@ def dataset_stats(ndf, fout, verbose=None):
                 size = 0
             if  isinstance(evts, NoneType):
                 evts = 0
-            ostream.write('%s,%s,%s,%s\n' % (row['d_dataset'], size, evts, row['date']))
+#            ostream.write('%s,%s,%s,%s\n' % (row['d_dataset'], size, evts, row['date']))
+            ostream.write('%s,%s,%s\n' % (row['d_dataset'], size, evts))
 
 def main():
     "Main function"
