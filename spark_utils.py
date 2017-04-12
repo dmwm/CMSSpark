@@ -22,6 +22,7 @@ from schemas import schema_processing_eras, schema_dataset_access_types
 from schemas import schema_acquisition_eras,  schema_datasets, schema_blocks
 from schemas import schema_files, schema_mod_configs, schema_out_configs
 from schemas import schema_rel_versions, schema_phedex
+from schemas import schema_aaa, schema_eos
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import Row
@@ -283,47 +284,50 @@ def cmssw_tables(ctx, sqlContext,
     if  verbose:
         print("### cmssw avro records", records, type(records))
 
-    reckeys = records[0].keys() # we get keys of first record
-    Record = Row(*reckeys)
-    if  verbose:
-        print("### inferred Record", Record, type(Record))
-    data = avro_rdd.map(lambda r: Record(*r))
+#    reckeys = records[0].keys() # we get keys of first record
+#    Record = Row(*reckeys)
+#    if  verbose:
+#        print("### inferred Record", Record, type(Record))
+#    data = avro_rdd.map(lambda r: Record(*r))
 
     # create new spark DataFrame
-    avro_df = sqlContext.createDataFrame(data)
+#    avro_df = sqlContext.createDataFrame(data)
+#    avro_df = sqlContext.createDataFrame(records)
+    avro_df = sqlContext.createDataFrame(avro_rdd)
     avro_df.registerTempTable('avro_df')
     if  verbose:
         print("### avro_df", avro_df, type(avro_df))
 
     return avro_df
 
-def aaa_tables(hdir='hdfs:///project/monitoring/archive/xrootd', verbose=False):
+def aaa_tables(sqlContext, hdir='hdfs:///project/monitoring/archive/xrootd/raw/gled', verbose=False):
     """
     Return dictionary of spark tables from AAA data
     """
-    sqlContext = HiveContext(ctx)
-
-    daf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
+    if  not day:
+        # by default we read yesterday data
+        day = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+    hpath = '%s/%s' % (hdir, day)
+    aaa_df = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_dataset_access_types()) \
-                        for path in files(paths['dapath'], verbose)])
+                        .load(path, schema = schema_aaa()) \
+                        for path in files(hpath, verbose)])
     aaa_df.registerTempTable('aaa_df')
     tables = {'aaa_df':aaa_df}
     return tables
 
-def eos_tables(hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms', day=None, verbose=False):
+def eos_tables(sqlContext, hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms', day=None, verbose=False):
     """
     Return dictionary of spark tables from EOS data
     """
-    sqlContext = HiveContext(ctx)
     if  not day:
         # by default we read yesterday data
         day = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
-    path = '%s/%s' % (hdir, day)
+    hpath = '%s/%s' % (hdir, day)
     eos_df = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_dataset_access_types()) \
-                        for path in files(path, verbose)])
+                        .load(path, schema = schema_eos()) \
+                        for path in files(hpath, verbose)])
     eos_df.registerTempTable('eos_df')
     tables = {'eos_df':eos_df}
     return tables
