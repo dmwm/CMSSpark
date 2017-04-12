@@ -74,7 +74,7 @@ def avro_files(path, verbose=0):
     "Return list of files for given HDFS path"
     hpath = "hadoop fs -ls %s | awk '{print $8}'" % path
     if  verbose:
-        print("Lookup area: %s" % hpath)
+        print("### Avro files area: %s" % hpath)
     pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
     pipe.wait()
     fnames = [f for f in pipe.stdout.read().split('\n') if f.endswith('avro')]
@@ -248,13 +248,14 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     tables = {'daf':daf, 'ddf':ddf, 'bdf':bdf, 'fdf':fdf, 'aef':aef, 'pef':pef, 'mcf':mcf, 'ocf':ocf, 'rvf':rvf}
     return tables
 
-def cmssw_rdd(ctx, schema_file, hdir='hdfs:///project/awg/cms/cmssw-popularity/avro-snappy', day=None):
+def cmssw_rdd(ctx, schema_file, hdir='hdfs:///project/awg/cms/cmssw-popularity/avro-snappy', day=None, verbose=None):
 
     if  not day:
-        day = time.strftime("year=%Y/month=%m/day=%d", time.gmtime(time.time()-60*60*24))
+        day = time.strftime("year=%Y/month=%-m/day=%d", time.gmtime(time.time()-60*60*24))
     path = '%s/%s' % (hdir, day)
     # get avro files from HDFS
-    files = avro_files(path)
+    afiles = avro_files(path, verbose=verbose)
+    print("### avro_files", afiles)
 
     # load FWJR schema
     rdd = ctx.textFile(schema_file, 1).collect()
@@ -271,7 +272,7 @@ def cmssw_rdd(ctx, schema_file, hdir='hdfs:///project/awg/cms/cmssw-popularity/a
     aconv="org.apache.spark.examples.pythonconverters.AvroWrapperToJavaConverter"
 
     # load data from HDFS
-    avro_rdd = ctx.union([ctx.newAPIHadoopFile(f, aformat, akey, awrite, aconv, conf=conf) for f in files])
+    avro_rdd = ctx.union([ctx.newAPIHadoopFile(f, aformat, akey, awrite, aconv, conf=conf) for f in afiles])
 
     return avro_rdd
 
