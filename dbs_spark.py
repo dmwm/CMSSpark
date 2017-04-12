@@ -30,6 +30,13 @@ from pyspark.sql import HiveContext
 from pyspark.sql import DataFrame
 from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField, StringType, BooleanType, LongType
 
+# WMCore modules
+try:
+    # stopmAMQ API
+    from WMCore.Services.StompAMQ.StompAMQ import StompAMQ
+except ImportError:
+    StompAMQ = None
+
 class OptionParser():
     def __init__(self):
         "User based option parser"
@@ -46,6 +53,8 @@ class OptionParser():
             dest="tier", default="", help='Select datasets for given data-tier, use comma-separated list if you want to handle multiple data-tiers')
         self.parser.add_argument("--era", action="store",
             dest="era", default="", help='Select datasets for given acquisition era')
+        self.parser.add_argument("--release", action="store",
+            dest="release", default="", help='Select datasets for given CMSSW release')
         self.parser.add_argument("--cdate", action="store",
             dest="cdate", default="", help='Select datasets starting given creation date in YYYYMMDD format')
         self.parser.add_argument("--patterns", action="store",
@@ -61,6 +70,9 @@ class OptionParser():
             dest="yarn", default=False, help="run job on analytics cluster via yarn resource manager")
         self.parser.add_argument("--verbose", action="store_true",
             dest="verbose", default=False, help="verbose output")
+        msg = "Send results via StompAMQ to a broker, provide broker credentials in JSON file"
+        self.parser.add_argument("--amq", action="store",
+            dest="amq", default="", help=msg)
 
 def apath(hdir, name):
     "Helper function to construct attribute path"
@@ -303,6 +315,32 @@ def schema_files():
             StructField("f_last_modified_by", StringType(), True)
         ])
 
+def schema_mod_configs():
+    return StructType([
+            StructField("mc_ds_output_mod_config_id", IntegerType(), True),
+            StructField("mc_dataset_id", IntegerType(), True),
+            StructField("mc_output_mod_config_id", IntegerType(), True)
+        ])
+
+def schema_out_configs():
+    return StructType([
+            StructField("oc_output_mod_config_id", IntegerType(), True),
+            StructField("oc_app_exec_id", IntegerType(), True),
+            StructField("oc_release_version_id", IntegerType(), True),
+            StructField("oc_parameter_set_hash_id", IntegerType(), True),
+            StructField("oc_output_module_label", StringType(), True),
+            StructField("oc_global_tag", StringType(), True),
+            StructField("oc_scenario", StringType(), True),
+            StructField("oc_creation_date", IntegerType(), True),
+            StructField("oc_create_by", StringType(), True)
+        ])
+
+def schema_rel_versions():
+    return StructType([
+            StructField("r_release_version_id", IntegerType(), True),
+            StructField("r_release_version", StringType(), True)
+        ])
+
 def files(path, verbose=0):
     "Return list of files for given HDFS path"
     hpath = "hadoop fs -ls %s | awk '{print $8}'" % path
@@ -360,7 +398,8 @@ def unix_tstamp(date):
         raise NotImplementedError('Given date %s is not in string YYYYMMDD format' % date)
 
 def run(paths, fout, action,
-        verbose=None, yarn=None, tier=None, era=None, cdate=None, patterns=[], antipatterns=[]):
+        verbose=None, yarn=None, tier=None, era=None,
+        release=None, cdate=None, patterns=[], antipatterns=[]):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
@@ -368,8 +407,6 @@ def run(paths, fout, action,
     print("Use the following data on HDFS")
     for key, val in paths.items():
         print(val)
-    # output
-    out = []
 
     time0 = time.time()
     # pyspark modules
@@ -411,6 +448,19 @@ def run(paths, fout, action,
                         .load(path, schema = schema_processing_eras()) \
                         for path in files(paths['ppath'], verbose)])
 
+    mcf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
+                        .load(path, schema = schema_mod_configs()) \
+                        for path in files(paths['mcpath'], verbose)])
+    ocf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
+                        .load(path, schema = schema_out_configs()) \
+                        for path in files(paths['ocpath'], verbose)])
+    rvf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
+                        .load(path, schema = schema_rel_versions()) \
+                        for path in files(paths['rvpath'], verbose)])
+
     # Register temporary tables to be able to use sqlContext.sql
     daf.registerTempTable('daf')
     ddf.registerTempTable('ddf')
@@ -418,19 +468,16 @@ def run(paths, fout, action,
     fdf.registerTempTable('fdf')
     aef.registerTempTable('aef')
     pef.registerTempTable('pef')
+    mcf.registerTempTable('mcf')
+    ocf.registerTempTable('ocf')
+    rvf.registerTempTable('rvf')
 
     # join tables
     cols = ['*'] # to select all fields from table
-    cols = ['d_dataset','d_creation_date','d_is_dataset_valid','f_event_count','f_file_size','dataset_access_type','acquisition_era_name']
-#    join1 = ddf.join(daf, ddf.d_dataset_access_type_id == daf.dataset_access_type_id)
-#    join2 = fdf.join(join1, join1.d_dataset_id == fdf.f_dataset_id)
-#    join3 = aef.join(join2, join2.d_acquisition_era_id == aef.acquisition_era_id)
-#    joins = join3.select(cols)
+    cols = ['d_dataset_id', 'd_dataset','d_creation_date','d_is_dataset_valid','f_event_count','f_file_size','dataset_access_type','acquisition_era_name','processing_version']
 
-    # another way to join tables is to use plain SQL and passes statemtn into sqlContext.sql(stmt)
-    # for example
-#    cols = ['dataset_access_type','d_is_dataset_valid','d_dataset','d_creation_date','f_event_count','f_file_size']
-    stmt = 'SELECT %s FROM ddf JOIN fdf on ddf.d_dataset_id = fdf.f_dataset_id JOIN daf ON ddf.d_dataset_access_type_id = daf.dataset_access_type_id JOIN aef ON ddf.d_acquisition_era_id = aef.acquisition_era_id' % ','.join(cols)
+    # join tables
+    stmt = 'SELECT %s FROM ddf JOIN fdf on ddf.d_dataset_id = fdf.f_dataset_id JOIN daf ON ddf.d_dataset_access_type_id = daf.dataset_access_type_id JOIN aef ON ddf.d_acquisition_era_id = aef.acquisition_era_id JOIN pef ON ddf.d_processing_era_id = pef.processing_era_id' % ','.join(cols)
     print(stmt)
     joins = sqlContext.sql(stmt)
 
@@ -471,103 +518,90 @@ def run(paths, fout, action,
         else:
             raise NotImplementedError("Given dates are not supported, please either provide YYYYMMDD date or use dash to define a dates range.")
 
-#    if  verbose:
     print("Applied condition %s" % cond)
 
-    if  action == 'tier_stats':
-        # process dataframe
+    if  tier:
         tiers = tier.split(',')
-        if  tiers:
-            gen_cond = cond
-            for tier in tiers:
-                cond = gen_cond + ' AND d_dataset like "%%/%s"' % tier
-                fjoin = joins.where(cond).distinct().select(cols)
-                tier_stats(tier, fjoin, fout, verbose)
-        else:
+        gen_cond = cond
+        for tier in tiers:
+            cond = gen_cond + ' AND d_dataset like "%%/%s"' % tier
             fjoin = joins.where(cond).distinct().select(cols)
-            tier_stats(None, fjoin, fout, verbose)
-    elif action == 'dataset_stats':
-        fjoin = joins.where(cond).distinct().select(cols)
-        dataset_stats(fjoin, fout, verbose)
     else:
-        raise NotImplementedError()
+        fjoin = joins.where(cond).distinct().select(cols)
+
+    # at this step we have fjoin table with Row(d_dataset_id=9413359, d_dataset=u'/SingleMu/CMSSW_7_1_0_pre9-GR_R_71_V4_RelVal_mu2012D_TEST-v6000/DQM', d_creation_date=1406060166.0, d_is_dataset_valid=1, f_event_count=5318, f_file_size=21132638.0, dataset_access_type=u'DELETED', acquisition_era_name=u'CMSSW_7_1_0_pre9', processing_version=u'6000'))
+
+    newdf = fjoin\
+            .groupBy(['d_dataset','d_dataset_id','dataset_access_type','acquisition_era_name','processing_version'])\
+            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
+            .withColumnRenamed('sum(f_event_count)', 'evts')\
+            .withColumnRenamed('sum(f_file_size)', 'size')\
+            .withColumnRenamed('max(d_creation_date)', 'date')
+
+
+    # at this point we have ndf dataframe with our collected stats for every dataset
+    # let's join it with release info
+    newdf.registerTempTable('newdf')
+    cols = ['d_dataset_id','d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','processing_version','r_release_version']
+    stmt = 'SELECT %s FROM newdf JOIN mcf ON newdf.d_dataset_id = mcf.mc_dataset_id JOIN ocf ON mcf.mc_output_mod_config_id = ocf.oc_output_mod_config_id JOIN rvf ON ocf.oc_release_version_id = rvf.r_release_version_id' % ','.join(cols)
+    joins = sqlContext.sql(stmt)
+
+    # keep joins table around
+    joins.persist(StorageLevel.MEMORY_AND_DISK)
+
+    # print out rows
+    if  verbose:
+        print("### First rows of joint table, nrows", joins.count())
+        for row in joins.head(5):
+            print("### row", row)
+
+    # collect results and perform re-mapping
+    out = []
+    idx = 0
+    site = '' # will fill it out when process Phedex data
+    naccess = 0 # will fill it out when process Phedex+DBS data and calc naccess
+    njobs = 0 # will fill it out when process JobMonitoring data
+    cpu = 0 # will fill it out when process JobMonitoring data
+    atype = '' # will fill out when process DBS data
+    pver = '' # will fill out when process DBS data
+    rver = '' # will fill out when process DBS data
+    drop_cols = ['d_dataset_id','d_dataset','dataset_access_type','acquisition_era_name','processing_version','r_release_version']
+    for row in joins.collect():
+        rdict = row.asDict()
+        _, primds, procds, tier = rdict['d_dataset'].split('/')
+        rdict['primds'] = primds
+        rdict['procds'] = procds
+        rdict['tier'] = tier
+        rdict['era'] = rdict.get('acquisition_era_name', era)
+        rdict['atype'] = rdict.get('dataset_access_type', atype)
+        rdict['pver'] = rdict.get('processing_version', pver)
+        rdict['release'] = rdict.get('r_release_version', rver)
+        rdict['site'] = site
+        rdict['naccess'] = naccess
+        rdict['njobs'] = njobs
+        rdict['cpu'] = cpu
+        for key in drop_cols:
+            if  key in rdict:
+                del rdict[key]
+        out.append(rdict)
+        if  verbose and idx < 5:
+            print(rdict)
+        idx += 1
 
     ctx.stop()
     if  verbose:
         logger.info("Elapsed time %s" % elapsed_time(time0))
     return out
 
-def tier_stats(tier, ndf, fout, verbose=None):
-    "Collect tier stats and write them out"
-    if  verbose:
-        print("### Final dataframe, total size %s" % ndf.count())
-        ndf.explain(extended=False)
-        for row in ndf.head(5):
-            print("### row", row)
-    if  tier:
-        fdir, fname = os.path.split(fout)
-        fout = os.path.join(fdir, '%s_%s' % (tier, fname))
-#    rdf = ndf.groupBy('d_dataset')\
-#            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
-#            .withColumnRenamed('sum(f_event_count)', 'evts')\
-#            .withColumnRenamed('sum(f_file_size)', 'size')\
-#            .withColumnRenamed('max(d_creation_date)', 'date')\
-#            .collect()
-    rdf = ndf.groupBy('d_dataset')\
-            .agg({'f_event_count':'sum', 'f_file_size':'sum'})\
-            .withColumnRenamed('sum(f_event_count)', 'evts')\
-            .withColumnRenamed('sum(f_file_size)', 'size')\
-            .collect()
-    tot_size = 0
-    tot_evts = 0
-    with fopen(fout, 'w') as ostream:
-#        ostream.write("dataset,size,evts,date\n")
-        ostream.write("dataset,size,evts\n")
-        for row in rdf:
-            size = row['size']
-            evts = row['evts']
-            if  isinstance(size, NoneType):
-                size = 0
-            if  isinstance(evts, NoneType):
-                evts = 0
-#            ostream.write('%s,%s,%s,%s\n' % (row['d_dataset'], size, evts, row['date']))
-            ostream.write('%s,%s,%s\n' % (row['d_dataset'], size, evts))
-            tot_size += float(size)
-            tot_evts += int(evts)
-    if  not tier:
-        tier = 'ALL'
-    print('%s,%s,%s' % (tier, tot_size, tot_evts))
-
-def dataset_stats(ndf, fout, verbose=None):
-    "Collect dataset stats and write them out"
-    if  verbose:
-        print("### Final dataframe, total size %s" % ndf.count())
-        ndf.explain(extended=False)
-        for row in ndf.head(5):
-            print("### row", row)
-#    rdf = ndf.groupBy('d_dataset')\
-#            .agg({'f_event_count':'sum', 'f_file_size':'sum', 'd_creation_date':'max'})\
-#            .withColumnRenamed('sum(f_event_count)', 'evts')\
-#            .withColumnRenamed('sum(f_file_size)', 'size')\
-#            .withColumnRenamed('max(d_creation_date)', 'date')\
-#            .collect()
-    rdf = ndf.groupBy('d_dataset')\
-            .agg({'f_event_count':'sum', 'f_file_size':'sum'})\
-            .withColumnRenamed('sum(f_event_count)', 'evts')\
-            .withColumnRenamed('sum(f_file_size)', 'size')\
-            .collect()
-    with fopen(fout, 'w') as ostream:
-#        ostream.write("dataset,size,evts,date\n")
-        ostream.write("dataset,size,evts\n")
-        for row in rdf:
-            size = row['size']
-            evts = row['evts']
-            if  isinstance(size, NoneType):
-                size = 0
-            if  isinstance(evts, NoneType):
-                evts = 0
-#            ostream.write('%s,%s,%s,%s\n' % (row['d_dataset'], size, evts, row['date']))
-            ostream.write('%s,%s,%s\n' % (row['d_dataset'], size, evts))
+def credentials(fname=None):
+    "Read credentials from PBR_BROKER environment"
+    if  not fname:
+        fname = os.environ.get('PBR_BROKER', '')
+    if  not os.path.isfile(fname):
+        return {}
+    with open(fname, 'r') as istream:
+        data = json.load(istream)
+    return data
 
 def main():
     "Main function"
@@ -580,17 +614,41 @@ def main():
              'fpath':apath(opts.hdir, 'FILES'),
              'apath':apath(opts.hdir, 'ACQUISITION_ERAS'),
              'ppath':apath(opts.hdir, 'PROCESSING_ERAS'),
+             'mcpath':apath(opts.hdir, 'DATASET_OUTPUT_MOD_CONFIGS'),
+             'ocpath':apath(opts.hdir, 'OUTPUT_MODULE_CONFIGS'),
+             'rvpath':apath(opts.hdir, 'RELEASE_VERSIONS'),
              'dapath':apath(opts.hdir, 'DATASET_ACCESS_TYPES')}
     fout = opts.fout
     verbose = opts.verbose
     yarn = opts.yarn
     tier = opts.tier
     era = opts.era
+    release = opts.release
     cdate = opts.cdate
     action = opts.action
     patterns = opts.patterns.split(',') if opts.patterns else []
     antipatterns = opts.antipatterns.split(',') if opts.antipatterns else []
-    results = run(paths, fout, action, verbose, yarn, tier, era, cdate, patterns, antipatterns)
+    res = run(paths, fout, action, verbose, yarn, tier, era, release, cdate, patterns, antipatterns)
+
+    if opts.amq:
+        creds = credentials(opts.amq)
+        host, port = creds['host_and_ports'].split(':')
+        port = int(port)
+        if  creds and StompAMQ:
+            print("### Send %s docs via StompAMQ" % len(res))
+            amq = StompAMQ(creds['username'], creds['password'], \
+                creds['producer'], creds['topic'], [(host, port)])
+            data = []
+            for doc in res:
+                hid = doc.get("hash", 1)
+                data.append(amq.make_notification(doc, hid))
+            results = amq.send(data)
+            print("### results sent by AMQ", len(results))
+    else:
+        print("### Collected", len(res), "results")
+        if len(res)>0:
+            print(res[0])
+
 
 if __name__ == '__main__':
     main()
