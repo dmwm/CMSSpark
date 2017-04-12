@@ -15,17 +15,13 @@ import gzip
 import time
 import json
 import argparse
-from datetime import datetime as dt
-from datetime import timedelta
 from types import NoneType
-from subprocess import Popen, PIPE
 
 from pyspark import SparkContext, StorageLevel
-from pyspark.sql import Row
-from pyspark.sql import SQLContext
 from pyspark.sql import HiveContext
-from pyspark.sql import DataFrame
-from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField, StringType, BooleanType, LongType
+
+# local modules
+from spark_utils import dbs_tables, phedex_tables, print_rows, spark_context
 
 # WMCore modules
 try:
@@ -71,10 +67,6 @@ class OptionParser():
         self.parser.add_argument("--amq", action="store",
             dest="amq", default="", help=msg)
 
-def apath(hdir, name):
-    "Helper function to construct attribute path"
-    return os.path.join(hdir, name)
-
 class GzipFile(gzip.GzipFile):
     def __enter__(self):
         "Context manager enter method"
@@ -97,300 +89,6 @@ def fopen(fin, mode='r'):
     else:
         stream = open(fin, mode)
     return stream
-
-class SparkLogger(object):
-    "Control Spark Logger"
-    def __init__(self, ctx):
-        self.logger = ctx._jvm.org.apache.log4j
-        self.rlogger = self.logger.LogManager.getRootLogger()
-
-    def set_level(self, level):
-        "Set Spark Logger level"
-        self.rlogger.setLevel(getattr(self.logger.Level, level))
-
-    def lprint(self, stream, msg):
-        "Print message via Spark Logger to given stream"
-        getattr(self.rlogger, stream)(msg)
-
-    def info(self, msg):
-        "Print message via Spark Logger to info stream"
-        self.lprint('info', msg)
-
-    def error(self, msg):
-        "Print message via Spark Logger to error stream"
-        self.lprint('error', msg)
-
-    def warning(self, msg):
-        "Print message via Spark Logger to warning stream"
-        self.lprint('warning', msg)
-
-def schema_processing_eras():
-    """
-    ==> /data/wma/dbs/hdfs/large/processing_eras.attrs <==
-    processing_era_id,processing_version,creation_date,create_by,description
-
-    ==> /data/wma/dbs/hdfs/large/processing_eras.csv <==
-    1,0,null,null,null
-
- PROCESSING_ERA_ID NOT NULL NUMBER(38)
- PROCESSING_ERA_NAME NOT NULL VARCHAR2(120)
- CREATION_DATE NOT NULL INTEGER
- CREATE_BY NOT NULL VARCHAR2(500)
- DESCRIPTION NOT NULL VARCHAR2(40)
-    """
-    return StructType([
-            StructField("processing_era_id", IntegerType(), True),
-            StructField("processing_version", StringType(), True),
-            StructField("creation_date", IntegerType(), True),
-            StructField("create_by", StringType(), True),
-            StructField("description", StringType(), True)
-        ])
-
-def schema_acquisition_eras():
-    """
-    ==> /data/wma/dbs/hdfs/large/acquisition_eras.attrs <==
-    acquisition_era_id,acquisition_era_name,start_date,end_date,creation_date,create_by,description
-
-    ==> /data/wma/dbs/hdfs/large/acquisition_eras.csv <==
-    202,DBS2_UNKNOWN_ACQUISION_ERA,0,null,null,null,null
-
- ACQUISITION_ERA_ID NOT NULL NUMBER(38)
- ACQUISITION_ERA_NAME NOT NULL VARCHAR2(120)
- START_DATE NOT NULL INTEGER
- END_DATE NOT NULL INTEGER
- CREATION_DATE NOT NULL INTEGER
- CREATE_BY NOT NULL VARCHAR2(500)
- DESCRIPTION NOT NULL VARCHAR2(40)
-    """
-    return StructType([
-            StructField("acquisition_era_id", IntegerType(), True),
-            StructField("acquisition_era_name", StringType(), True),
-            StructField("start_date", IntegerType(), True),
-            StructField("end_date", IntegerType(), True),
-            StructField("creation_date", IntegerType(), True),
-            StructField("create_by", StringType(), True),
-            StructField("description", StringType(), True)
-        ])
-
-def schema_dataset_access_types():
-    """
-    ==> /data/wma/dbs/hdfs/large/dataset_access_types.attrs <==
-    dataset_access_type_id,dataset_access_type
-
-    ==> /data/wma/dbs/hdfs/large/dataset_access_types.csv <==
-    1,VALID
-
- DATASET_ACCESS_TYPE_ID NOT NULL NUMBER(38)
- DATASET_ACCESS_TYPE NOT NULL VARCHAR2(100)
-    """
-    return StructType([
-            StructField("dataset_access_type_id", IntegerType(), True),
-            StructField("dataset_access_type", StringType(), True)
-        ])
-
-def schema_datasets():
-    """
-    ==> /data/wma/dbs/hdfs/large/datasets.attrs <==
-    dataset_id,dataset,is_dataset_valid,primary_ds_id,processed_ds_id,data_tier_id,datset_access_type_id,acqusition_era_id,processing_era_id,physics_group_id,xtcrosssection,prep_id,createion_date,create_by,last_modification_date,last_modified_by
-
-    ==> /data/wma/dbs/hdfs/large/datasets.csv <==
-    48,/znn4j_1600ptz3200-alpgen/CMSSW_1_4_9-CSA07-4157/GEN-SIM,1,15537,17760,109,81,202,1,37,null,null,1206050276,/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=aresh/CN=669724/CN=Aresh Vedaee,1261148491,/DC=org/DC=doegrids/OU=People/CN=Si Xie 523253
-
- DATASET_ID NOT NULL NUMBER(38)
- DATASET NOT NULL VARCHAR2(700)
- IS_DATASET_VALID NOT NULL NUMBER(38)
- PRIMARY_DS_ID NOT NULL NUMBER(38)
- PROCESSED_DS_ID NOT NULL NUMBER(38)
- DATA_TIER_ID NOT NULL NUMBER(38)
- DATASET_ACCESS_TYPE_ID NOT NULL NUMBER(38)
- ACQUISITION_ERA_ID NUMBER(38)
- PROCESSING_ERA_ID NUMBER(38)
- PHYSICS_GROUP_ID NUMBER(38)
- XTCROSSSECTION FLOAT(126)
- PREP_ID VARCHAR2(256)
- CREATION_DATE NUMBER(38)
- CREATE_BY VARCHAR2(500)
- LAST_MODIFICATION_DATE NUMBER(38)
- LAST_MODIFIED_BY VARCHAR2(500)
-    """
-    return StructType([
-            StructField("d_dataset_id", IntegerType(), True),
-            StructField("d_dataset", StringType(), True),
-            StructField("d_is_dataset_valid", IntegerType(), True),
-            StructField("d_primary_ds_id", IntegerType(), True),
-            StructField("d_processed_ds_id", IntegerType(), True),
-            StructField("d_data_tier_id", IntegerType(), True),
-            StructField("d_dataset_access_type_id", IntegerType(), True),
-            StructField("d_acquisition_era_id", IntegerType(), True),
-            StructField("d_processing_era_id", IntegerType(), True),
-            StructField("d_physics_group_id", IntegerType(), True),
-            StructField("d_xtcrosssection", DoubleType(), True),
-            StructField("d_prep_id", StringType(), True),
-            StructField("d_creation_date", DoubleType(), True),
-            StructField("d_create_by", StringType(), True),
-            StructField("d_last_modification_date", DoubleType(), True),
-            StructField("d_last_modified_by", StringType(), True)
-        ])
-
-def schema_blocks():
-    """
-    ==> /data/wma/dbs/hdfs/large/blocks.attrs <==
-    block_id,block_name,dataset_id,open_for_writing,origin_site_name,block_size,file_count,creation_date,create_by,last_modification_date,last_modified_by
-
-    ==> /data/wma/dbs/hdfs/large/blocks.csv <==
-    555044,/Cosmics/Commissioning09-v1/RAW#72404277-dfe7-4405-9623-f240b21b60bc,13392,0,UNKNOWN,103414137568,30,1236228037,/DC=ch/DC=cern/OU=computers/CN=vocms39.cern.ch,1239909571,/DC=ch/DC=cern/OU=computers/CN=vocms39.cern.ch
-
- BLOCK_ID NOT NULL NUMBER(38)
- BLOCK_NAME NOT NULL VARCHAR2(500)
- DATASET_ID NOT NULL NUMBER(38)
- OPEN_FOR_WRITING NOT NULL NUMBER(38)
- ORIGIN_SITE_NAME NOT NULL VARCHAR2(100)
- BLOCK_SIZE NUMBER(38)
- FILE_COUNT NUMBER(38)
- CREATION_DATE NUMBER(38)
- CREATE_BY VARCHAR2(500)
- LAST_MODIFICATION_DATE NUMBER(38)
- LAST_MODIFIED_BY VARCHAR2(500)
-    """
-    return StructType([
-            StructField("b_block_id", IntegerType(), True),
-            StructField("b_block_name", StringType(), True),
-            StructField("b_dataset_id", IntegerType(), True),
-            StructField("b_open_for_writing", IntegerType(), True),
-            StructField("b_origin_site_name", StringType(), True),
-            StructField("b_block_size", DoubleType(), True),
-            StructField("b_file_count", IntegerType(), True),
-            StructField("b_creation_date", DoubleType(), True),
-            StructField("b_create_by", StringType(), True),
-            StructField("b_last_modification_date", DoubleType(), True),
-            StructField("b_last_modified_by", StringType(), True)
-        ])               
-                         
-def schema_files():
-    """
-    ==> /data/wma/dbs/hdfs/large/files.attrs <==
-    file_id,logical_file_name,is_file_valid,dataset_id,block_id,file_type_id,check_sum,event_count,file_size,branch_hash_id,adler32,md5,auto_cross_section,creation_date,create_by,last_modification_date,last_modified_by
-
-    ==> /data/wma/dbs/hdfs/large/files.csv <==
-    11167853,/store/data/Commissioning08/Cosmics/RECO/CruzetAll_HLT_L1Basic-v1/000/058/546/E2813760-1C0D-DE11-AA92-001617DBD5AC.root,1,13615,574289,1,1934797535,24043,2886176192,null,NOTSET,NOTSET,null,1236656156,/DC=ch/DC=cern/OU=computers/CN=vocms39.cern.ch,1239909559,/DC=ch/DC=cern/OU=computers/CN=vocms39.cern.ch
-
- FILE_ID NOT NULL NUMBER(38)
- LOGICAL_FILE_NAME NOT NULL VARCHAR2(500)
- IS_FILE_VALID NOT NULL NUMBER(38)
- DATASET_ID NOT NULL NUMBER(38)
- BLOCK_ID NOT NULL NUMBER(38)
- FILE_TYPE_ID NOT NULL NUMBER(38)
- CHECK_SUM NOT NULL VARCHAR2(100)
- EVENT_COUNT NOT NULL NUMBER(38)
- FILE_SIZE NOT NULL NUMBER(38)
- BRANCH_HASH_ID NUMBER(38)
- ADLER32 VARCHAR2(100)
- MD5 VARCHAR2(100)
- AUTO_CROSS_SECTION FLOAT(126)
- CREATION_DATE NUMBER(38)
- CREATE_BY VARCHAR2(500)
- LAST_MODIFICATION_DATE NUMBER(38)
- LAST_MODIFIED_BY VARCHAR2(500)
-    """
-    return StructType([
-            StructField("f_file_id", IntegerType(), True),
-            StructField("f_logical_file_name", StringType(), True),
-            StructField("f_is_file_valid", IntegerType(), True),
-            StructField("f_dataset_id", IntegerType(), True),
-            StructField("f_block_id", IntegerType(), True),
-            StructField("f_file_type_id", IntegerType(), True),
-            StructField("f_check_sum", StringType(), True),
-            StructField("f_event_count", IntegerType(), True),
-            StructField("f_file_size", DoubleType(), True),
-            StructField("f_branch_hash_id", IntegerType(), True),
-            StructField("f_adler32", StringType(), True),
-            StructField("f_md5", StringType(), True),
-            StructField("f_auto_cross_section", DoubleType(), True),
-            StructField("f_creation_date", DoubleType(), True),
-            StructField("f_create_by", StringType(), True),
-            StructField("f_last_modification_date", DoubleType(), True),
-            StructField("f_last_modified_by", StringType(), True)
-        ])
-
-def schema_mod_configs():
-    return StructType([
-            StructField("mc_ds_output_mod_config_id", IntegerType(), True),
-            StructField("mc_dataset_id", IntegerType(), True),
-            StructField("mc_output_mod_config_id", IntegerType(), True)
-        ])
-
-def schema_out_configs():
-    return StructType([
-            StructField("oc_output_mod_config_id", IntegerType(), True),
-            StructField("oc_app_exec_id", IntegerType(), True),
-            StructField("oc_release_version_id", IntegerType(), True),
-            StructField("oc_parameter_set_hash_id", IntegerType(), True),
-            StructField("oc_output_module_label", StringType(), True),
-            StructField("oc_global_tag", StringType(), True),
-            StructField("oc_scenario", StringType(), True),
-            StructField("oc_creation_date", IntegerType(), True),
-            StructField("oc_create_by", StringType(), True)
-        ])
-
-def schema_rel_versions():
-    return StructType([
-            StructField("r_release_version_id", IntegerType(), True),
-            StructField("r_release_version", StringType(), True)
-        ])
-
-def schema_phedex():
-    """
-    Provides schema (names, types, nullable) for csv snapshot
-
-    :returns: StructType consisting StructField array
-    """
-    return StructType([StructField("now_sec", DoubleType(), True),
-                     StructField("dataset_name", StringType(), True),
-                     StructField("dataset_id", IntegerType(), True),
-                     StructField("dataset_is_open", StringType(), True),
-                     StructField("dataset_time_create", DoubleType(), True),
-                     StructField("dataset_time_update", DoubleType(), True),
-                     StructField("block_name", StringType(), True), 
-                     StructField("block_id", IntegerType(), True),
-                     StructField("block_files", IntegerType(), True),
-                     StructField("block_bytes", DoubleType(), True),
-                     StructField("block_is_open", StringType(), True),
-                     StructField("block_time_create", DoubleType(), True),
-                     StructField("block_time_update", DoubleType(), True),
-                     StructField("node_name", StringType(), True),
-                     StructField("node_id", IntegerType(), True),
-                     StructField("br_is_active", StringType(), True),
-                     StructField("br_src_files", LongType(), True),
-                     StructField("br_src_bytes", LongType(), True),
-                     StructField("br_dest_files", LongType(), True),
-                     StructField("br_dest_bytes", LongType(), True),
-                     StructField("br_node_files", LongType(), True),
-                     StructField("br_node_bytes", LongType(), True),
-                     StructField("br_xfer_files", LongType(), True),
-                     StructField("br_xfer_bytes", LongType(), True),
-                     StructField("br_is_custodial", StringType(), True),
-                     StructField("br_user_group_id", IntegerType(), True),
-                     StructField("replica_time_create", DoubleType(), True),
-                     StructField("replica_time_updater", DoubleType(), True)])
-
-def files(path, verbose=0):
-    "Return list of files for given HDFS path"
-    hpath = "hadoop fs -ls %s | awk '{print $8}'" % path
-    if  verbose:
-        print("Lookup area: %s" % hpath)
-    pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
-    pipe.wait()
-    fnames = [f for f in pipe.stdout.read().split('\n') if f.find('part') != -1]
-    return fnames
-
-def unionAll(dfs):
-    """
-    Unions snapshots in one dataframe
-
-    :param item: list of dataframes
-    :returns: union of dataframes
-    """
-    return reduce(DataFrame.unionAll, dfs)
 
 def htime(seconds):
     "Convert given seconds into human readable form of N hour(s), N minute(s), N second(s)"
@@ -429,144 +127,34 @@ def unix_tstamp(date):
     else:
         raise NotImplementedError('Given date %s is not in string YYYYMMDD format' % date)
 
-def getFileList(basedir, fromdate=None, todate=None):
-    """
-    Finds snapshots in given directory by interval dates
-
-    :param basedir: directory where snapshots are held
-    :param fromdate: date from which snapshots are filtered
-    :param todate: date until which snapshots are filtered
-    :returns: array of filtered snapshots paths
-    :raises ValueError: if unparsable date format
-    """
-    dirs = os.popen("hadoop fs -ls %s | sed '1d;s/  */ /g' | cut -d\  -f8" % basedir).read().splitlines()
-    # if files are not in hdfs --> dirs = os.listdir(basedir)
-
-    # by default we'll use yesterday date on HDFS to avoid clashes
-    day = time.strftime("%Y-%m-%d", time.gmtime(time.time()-60*60*24))
-    if  not fromdate:
-        fromdate = day
-    if  not todate:
-        todate = day
-
-    o_fromdate = fromdate
-    o_todate = todate
-    try:
-        fromdate = dt.strptime(fromdate, "%Y-%m-%d")
-        todate = dt.strptime(todate, "%Y-%m-%d")
-    except ValueError as err:
-        raise ValueError("Unparsable date parameters. Date should be specified in form: YYYY-mm-dd")		
- 		
-    pattern = re.compile(r"(\d{4}-\d{2}-\d{2})")
-
-    dirdate_dic = {}
-    from_match = 0
-    to_match = 0
-    for idir in dirs:
-        if  idir.find(o_fromdate) != -1:
-            from_match = 1
-        if  idir.find(o_todate) != -1:
-            to_match = 1
-        matching = pattern.search(idir)
-        if matching:
-            dirdate_dic[idir] = dt.strptime(matching.group(1), "%Y-%m-%d")
-
-    if  not from_match:
-        raise Exception("Unable to find fromdate=%s are on HDFS %s" % (o_fromdate, basedir))
-    if  not to_match:
-        raise Exception("Unable to find todate=%s are on HDFS %s" % (o_todate, basedir))
-    return [k for k, v in dirdate_dic.items() if v >= fromdate and v <= todate]		
-
-def print_rows(df, dfname, verbose, head=5):
-    if  verbose:
-        print("First rows of %s" % dfname)
-        for row in df.head(head):
-            print("### row", row)
-
-def run(paths, fout, action,
-        verbose=None, yarn=None, tier=None, era=None,
+def run(fout, verbose=None, yarn=None, tier=None, era=None,
         release=None, cdate=None, patterns=[], antipatterns=[]):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
     """
-    print("Use the following data on HDFS")
-    for key, val in paths.items():
-        print(val)
-
     time0 = time.time()
-    # pyspark modules
-    from pyspark import SparkContext
 
-    # define spark context, it's main object which allow
-    # to communicate with spark
-    ctx = SparkContext(appName="dbs")
-    logger = SparkLogger(ctx)
-    if  not verbose:
-        logger.set_level('ERROR')
-    if yarn:
-        logger.info("YARN client mode enabled")
-
+    # define spark context, it's main object which allow to communicate with spark
+    ctx = spark_context('cms', yarn, verbose)
     sqlContext = HiveContext(ctx)
 
-    daf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_dataset_access_types()) \
-                        for path in files(paths['dapath'], verbose)])
-    ddf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_datasets()) \
-                        for path in files(paths['dpath'], verbose)])
-    bdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_blocks()) \
-                        for path in files(paths['bpath'], verbose)])
-    fdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_files()) \
-                        for path in files(paths['fpath'], verbose)])
-    aef = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_acquisition_eras()) \
-                        for path in files(paths['apath'], verbose)])
-    pef = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_processing_eras()) \
-                        for path in files(paths['ppath'], verbose)])
+    # read DBS and Phedex tables
+    tables = {}
+    tables.update(dbs_tables(sqlContext, verbose=verbose))
+    tables.update(phedex_tables(sqlContext, verbose=verbose))
+    phedex_df = tables['phedex_df']
+    daf = tables['daf']
+    ddf = tables['ddf']
+    bdf = tables['bdf']
+    fdf = tables['fdf']
+    aef = tables['aef']
+    pef = tables['pef']
+    mcf = tables['mcf']
+    ocf = tables['ocf']
+    rvf = tables['rvf']
 
-    mcf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_mod_configs()) \
-                        for path in files(paths['mcpath'], verbose)])
-    ocf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_out_configs()) \
-                        for path in files(paths['ocpath'], verbose)])
-    rvf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_rel_versions()) \
-                        for path in files(paths['rvpath'], verbose)])
-
-    # phedex data
-    pfiles = getFileList(paths['phedex'])
-    msg = "Phedex snapshot found %d directories" % len(pfiles)
-    print(msg)
-    phedex_df = unionAll([sqlContext.read.format('com.databricks.spark.csv')
-                    .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                    .load(file_path, schema = schema_phedex()) \
-                    for file_path in pfiles])
-
-    # Register temporary tables to be able to use sqlContext.sql
-    daf.registerTempTable('daf')
-    ddf.registerTempTable('ddf')
-    bdf.registerTempTable('bdf')
-    fdf.registerTempTable('fdf')
-    aef.registerTempTable('aef')
-    pef.registerTempTable('pef')
-    mcf.registerTempTable('mcf')
-    ocf.registerTempTable('ocf')
-    rvf.registerTempTable('rvf')
-    phedex_df.registerTempTable('phedex_df')
+    print("### ddf from main", ddf)
 
     # aggregate phedex info into dataframe
     phedex_cols = ['node_name', 'dataset_name', 'dataset_is_open', 'block_bytes', 'replica_time_create']
@@ -716,7 +304,7 @@ def run(paths, fout, action,
 
     ctx.stop()
     if  verbose:
-        logger.info("Elapsed time %s" % elapsed_time(time0))
+        print("Elapsed time %s" % elapsed_time(time0))
     return out
 
 def credentials(fname=None):
@@ -735,19 +323,6 @@ def main():
     opts = optmgr.parser.parse_args()
     print("Input arguments: %s" % opts)
     time0 = time.time()
-    hdir = opts.hdir if opts.hdir else 'hdfs:///project/awg/cms'
-    dbsdir = hdir+'/CMS_DBS3_PROD_GLOBAL/current'
-    phxdir = hdir+'/phedex/block-replicas-snapshots/csv/'
-    paths = {'dpath':apath(dbsdir, 'DATASETS'),
-             'bpath':apath(dbsdir, 'BLOCKS'),
-             'fpath':apath(dbsdir, 'FILES'),
-             'apath':apath(dbsdir, 'ACQUISITION_ERAS'),
-             'ppath':apath(dbsdir, 'PROCESSING_ERAS'),
-             'mcpath':apath(dbsdir, 'DATASET_OUTPUT_MOD_CONFIGS'),
-             'ocpath':apath(dbsdir, 'OUTPUT_MODULE_CONFIGS'),
-             'rvpath':apath(dbsdir, 'RELEASE_VERSIONS'),
-             'dapath':apath(dbsdir, 'DATASET_ACCESS_TYPES'),
-             'phedex':phxdir}
     fout = opts.fout
     verbose = opts.verbose
     yarn = opts.yarn
@@ -755,10 +330,9 @@ def main():
     era = opts.era
     release = opts.release
     cdate = opts.cdate
-    action = opts.action
     patterns = opts.patterns.split(',') if opts.patterns else []
     antipatterns = opts.antipatterns.split(',') if opts.antipatterns else []
-    res = run(paths, fout, action, verbose, yarn, tier, era, release, cdate, patterns, antipatterns)
+    res = run(fout, verbose, yarn, tier, era, release, cdate, patterns, antipatterns)
 
     if opts.amq:
         creds = credentials(opts.amq)
@@ -780,7 +354,7 @@ def main():
             print(res[0])
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
-    print('Elapsed time: %s sec' % (time.time()-time0))
+    print('Elapsed time: %s sec' % elapsed_time(time0))
 
 if __name__ == '__main__':
     main()
