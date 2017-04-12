@@ -1,0 +1,73 @@
+#!/bin/sh
+# Author: Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
+# A wrapper script to submit spark job with dbs_phedex.py script
+# from WMArchive project.
+
+# test arguments
+#if [ "$#" -eq 0 ]; then
+#    echo "Usage: dbs_phedex <options>"
+#    echo "       dbs_phedex --help"
+#    exit 1
+#fi
+
+# get required jars
+#if [ ! -f $SPARK_CSV_ASSEMBLY_JAR ]; then
+#   echo "Unable to find spark-csv-assembly jar in SPARK_CSV_ASSEMBLY_JAR environment"
+#   exit 1
+#fi
+#jars=$SPARK_CSV_ASSEMBLY_JAR
+jars=/afs/cern.ch/user/l/lmeniche/public/spark-csv-assembly-1.4.0.jar
+
+# find out where WMArchive is installed on a system
+droot=$PWD
+
+# allow to disable spark output, client should setup his/her own log4j.properties
+# via WMA_LOG4J environment variable
+conf=""
+# look if we requested to show full log output
+if [[ "$@" =~ "--no-log4j" ]]; then
+    conf=" --conf spark.ui.showConsoleProgress=false "
+    if [ -n "$LOG4J_CONF" ] && [ -f $LOG4J_CONF ]; then
+        conf="$conf --conf spark.driver.extraJavaOptions=\"-Dlog4j.configuration=file:$LOG4J_CONF\""
+    fi
+fi
+
+# set avro jars
+avrojar=/usr/lib/avro/avro-mapred.jar
+sparkexjar=/usr/lib/spark/examples/lib/spark-examples-1.6.0-cdh5.7.0-hadoop2.6.0-cdh5.7.0.jar
+
+if [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-help" ]; then
+    # run help
+    python $droot/dbs_phedex.py --help
+elif [[  $1 =~ -?-yarn(-cluster)?$ ]]; then
+    # to tune up these numbers:
+    #  - executor-memory not more than 5G
+    #  - num-executor can be increased (suggested not more than 10)
+    #  - cores = 2/4/8
+    # Temp solution to have a wrapper for python27 on spark cluster
+    # once CERN IT will resolve python version we can remove PYSPARK_PYTHON
+    PYSPARK_PYTHON='/afs/cern.ch/user/v/valya/public/python27' \
+    spark-submit --jars $avrojar,$sparkexjar \
+        --master yarn-client \
+        --driver-class-path '/usr/lib/hive/lib/*' \
+        --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
+        --executor-memory 5g \
+        --jars $jars \
+        $conf $droot/dbs_phedex.py ${1+"$@"}
+else
+    # submit spark job with our file, please note
+    # that user may increase memory options if necessary
+    # the executor and driver memory options can be given in human readable form
+    # while spark yarn option should use memoryOverhead as KB value.
+
+    # Modify with local[*] to use all the available cores in the node
+    #   optionally increase driver memory with --driver-memory 2G (default 1G)
+    PYSPARK_PYTHON='/afs/cern.ch/user/v/valya/public/python27' \
+    spark-submit --jars $avrojar,$sparkexjar \
+        --executor-memory $((`nproc`/4))G \
+        --master local[$((`nproc`/4))] \
+        --driver-class-path '/usr/lib/hive/lib/*' \
+        --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
+        --jars $jars \
+        $conf $droot/dbs_phedex.py ${1+"$@"}
+fi
