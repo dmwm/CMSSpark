@@ -22,7 +22,6 @@ from schemas import schema_processing_eras, schema_dataset_access_types
 from schemas import schema_acquisition_eras,  schema_datasets, schema_blocks
 from schemas import schema_files, schema_mod_configs, schema_out_configs
 from schemas import schema_rel_versions, schema_phedex
-from schemas import schema_aaa, schema_eos
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import Row
@@ -308,10 +307,7 @@ def aaa_tables(sqlContext, hdir='hdfs:///project/monitoring/archive/xrootd/raw/g
         # by default we read yesterday data
         day = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
     hpath = '%s/%s' % (hdir, day)
-    aaa_df = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_aaa()) \
-                        for path in files(hpath, verbose)])
+    aaa_df = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
     aaa_df.registerTempTable('aaa_df')
     tables = {'aaa_df':aaa_df}
     return tables
@@ -324,10 +320,7 @@ def eos_tables(sqlContext, hdir='hdfs:///project/monitoring/archive/eos/logs/rep
         # by default we read yesterday data
         day = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
     hpath = '%s/%s' % (hdir, day)
-    eos_df = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(path, schema = schema_eos()) \
-                        for path in files(hpath, verbose)])
+    eos_df = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
     eos_df.registerTempTable('eos_df')
     tables = {'eos_df':eos_df}
     return tables
