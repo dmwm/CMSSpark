@@ -146,6 +146,7 @@ def print_rows(df, dfname, verbose, head=5):
 def spark_context(appname='cms', yarn=None, verbose=False):
     # define spark context, it's main object which allow
     # to communicate with spark
+#    ctx = SparkSession.builder.appName(appname).enableHiveSupport().getOrCreate().sparkContext()
     ctx = SparkContext(appName=appname)
     logger = SparkLogger(ctx)
     if  not verbose:
@@ -243,12 +244,14 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     ocf.registerTempTable('ocf')
     rvf.registerTempTable('rvf')
 
-    print("### ddf from dbs_tables", ddf)
+    print("### ddf from dbs_tables", ddf, type(ddf))
 
     tables = {'daf':daf, 'ddf':ddf, 'bdf':bdf, 'fdf':fdf, 'aef':aef, 'pef':pef, 'mcf':mcf, 'ocf':ocf, 'rvf':rvf}
     return tables
 
-def cmssw_rdd(ctx, schema_file, hdir='hdfs:///project/awg/cms/cmssw-popularity/avro-snappy', day=None, verbose=None):
+def cmssw_tables(ctx, sqlContext,
+        schema_file='hdfs:///cms/wmarchive/avro/schemas/cmssw.avsc',
+        hdir='hdfs:///project/awg/cms/cmssw-popularity/avro-snappy', day=None, verbose=None):
 
     if  not day:
         day = time.strftime("year=%Y/month=%-m/day=%d", time.gmtime(time.time()-60*60*24))
@@ -272,9 +275,27 @@ def cmssw_rdd(ctx, schema_file, hdir='hdfs:///project/awg/cms/cmssw-popularity/a
     aconv="org.apache.spark.examples.pythonconverters.AvroWrapperToJavaConverter"
 
     # load data from HDFS
-    avro_rdd = ctx.union([ctx.newAPIHadoopFile(f, aformat, akey, awrite, aconv, conf=conf) for f in afiles])
+    rdd = ctx.union([ctx.newAPIHadoopFile(f, aformat, akey, awrite, aconv, conf=conf) for f in afiles])
+    # the CMSSW are stored as [(dict, None), (dict, None)], therefore we take first element
+    # and assign them to new rdd
+    avro_rdd = rdd.map(lambda x: x[0])
+    records = avro_rdd.take(1) # take function will return list of records
+    if  verbose:
+        print("### cmssw avro records", records, type(records))
 
-    return avro_rdd
+    reckeys = records[0].keys() # we get keys of first record
+    Record = Row(*reckeys)
+    if  verbose:
+        print("### inferred Record", Record, type(Record))
+    data = avro_rdd.map(lambda r: Record(*r))
+
+    # create new spark DataFrame
+    avro_df = sqlContext.createDataFrame(data)
+    avro_df.registerTempTable('avro_df')
+    if  verbose:
+        print("### avro_df", avro_df, type(avro_df))
+
+    return avro_df
 
 def aaa_tables(hdir='hdfs:///project/monitoring/archive/xrootd', verbose=False):
     """
