@@ -19,16 +19,9 @@ from types import NoneType
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
 
-# local modules
-from spark_utils import dbs_tables, phedex_tables, print_rows, spark_context
-from utils import elapsed_time
-
-# WMCore modules
-try:
-    # stopmAMQ API
-    from WMCore.Services.StompAMQ.StompAMQ import StompAMQ
-except ImportError:
-    StompAMQ = None
+# CMSSpark modules
+from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows, spark_context
+from CMSSpark.utils import elapsed_time, cern_monit
 
 class OptionParser():
     def __init__(self):
@@ -36,7 +29,7 @@ class OptionParser():
         self.parser = argparse.ArgumentParser(prog='PROG')
         year = time.strftime("%Y", time.localtime())
         hdir = 'hdfs:///project/awg/cms'
-        msg = 'Location of CMS\w folders on HDFS, default %s' % hdir
+        msg = 'Location of CMS folders on HDFS, default %s' % hdir
         self.parser.add_argument("--hdir", action="store",
             dest="hdir", default=hdir, help=msg)
         fout = 'dbs_datasets.csv'
@@ -247,16 +240,6 @@ def run(fout, verbose=None, yarn=None, tier=None, era=None,
         print("Elapsed time %s" % elapsed_time(time0))
     return out
 
-def credentials(fname=None):
-    "Read credentials from PBR_BROKER environment"
-    if  not fname:
-        fname = os.environ.get('PBR_BROKER', '')
-    if  not os.path.isfile(fname):
-        return {}
-    with open(fname, 'r') as istream:
-        data = json.load(istream)
-    return data
-
 def main():
     "Main function"
     optmgr  = OptionParser()
@@ -273,25 +256,13 @@ def main():
     patterns = opts.patterns.split(',') if opts.patterns else []
     antipatterns = opts.antipatterns.split(',') if opts.antipatterns else []
     res = run(fout, verbose, yarn, tier, era, release, cdate, patterns, antipatterns)
+    cern_monit(res, opts.amq)
 
-    if opts.amq:
-        creds = credentials(opts.amq)
-        host, port = creds['host_and_ports'].split(':')
-        port = int(port)
-        if  creds and StompAMQ:
-            print("### Send %s docs via StompAMQ" % len(res))
-            amq = StompAMQ(creds['username'], creds['password'], \
-                creds['producer'], creds['topic'], [(host, port)])
-            data = []
-            for doc in res:
-                hid = doc.get("hash", 1)
-                data.append(amq.make_notification(doc, hid))
-            results = amq.send(data)
-            print("### results sent by AMQ", len(results))
-    else:
+    if  verbose:
         print("### Collected", len(res), "results")
         if  len(res)>0:
             print(res[0])
+
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s sec' % elapsed_time(time0))

@@ -8,8 +8,44 @@ Description: Set of utililities
 """
 
 # system modules
+import os
 import gzip
 import time
+
+# WMCore modules
+try:
+    # stopmAMQ API
+    from WMCore.Services.StompAMQ.StompAMQ import StompAMQ
+except ImportError:
+    StompAMQ = None
+
+def credentials(fname=None):
+    "Read credentials from PBR_BROKER environment"
+    if  not fname:
+        fname = os.environ.get('PBR_BROKER', '')
+    if  not os.path.isfile(fname):
+        return {}
+    with open(fname, 'r') as istream:
+        data = json.load(istream)
+    return data
+
+def cern_monit(res, amq):
+    "Send results to CERN MONIT system"
+    if  not amq:
+        return
+    creds = credentials(amq)
+    host, port = creds['host_and_ports'].split(':')
+    port = int(port)
+    if  creds and StompAMQ:
+        print("### Send %s docs via StompAMQ" % len(res))
+        amq = StompAMQ(creds['username'], creds['password'], \
+            creds['producer'], creds['topic'], [(host, port)])
+        data = []
+        for doc in res:
+            hid = doc.get("hash", 1)
+            data.append(amq.make_notification(doc, hid))
+        results = amq.send(data)
+        print("### results sent by AMQ", len(results))
 
 class GzipFile(gzip.GzipFile):
     def __enter__(self):

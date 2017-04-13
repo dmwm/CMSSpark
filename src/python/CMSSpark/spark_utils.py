@@ -18,10 +18,10 @@ from types import NoneType
 from subprocess import Popen, PIPE
 
 # local modules
-from schemas import schema_processing_eras, schema_dataset_access_types
-from schemas import schema_acquisition_eras,  schema_datasets, schema_blocks
-from schemas import schema_files, schema_mod_configs, schema_out_configs
-from schemas import schema_rel_versions, schema_phedex
+from CMSSpark.schemas import schema_processing_eras, schema_dataset_access_types
+from CMSSpark.schemas import schema_acquisition_eras,  schema_datasets, schema_blocks
+from CMSSpark.schemas import schema_files, schema_mod_configs, schema_out_configs
+from CMSSpark.schemas import schema_rel_versions, schema_phedex
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import Row
@@ -250,7 +250,7 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     return tables
 
 def cmssw_tables(ctx, sqlContext,
-        schema_file='hdfs:///cms/wmarchive/avro/schemas/cmssw.avsc',
+        schema_file='hdfs:///cms/schemas/cmssw.avsc',
         hdir='hdfs:///project/awg/cms/cmssw-popularity/avro-snappy', day=None, verbose=None):
 
     if  not day:

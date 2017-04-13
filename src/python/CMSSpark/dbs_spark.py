@@ -2,9 +2,9 @@
 #-*- coding: utf-8 -*-
 #pylint: disable=
 """
-File       : myspark.py
+File       : dbs_spark.py
 Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
-Description: Example file to run basic spark job via pyspark
+Description: DBS Spark code
 
 This code is based on example provided at
 https://github.com/apache/spark/blob/master/examples/src/main/python/avro_inputformat.py

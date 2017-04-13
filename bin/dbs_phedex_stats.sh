@@ -7,12 +7,6 @@ export PYTHONUNBUFFERED=1
 export JAVA_JDK_ROOT
 export JAVA_HOME=$JAVA_JDK_ROOT
 
-# kerberos
-#export PRMKEYTAB=/data/wma/PhedexReplicaMonitoring/prm.keytab
-#principal=`klist -k $PRMKEYTAB | tail -1 | awk '{print $2}'`
-#echo "klist -k $PRMKEYTAB | tail -1 | awk '{print $2}'"
-#kinit $principal -k -t $PRMKEYTAB
-
 # GRID
 export X509_USER_PROXY=$STATEDIR/proxy/proxy.cert
 export X509_USER_CERT=$X509_USER_PROXY
@@ -27,8 +21,8 @@ tiers="USER"
 apatterns="*BUNNIES*"
 amq=/data/wma/dbs/dbs_spark/phedex_dbs_broker.json
 fout=datasets.csv
-#cmd="./dbs_phedex_spark --fout=$fout --antipatterns=$apatterns --yarn --verbose --amq=$amq"
-cmd="./dbs_phedex_spark --fout=$fout --antipatterns=$apatterns --yarn --verbose"
+#cmd="dbs_phedex_spark --fout=$fout --antipatterns=$apatterns --yarn --verbose --amq=$amq"
+cmd="dbs_phedex_spark --fout=$fout --antipatterns=$apatterns --yarn --verbose"
 for tier in $tiers; do
     echo "$cmd --tier=$tier"
     $cmd --tier=$tier 2>&1 1>& dp_${tier}.log

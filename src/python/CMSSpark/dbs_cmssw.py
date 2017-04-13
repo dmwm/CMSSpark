@@ -2,9 +2,9 @@
 #-*- coding: utf-8 -*-
 #pylint: disable=
 """
-File       : dbs_phedex.py
+File       : dbs_cmssw.py
 Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
-Description: Spark script to parse DBS and PhEDEx content on HDFS
+Description: Spark script to parse DBS and CMSSW monitoring content on HDFS
 """
 
 # system modules
@@ -20,16 +20,9 @@ from types import NoneType
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
 
-# local modules
-from spark_utils import dbs_tables, phedex_tables, print_rows, spark_context, cmssw_tables
-from utils import elapsed_time
-
-# WMCore modules
-try:
-    # stopmAMQ API
-    from WMCore.Services.StompAMQ.StompAMQ import StompAMQ
-except ImportError:
-    StompAMQ = None
+# CMSSpark modules
+from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows, spark_context, cmssw_tables
+from CMSSpark.utils import elapsed_time, cern_monit
 
 class OptionParser():
     def __init__(self):
@@ -37,27 +30,16 @@ class OptionParser():
         self.parser = argparse.ArgumentParser(prog='PROG')
         year = time.strftime("%Y", time.localtime())
         hdir = 'hdfs:///project/awg/cms'
-        msg = 'Location of CMS\w folders on HDFS, default %s' % hdir
+        msg = 'Location of CMS folders on HDFS, default %s' % hdir
         self.parser.add_argument("--hdir", action="store",
             dest="hdir", default=hdir, help=msg)
-        fout = 'dbs_datasets.csv'
+        fout = 'cmssw_datasets.csv'
         self.parser.add_argument("--fout", action="store",
             dest="fout", default=fout, help='Output file name, default %s' % fout)
         self.parser.add_argument("--tier", action="store",
             dest="tier", default="", help='Select datasets for given data-tier, use comma-separated list if you want to handle multiple data-tiers')
-        self.parser.add_argument("--era", action="store",
-            dest="era", default="", help='Select datasets for given acquisition era')
-        self.parser.add_argument("--release", action="store",
-            dest="release", default="", help='Select datasets for given CMSSW release')
-        self.parser.add_argument("--cdate", action="store",
-            dest="cdate", default="", help='Select datasets starting given creation date in YYYYMMDD format')
-        self.parser.add_argument("--patterns", action="store",
-            dest="patterns", default="", help='Select datasets patterns')
-        self.parser.add_argument("--antipatterns", action="store",
-            dest="antipatterns", default="", help='Select datasets antipatterns')
-        msg = 'Perform action over DBS info on HDFS: tier_stats, dataset_stats'
-        self.parser.add_argument("--action", action="store",
-            dest="action", default="tier_stats", help=msg)
+        self.parser.add_argument("--date", action="store",
+            dest="date", default="", help='Select datasets for given acquisition date')
         self.parser.add_argument("--no-log4j", action="store_true",
             dest="no-log4j", default=False, help="Disable spark log4j messages")
         self.parser.add_argument("--yarn", action="store_true",
@@ -68,8 +50,7 @@ class OptionParser():
         self.parser.add_argument("--amq", action="store",
             dest="amq", default="", help=msg)
 
-def run(fout, verbose=None, yarn=None, tier=None, era=None,
-        release=None, cdate=None, patterns=[], antipatterns=[]):
+def run(fout, verbose=None, yarn=None, day=None):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
@@ -109,6 +90,8 @@ def run(fout, verbose=None, yarn=None, tier=None, era=None,
             .agg({'FILE_LFN':'count'})\
             .withColumnRenamed('count(FILE_LFN)', 'cmssw_count')\
 
+    if  not day:
+        day = time.strftime("year=%Y/month=%-m/day=%d", time.gmtime(time.time()-60*60*24))
     # output results
     out = []
     idx = 0
@@ -144,13 +127,9 @@ def main():
     fout = opts.fout
     verbose = opts.verbose
     yarn = opts.yarn
-    tier = opts.tier
-    era = opts.era
-    release = opts.release
-    cdate = opts.cdate
-    patterns = opts.patterns.split(',') if opts.patterns else []
-    antipatterns = opts.antipatterns.split(',') if opts.antipatterns else []
-    res = run(fout, verbose, yarn, tier, era, release, cdate, patterns, antipatterns)
+    date = opts.date
+    res = run(fout, verbose, yarn, date)
+    cern_monit(res, opts.amq)
 
     print("results", len(res))
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))

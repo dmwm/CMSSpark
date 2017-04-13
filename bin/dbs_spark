@@ -1,27 +1,20 @@
 #!/bin/sh
 # Author: Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
-# A wrapper script to submit spark job
+# A wrapper script to submit spark job with dbs_spark.py script
+# from WMArchive project.
+
+# test arguments
+#if [ "$#" -eq 0 ]; then
+#    echo "Usage: dbs_spark <options>"
+#    echo "       dbs_spark --help"
+#    exit 1
+#fi
 
 # Load WMArchive environment which setup all spark stuff
 source /data/srv/current/apps/wmarchive/etc/profile.d/init.sh
 
-# test arguments
-#if [ "$#" -eq 0 ]; then
-#    echo "Usage: dbs_cmssw <options>"
-#    echo "       dbs_cmssw --help"
-#    exit 1
-#fi
-
-# get required jars
-#if [ ! -f $SPARK_CSV_ASSEMBLY_JAR ]; then
-#   echo "Unable to find spark-csv-assembly jar in SPARK_CSV_ASSEMBLY_JAR environment"
-#   exit 1
-#fi
-#jars=$SPARK_CSV_ASSEMBLY_JAR
-jars=/afs/cern.ch/user/l/lmeniche/public/spark-csv-assembly-1.4.0.jar
-
-# find out where WMArchive is installed on a system
-droot=$PWD
+# find out where CMSSpark is installed on a system
+droot=`python -c "import CMSSpark; print '/'.join(CMSSpark.__file__.split('/')[:-1])"`
 
 # allow to disable spark output, client should setup his/her own log4j.properties
 # via WMA_LOG4J environment variable
@@ -41,7 +34,7 @@ sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
 
 if [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-help" ]; then
     # run help
-    python $droot/dbs_cmssw.py --help
+    python $droot/dbs_spark.py --help
 elif [[  $1 =~ -?-yarn(-cluster)?$ ]]; then
     # to tune up these numbers:
     #  - executor-memory not more than 5G
@@ -50,11 +43,12 @@ elif [[  $1 =~ -?-yarn(-cluster)?$ ]]; then
     # Temp solution to have a wrapper for python27 on spark cluster
     # once CERN IT will resolve python version we can remove PYSPARK_PYTHON
     PYSPARK_PYTHON='/afs/cern.ch/user/v/valya/public/python27' \
-        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
-            --master yarn-client \
-            --driver-class-path '/usr/lib/hive/lib/*' \
-            --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
-            $conf $droot/dbs_cmssw.py ${1+"$@"}
+    spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+        --master yarn-client \
+        --driver-class-path '/usr/lib/hive/lib/*' \
+        --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
+        --executor-memory 5g \
+        $conf $droot/dbs_spark.py ${1+"$@"}
 else
     # submit spark job with our file, please note
     # that user may increase memory options if necessary
@@ -66,9 +60,8 @@ else
     PYSPARK_PYTHON='/afs/cern.ch/user/v/valya/public/python27' \
     spark-submit --jars $csvjar,$avrojar,$sparkexjar \
         --executor-memory $((`nproc`/4))G \
-        --driver-memory 4G \
         --master local[$((`nproc`/4))] \
         --driver-class-path '/usr/lib/hive/lib/*' \
         --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
-        $conf $droot/dbs_cmssw.py ${1+"$@"}
+        $conf $droot/dbs_spark.py ${1+"$@"}
 fi
