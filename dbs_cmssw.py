@@ -98,23 +98,21 @@ def run(fout, verbose=None, yarn=None, tier=None, era=None,
             print("### avro_df row", row)
 
     # merge DBS and CMSSW data
-    cols = ['d_dataset_id','d_dataset','d_creation_date','f_logical_file_name','FILE_LFN']
+    cols = ['d_dataset','d_dataset_id','f_logical_file_name','FILE_LFN','SITE_NAME']
     stmt = 'SELECT %s FROM ddf JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id JOIN avro_df ON fdf.f_logical_file_name = avro_df.FILE_LFN' % ','.join(cols)
     print(stmt)
     joins = sqlContext.sql(stmt)
     print_rows(joins, 'joins', verbose)
 
-    # keep joins table around
-#    joins.persist(StorageLevel.MEMORY_AND_DISK)
-
-    # construct conditions
-#    cond = 'd_is_dataset_valid = 1'
-#    fjoin = joins.where(cond).distinct().select(cols)
+    # perform aggregation
+    fjoin = joins.groupBy(['SITE_NAME','d_dataset'])\
+            .agg({'FILE_LFN':'count'})\
+            .withColumnRenamed('count(FILE_LFN)', 'cmssw_count')\
 
     # output results
     out = []
     idx = 0
-    for row in joins.collect():
+    for row in fjoin.collect():
         rdict = row.asDict()
         out.append(rdict)
         if  verbose and idx < 5:
