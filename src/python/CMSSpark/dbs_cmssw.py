@@ -36,10 +36,8 @@ class OptionParser():
         fout = 'cmssw_datasets.csv'
         self.parser.add_argument("--fout", action="store",
             dest="fout", default=fout, help='Output file name, default %s' % fout)
-        self.parser.add_argument("--tier", action="store",
-            dest="tier", default="", help='Select datasets for given data-tier, use comma-separated list if you want to handle multiple data-tiers')
         self.parser.add_argument("--date", action="store",
-            dest="date", default="", help='Select datasets for given acquisition date')
+            dest="date", default="", help='Select CMSSW data for specific date (YYYYMMDD)')
         self.parser.add_argument("--no-log4j", action="store_true",
             dest="no-log4j", default=False, help="Disable spark log4j messages")
         self.parser.add_argument("--yarn", action="store_true",
@@ -50,7 +48,18 @@ class OptionParser():
         self.parser.add_argument("--amq", action="store",
             dest="amq", default="", help=msg)
 
-def run(fout, verbose=None, yarn=None, day=None):
+def cmssw_date(date):
+    "Convert given date into CMSSW date format"
+    if  not date:
+        return None
+    if  len(date) != 8:
+        raise Exception("Given date %s is not in YYYYMMDD format")
+    year = date[:4]
+    month = int(date[4:6])
+    day = int(date[6:])
+    return 'year=%s/month=%s/day=%s' % (year, month, day)
+
+def run(fout, verbose=None, yarn=None, date=None):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
@@ -67,31 +76,38 @@ def run(fout, verbose=None, yarn=None, day=None):
     ddf = tables['ddf'] # dataset table
     fdf = tables['fdf'] # file table
 
-    if  verbose:
-        for row in ddf.head(1):
-            print("### ddf row", row)
-
     # read CMSSW avro rdd
-    avro_df = cmssw_tables(ctx, sqlContext, verbose=verbose)
-
-    if  verbose:
-        for row in avro_df.head(1):
-            print("### avro_df row", row)
+    cmssw_df = cmssw_tables(ctx, sqlContext, date=cmssw_date(date), verbose=verbose)
 
     # merge DBS and CMSSW data
     cols = ['d_dataset','d_dataset_id','f_logical_file_name','FILE_LFN','SITE_NAME']
-    stmt = 'SELECT %s FROM ddf JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id JOIN avro_df ON fdf.f_logical_file_name = avro_df.FILE_LFN' % ','.join(cols)
-    print(stmt)
+    stmt = 'SELECT %s FROM ddf JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id JOIN cmssw_df ON fdf.f_logical_file_name = cmssw_df.FILE_LFN' % ','.join(cols)
     joins = sqlContext.sql(stmt)
-    print_rows(joins, 'joins', verbose)
+    print_rows(joins, stmt, verbose)
 
     # perform aggregation
     fjoin = joins.groupBy(['SITE_NAME','d_dataset'])\
             .agg({'FILE_LFN':'count'})\
             .withColumnRenamed('count(FILE_LFN)', 'cmssw_count')\
 
-    if  not day:
-        day = time.strftime("year=%Y/month=%-m/day=%d", time.gmtime(time.time()-60*60*24))
+    # keep table around
+    fjoin.persist(StorageLevel.MEMORY_AND_DISK)
+
+    if  not date:
+        date = time.strftime("year=%Y/month=%-m/date=%d", time.gmtime(time.time()-60*60*24))
+
+    # write out results back to HDFS, the fout parameter defines area on HDFS
+    # it is either absolute path or area under /user/USERNAME
+    if  fout:
+        fjoin.write.format("com.databricks.spark.csv")\
+                .option("header", "true").save(fout)
+
+    ctx.stop()
+    if  verbose:
+        print("Elapsed time %s" % elapsed_time(time0))
+    return fjoin
+
+def tmp():
     # output results
     out = []
     idx = 0
@@ -129,9 +145,9 @@ def main():
     yarn = opts.yarn
     date = opts.date
     res = run(fout, verbose, yarn, date)
-    cern_monit(res, opts.amq)
+    if  opts.amq:
+        cern_monit(res)
 
-    print("results", len(res))
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s sec' % elapsed_time(time0))

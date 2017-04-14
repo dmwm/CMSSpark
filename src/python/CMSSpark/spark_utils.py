@@ -29,6 +29,7 @@ from pyspark.sql import SQLContext
 from pyspark.sql import HiveContext
 from pyspark.sql import DataFrame
 from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField, StringType, BooleanType, LongType
+from pyspark.sql.functions import split
 
 class SparkLogger(object):
     "Control Spark Logger"
@@ -103,11 +104,11 @@ def file_list(basedir, fromdate=None, todate=None):
     # if files are not in hdfs --> dirs = os.listdir(basedir)
 
     # by default we'll use yesterday date on HDFS to avoid clashes
-    day = time.strftime("%Y-%m-%d", time.gmtime(time.time()-60*60*24))
+    date = time.strftime("%Y-%m-%d", time.gmtime(time.time()-60*60*24))
     if  not fromdate:
-        fromdate = day
+        fromdate = date
     if  not todate:
-        todate = day
+        todate = date
 
     o_fromdate = fromdate
     o_todate = todate
@@ -138,6 +139,7 @@ def file_list(basedir, fromdate=None, todate=None):
     return [k for k, v in dirdate_dic.items() if v >= fromdate and v <= todate]		
 
 def print_rows(df, dfname, verbose, head=5):
+    "Helper function to print rows from a given dataframe"
     if  verbose:
         print("First rows of %s" % dfname)
         for row in df.head(head):
@@ -146,7 +148,6 @@ def print_rows(df, dfname, verbose, head=5):
 def spark_context(appname='cms', yarn=None, verbose=False):
     # define spark context, it's main object which allow
     # to communicate with spark
-#    ctx = SparkSession.builder.appName(appname).enableHiveSupport().getOrCreate().sparkContext()
     ctx = SparkContext(appName=appname)
     logger = SparkLogger(ctx)
     if  not verbose:
@@ -157,7 +158,8 @@ def spark_context(appname='cms', yarn=None, verbose=False):
 
 def phedex_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     """
-    Return dictionary of spark dbs tables
+    Parse PhEDEx records on HDFS via mapping PhEDEx tables to Spark SQLContext.
+    :returns: a dictionary with PhEDEx Spark DataFrame.
     """
     phxdir = hdir+'/phedex/block-replicas-snapshots/csv/'
 
@@ -178,7 +180,8 @@ def phedex_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
 
 def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     """
-    Return dictionary of spark dbs tables
+    Parse DBS records on HDFS via mapping DBS tables to Spark SQLContext.
+    :returns: a dictionary with DBS Spark DataFrame.
     """
     dbsdir = hdir+'/CMS_DBS3_PROD_GLOBAL/current'
     paths = {'dpath':apath(dbsdir, 'DATASETS'),
@@ -244,18 +247,35 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     ocf.registerTempTable('ocf')
     rvf.registerTempTable('rvf')
 
-    print("### ddf from dbs_tables", ddf, type(ddf))
-
     tables = {'daf':daf, 'ddf':ddf, 'bdf':bdf, 'fdf':fdf, 'aef':aef, 'pef':pef, 'mcf':mcf, 'ocf':ocf, 'rvf':rvf}
     return tables
 
 def cmssw_tables(ctx, sqlContext,
         schema_file='hdfs:///cms/schemas/cmssw.avsc',
-        hdir='hdfs:///project/awg/cms/cmssw-popularity/avro-snappy', day=None, verbose=None):
+        hdir='hdfs:///project/awg/cms/cmssw-popularity/avro-snappy', date=None, verbose=None):
+    """
+    Parse CMSSW HDFS records.
 
-    if  not day:
-        day = time.strftime("year=%Y/month=%-m/day=%d", time.gmtime(time.time()-60*60*24))
-    path = '%s/%s' % (hdir, day)
+    Example of CMSSW JSON record on HDFS
+    {"UNIQUE_ID":"08F8DD3A-0FFE-E611-B710-BC305B3909F1-1","FILE_LFN":"/s.root",
+    "FILE_SIZE":"3865077537","CLIENT_DOMAIN":"in2p3.fr","CLIENT_HOST":"sbgwn141",
+    "SERVER_DOMAIN":"in2p3.fr","SERVER_HOST":"sbgse20","SITE_NAME":"T2_FR_IPHC",
+    "READ_BYTES_AT_CLOSE":"438385807","READ_BYTES":"438385807",
+    "READ_SINGLE_BYTES":"8913451","READ_SINGLE_OPERATIONS":"19",
+    "READ_SINGLE_AVERAGE":"469129","READ_SINGLE_SIGMA":"1956390","READ_VECTOR_BYTES":"429472356",
+    "READ_VECTOR_OPERATIONS":"58","READ_VECTOR_AVERAGE":"7404700","READ_VECTOR_SIGMA":"6672770",
+    "READ_VECTOR_COUNT_AVERAGE":"37.4138","READ_VECTOR_COUNT_SIGMA":"35.242","FALLBACK":"-",
+    "USER_DN":"/DC=1846615186/CN=2041527197","APP_INFO":"3809_https://glidein.cern.ch/3809/DSm:4b_0",
+    "START_TIME":"1488325657","END_TIME":"1488326400","START_DATE":1488322057000,
+    "END_DATE":1488322800000,"INSERT_DATE":1488323999000}
+
+    :returns: a dictionary with CMSSW Spark DataFrame
+    """
+
+    if  not date:
+        date = time.strftime("year=%Y/month=%-m/date=%d", time.gmtime(time.time()-60*60*24))
+
+    path = '%s/%s' % (hdir, date)
     # get avro files from HDFS
     afiles = avro_files(path, verbose=verbose)
     print("### avro_files", afiles)
@@ -276,6 +296,7 @@ def cmssw_tables(ctx, sqlContext,
 
     # load data from HDFS
     rdd = ctx.union([ctx.newAPIHadoopFile(f, aformat, akey, awrite, aconv, conf=conf) for f in afiles])
+
     # the CMSSW are stored as [(dict, None), (dict, None)], therefore we take first element
     # and assign them to new rdd
     avro_rdd = rdd.map(lambda x: x[0])
@@ -283,45 +304,79 @@ def cmssw_tables(ctx, sqlContext,
     if  verbose:
         print("### cmssw avro records", records, type(records))
 
-#    reckeys = records[0].keys() # we get keys of first record
-#    Record = Row(*reckeys)
-#    if  verbose:
-#        print("### inferred Record", Record, type(Record))
-#    data = avro_rdd.map(lambda r: Record(*r))
+    # create new spark DataFrame
+    cmssw_df = sqlContext.createDataFrame(avro_rdd)
+    cmssw_df.registerTempTable('cmssw_df')
+    tables = {'cmssw_df': cmssw_df}
+    return tables
+
+def aaa_tables(sqlContext,
+        hdir='hdfs:///project/monitoring/archive/xrootd/raw/gled',
+        date=None, verbose=False):
+    """
+    Parse AAA HDFS records.
+
+    Example of AAA (xrootd) JSON record on HDFS
+    {"data":{"activity":"r","app_info":"","client_domain":"cern.ch","client_host":"b608a4fe55","end_time":1491789715000,"file_lfn":"/eos/cms/store/hidata/PARun2016C/PAEGJet1/AOD/PromptReco-v1/000/286/471/00000/7483FE13-28BD-E611-A2BD-02163E01420E.root","file_size":189272229,"is_transfer":true,"operation_time":690,"read_average":0.0,"read_bytes":0,"read_bytes_at_close":189272229,"read_max":0,"read_min":0,"read_operations":0,"read_sigma":0.0,"read_single_average":0.0,"read_single_bytes":0,"read_single_max":0,"read_single_min":0,"read_single_operations":0,"read_single_sigma":0.0,"read_vector_average":0.0,"read_vector_bytes":0,"read_vector_count_average":0.0,"read_vector_count_max":0,"read_vector_count_min":0,"read_vector_count_sigma":0.0,"read_vector_max":0,"read_vector_min":0,"read_vector_operations":0,"read_vector_sigma":0.0,"remote_access":false,"server_domain":"cern.ch","server_host":"p05799459u51457","server_username":"","start_time":1491789025000,"throughput":274307.57826086954,"unique_id":"03404bbc-1d90-11e7-9717-47f48e80beef-2e48","user":"","user_dn":"","user_fqan":"","user_role":"","vo":"","write_average":0.0,"write_bytes":0,"write_bytes_at_close":0,"write_max":0,"write_min":0,"write_operations":0,"write_sigma":0.0},"metadata":{"event_timestamp":1491789715000,"hostname":"monit-amqsource-fafa51de8d.cern.ch","kafka_timestamp":1491789741627,"original-destination":"/topic/xrootd.cms.eos","partition":"10","producer":"xrootd","timestamp":1491789740015,"topic":"xrootd_raw_gled","type":"gled","type_prefix":"raw","version":"003"}}
+
+    :returns: a dictionary with AAA Spark DataFrame
+    """
+    if  not date:
+        # by default we read yesterdate data
+        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+
+    hpath = '%s/%s' % (hdir, date)
+    rdd = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
+    aaa_rdd = rdd.map(lambda r: r['data'])
+    records = aaa_rdd.take(1) # take function will return list of records
+    if  verbose:
+        print("### aaa_rdd records", records, type(records))
 
     # create new spark DataFrame
-#    avro_df = sqlContext.createDataFrame(data)
-#    avro_df = sqlContext.createDataFrame(records)
-    avro_df = sqlContext.createDataFrame(avro_rdd)
-    avro_df.registerTempTable('avro_df')
-    if  verbose:
-        print("### avro_df", avro_df, type(avro_df))
-
-    return avro_df
-
-def aaa_tables(sqlContext, hdir='hdfs:///project/monitoring/archive/xrootd/raw/gled', verbose=False):
-    """
-    Return dictionary of spark tables from AAA data
-    """
-    if  not day:
-        # by default we read yesterday data
-        day = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
-    hpath = '%s/%s' % (hdir, day)
-    aaa_df = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
+    aaa_df = sqlContext.createDataFrame(aaa_rdd)
     aaa_df.registerTempTable('aaa_df')
     tables = {'aaa_df':aaa_df}
     return tables
 
-def eos_tables(sqlContext, hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms', day=None, verbose=False):
+def eos_tables(sqlContext,
+        hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms',
+        date=None, verbose=False):
     """
-    Return dictionary of spark tables from EOS data
+    Parse EOS HDFS records
+
+    Example of EOS JSON record on HDFS
+    {"data":"\"log=9e7436fe-1d8e-11e7-ba07-a0369f1fbf0c&path=/store/mc/PhaseISpring17GS/MinBias_TuneCUETP8M1_13TeV-pythia8/GEN-SIM/90X_upgrade2017_realistic_v20-v1/50000/72C78841-2110-E711-867F-F832E4CC4D39.root&ruid=8959&rgid=1399&td=nobody.693038:472@fu-c2e05-24-03-daq2fus1v0--cms&host=p05798818q44165.cern.ch&lid=1048850&fid=553521212&fsid=18722&ots=1491788403&otms=918&cts=1491789688&ctms=225&rb=19186114&rb_min=104&rb_max=524288&rb_sigma=239596.05&wb=0&wb_min=0&wb_max=0&wb_sigma=0.00&sfwdb=7576183815&sbwdb=6313410471&sxlfwdb=7575971197&sxlbwdb=6313300667&nrc=72&nwc=0&nfwds=24&nbwds=10&nxlfwds=12&nxlbwds=4&rt=9130.44&wt=0.00&osize=3850577700&csize=3850577700&sec.prot=gsi&sec.name=cmsprd&sec.host=cms-ucsrv-c2f46-32-07.cern.ch&sec.vorg=&sec.grps=&sec.role=&sec.info=/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=amaltaro/CN=718748/CN=Alan Malta Rodrigues&sec.app=\"","metadata":{"host":"eoscms-srv-m1.cern.ch","kafka_timestamp":1491789692305,"partition":"14","path":"cms","producer":"eos","timestamp":1491789689562,"topic":"eos_logs","type":"reports","type_prefix":"logs"}}
+
+    The EOS record consist of data and metadata parts where data part squashed
+    into single string all requested parameters.
+
+    :returns: a dictionary with eos Spark DataFrame
     """
-    if  not day:
-        # by default we read yesterday data
-        day = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
-    hpath = '%s/%s' % (hdir, day)
-    eos_df = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
+    if  not date:
+        # by default we read yesterdate data
+        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+
+    hpath = '%s/%s' % (hdir, date)
+    rdd = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
+    def parse_log(r):
+        "Local helper function to parse EOS record and extract intersting fields"
+        rdict = {}
+        for item in r.split('&'):
+            if  item.startswith('path='):
+                rdict['file_lfn'] = item.split('path=')[-1]
+            if  item.startswith('sec.info='):
+                rdict['user_dn'] = item.split('sec.info=')[-1]
+            if  item.startswith('sec.host='):
+                rdict['host'] = item.split('sec.host=')[-1]
+        return rdict
+
+    eos_rdd = rdd.map(lambda r: parse_log(r['data']))
+    records = eos_rdd.take(1) # take function will return list of records
+    if  verbose:
+        print("### eos_rdd records", records, type(records))
+
+    # create new spark DataFrame
+    eos_df = sqlContext.createDataFrame(eos_rdd)
     eos_df.registerTempTable('eos_df')
     tables = {'eos_df':eos_df}
     return tables
-

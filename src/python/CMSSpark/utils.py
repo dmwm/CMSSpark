@@ -29,10 +29,8 @@ def credentials(fname=None):
         data = json.load(istream)
     return data
 
-def cern_monit(res, amq):
+def cern_monit(res, chunk=1000):
     "Send results to CERN MONIT system"
-    if  not amq:
-        return
     creds = credentials(amq)
     host, port = creds['host_and_ports'].split(':')
     port = int(port)

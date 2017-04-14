@@ -60,8 +60,7 @@ class OptionParser():
         self.parser.add_argument("--amq", action="store",
             dest="amq", default="", help=msg)
 
-def run(fout, verbose=None, yarn=None, tier=None, era=None,
-        release=None, cdate=None, patterns=[], antipatterns=[]):
+def run(fout, verbose=None, yarn=None, patterns=[], antipatterns=[]):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
@@ -114,45 +113,7 @@ def run(fout, verbose=None, yarn=None, tier=None, era=None,
 
     # construct conditions
     cond = 'dataset_access_type = "VALID" AND d_is_dataset_valid = 1'
-    if  era:
-        cond += ' AND acquisition_era_name like "%s"' % era.replace('*', '%')
-    cond_pat = []
-    for name in patterns:
-        if  name.find('*') != -1:
-            cond_pat.append('d_dataset LIKE "%s"' % name.replace('*', '%'))
-        else:
-            cond_pat.append('d_dataset="%s"' % name)
-    if  cond_pat:
-        cond += ' AND (%s)' % ' OR '.join(cond_pat)
-    for name in antipatterns:
-        if  name.find('*') != -1:
-            cond += ' AND d_dataset NOT LIKE "%s"' % name.replace('*', '%')
-        else:
-            cond += ' AND d_dataset!="%s"' % name
-    if  cdate:
-        dates = cdate.split('-')
-        if  len(dates) == 2:
-            cond += ' AND d_creation_date > %s AND d_creation_date < %s' \
-                    % (unix_tstamp(dates[0]), unix_tstamp(dates[1]))
-            joins = joins.where(joins.d_creation_date>unix_tstamp(dates[0]))
-        elif len(dates) == 1:
-            cond += ' AND d_creation_date > %s' % unix_tstamp(dates[0])
-        else:
-            raise NotImplementedError("Given dates are not supported, please either provide YYYYMMDD date or use dash to define a dates range.")
-
-    print("Applied condition %s" % cond)
-
-    if  tier:
-        if isinstance(tier, list):
-            tiers = tier
-        else:
-            tiers = tier.split(',')
-        gen_cond = cond
-        for tier in tiers:
-            cond = gen_cond + ' AND d_dataset like "%%/%s"' % tier
-            fjoin = joins.where(cond).distinct().select(cols)
-    else:
-        fjoin = joins.where(cond).distinct().select(cols)
+    fjoin = joins.where(cond).distinct().select(cols)
 
     # at this step we have fjoin table with Row(d_dataset_id=9413359, d_dataset=u'/SingleMu/CMSSW_7_1_0_pre9-GR_R_71_V4_RelVal_mu2012D_TEST-v6000/DQM', d_creation_date=1406060166.0, d_is_dataset_valid=1, f_event_count=5318, f_file_size=21132638.0, dataset_access_type=u'DELETED', acquisition_era_name=u'CMSSW_7_1_0_pre9', processing_version=u'6000'))
 
@@ -177,68 +138,25 @@ def run(fout, verbose=None, yarn=None, tier=None, era=None,
     agg_dbs_df.persist(StorageLevel.MEMORY_AND_DISK)
 
     # join dbs and phedex tables
-    cols = ['d_dataset_id','d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','processing_version','r_release_version','dataset_name','node_name','pbr_size','dataset_is_open','max_replica_time']
+#    cols = ['d_dataset_id','d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','processing_version','r_release_version','dataset_name','node_name','pbr_size','dataset_is_open','max_replica_time']
+    cols = ['dataset_name','evts','size','date','dataset_access_type','acquisition_era_name','r_release_version','node_name','pbr_size','dataset_is_open','max_replica_time']
     stmt = 'SELECT %s FROM agg_dbs_df JOIN newpdf ON agg_dbs_df.d_dataset = newpdf.dataset_name' % ','.join(cols)
     finaldf = sqlContext.sql(stmt)
-    print_rows(finaldf, 'finaldf', verbose)
+    print_rows(finaldf, stmt, verbose)
 
-    # collect results and perform re-mapping
-    out = []
-    idx = 0
-    site = '' # will fill it out when process Phedex data
-    naccess = 0 # will fill it out when process Phedex+DBS data and calc naccess
-    njobs = 0 # will fill it out when process JobMonitoring data
-    cpu = 0 # will fill it out when process JobMonitoring data
-    atype = '' # will fill out when process DBS data
-    pver = '' # will fill out when process DBS data
-    rver = '' # will fill out when process DBS data
-    drop_cols = ['d_dataset_id','d_dataset','dataset_access_type','acquisition_era_name','processing_version','r_release_version', 'node_name', 'dataset_name']
-    for row in finaldf.collect():
-        rdict = row.asDict()
-        _, primds, procds, tier = rdict['d_dataset'].split('/')
-        rdict['primds'] = primds
-        rdict['procds'] = procds
-        rdict['tier'] = tier
-        rdict['era'] = rdict.get('acquisition_era_name', era)
-        rdict['atype'] = rdict.get('dataset_access_type', atype)
-        rdict['pver'] = rdict.get('processing_version', pver)
-        rdict['release'] = rdict.get('r_release_version', rver)
-        node = rdict.get('node_name', site).split('_')
-        if len(node) == 4:
-            node_name = '_'.join(node[:3])
-            node_type = node[-1]
-        else:
-            node_name = rdict.get('node_name', site)
-            node_type = 'NA'
-        rdict['site'] = node_name
-        rdict['node_type'] = node_type
-        rdict['dataset'] = rdict['dataset_name']
-        rdict['naccess'] = naccess
-        rdict['njobs'] = njobs
-        rdict['cpu'] = cpu
-        for key in drop_cols:
-            if  key in rdict:
-                del rdict[key]
-        out.append(rdict)
-        if  verbose and idx < 5:
-            print(rdict)
-        idx += 1
+    # keep agg_dbs_df table around
+    finaldf.persist(StorageLevel.MEMORY_AND_DISK)
 
-    # write out output
+    # write out results back to HDFS, the fout parameter defines area on HDFS
+    # it is either absolute path or area under /user/USERNAME
     if  fout:
-        with open(fout, 'w') as ostream:
-            headers = sorted(out[0].keys())
-            ostream.write(','.join(headers)+'\n')
-            for rdict in out:
-                arr = []
-                for key in headers:
-                    arr.append(str(rdict[key]))
-                ostream.write(','.join(arr)+'\n')
+        finaldf.write.format("com.databricks.spark.csv")\
+                .option("header", "true").save(fout)
 
     ctx.stop()
     if  verbose:
         print("Elapsed time %s" % elapsed_time(time0))
-    return out
+    return finaldf
 
 def main():
     "Main function"
@@ -249,19 +167,11 @@ def main():
     fout = opts.fout
     verbose = opts.verbose
     yarn = opts.yarn
-    tier = opts.tier
-    era = opts.era
-    release = opts.release
-    cdate = opts.cdate
     patterns = opts.patterns.split(',') if opts.patterns else []
     antipatterns = opts.antipatterns.split(',') if opts.antipatterns else []
-    res = run(fout, verbose, yarn, tier, era, release, cdate, patterns, antipatterns)
-    cern_monit(res, opts.amq)
-
-    if  verbose:
-        print("### Collected", len(res), "results")
-        if  len(res)>0:
-            print(res[0])
+    res = run(fout, verbose, yarn, patterns, antipatterns)
+    if  opts.amq:
+        cern_monit(res)
 
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
