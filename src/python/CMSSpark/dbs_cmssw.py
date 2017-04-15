@@ -19,6 +19,7 @@ from types import NoneType
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
+from pyspark.sql.functions import lit
 
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows, spark_context, cmssw_tables
@@ -51,13 +52,18 @@ class OptionParser():
 def cmssw_date(date):
     "Convert given date into CMSSW date format"
     if  not date:
-        return None
+        date = time.strftime("year=%Y/month=%-m/date=%d", time.gmtime(time.time()-60*60*24))
+        return date
     if  len(date) != 8:
         raise Exception("Given date %s is not in YYYYMMDD format")
     year = date[:4]
     month = int(date[4:6])
     day = int(date[6:])
     return 'year=%s/month=%s/day=%s' % (year, month, day)
+
+def cmssw_date_unix(date):
+    "Convert CMSSW date into UNIX timestamp"
+    return time.mktime(time.strptime(date, 'year=%Y/month=%m/day=%d'))
 
 def run(fout, verbose=None, yarn=None, date=None):
     """
@@ -77,7 +83,8 @@ def run(fout, verbose=None, yarn=None, date=None):
     fdf = tables['fdf'] # file table
 
     # read CMSSW avro rdd
-    cmssw_df = cmssw_tables(ctx, sqlContext, date=cmssw_date(date), verbose=verbose)
+    date = cmssw_date(date)
+    cmssw_df = cmssw_tables(ctx, sqlContext, date=date, verbose=verbose)
 
     # merge DBS and CMSSW data
     cols = ['d_dataset','d_dataset_id','f_logical_file_name','FILE_LFN','SITE_NAME']
@@ -88,13 +95,13 @@ def run(fout, verbose=None, yarn=None, date=None):
     # perform aggregation
     fjoin = joins.groupBy(['SITE_NAME','d_dataset'])\
             .agg({'FILE_LFN':'count'})\
-            .withColumnRenamed('count(FILE_LFN)', 'cmssw_count')\
+            .withColumnRenamed('count(FILE_LFN)', 'count')\
+            .withColumnRenamed('d_dataset', 'dataset')\
+            .withColumn('date', lit(cmssw_date_unix(date)))\
+            .withColumn('count_type', lit('cmssw'))\
 
     # keep table around
     fjoin.persist(StorageLevel.MEMORY_AND_DISK)
-
-    if  not date:
-        date = time.strftime("year=%Y/month=%-m/date=%d", time.gmtime(time.time()-60*60*24))
 
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
