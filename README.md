@@ -25,6 +25,12 @@ run_spark dbs_aaa.py --verbose --yarn --fout=hdfs:///cms/users/vk/aaa --date=201
 run_spark dbs_eos.py --verbose --yarn --fout=hdfs:///cms/users/vk/eos --date=20170411
 ```
 
+*Please note*: in order to run cern_monit.py script user must supply two
+additional parameters. The StompAMQ library file and AMQ credentials.
+The former is located in static are of this package. The later contains
+CERN MONIT end-point parameters and should be individually obtained from CERN
+MONIT team.
+
 ### CMS metadata
 CMS metadata are stored in the following location on HDFS and accessing from
 analytix cluster:
