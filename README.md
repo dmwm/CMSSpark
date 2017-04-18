@@ -8,16 +8,21 @@ Here are few examples how to get various stats:
 
 ```
 # DBS+PhEDEx
-dbs_phedex_stats.sh 2>&1 1>& dbs_phedex.log
+apatterns="*BUNNIES*,*Commissioning*,*RelVal*"
+hdir=hdfs:///cms/users/vk/datasets
+run_spark dbs_phedex.py --fout=$hdir --antipatterns=$apatterns --yarn --verbose
+
+# Send data to CERN MONIT, user must provide stomppy egg and AMQ JSON broker file
+run_spark cern_monit.py --hdir=$hdir --stomp=static/stomp.py-4.1.15-py2.7.egg --amq=amq_broker.json
 
 # DBS+CMSSW
-dbs_cmssw_spark --verbose --yarn --fout=hdfs:///cms/users/vk/cmssw --date=20170412 2>&1 &> cmssw.log
+run_spark dbs_cmssw.py --verbose --yarn --fout=hdfs:///cms/users/vk/cmssw --date=20170411
 
 # DBS+AAA
-dbs_aaa_spark --verbose --yarn --fout=hdfs:///cms/users/vk/aaa --date=20170411 2>&1 &> aaa.log
+run_spark dbs_aaa.py --verbose --yarn --fout=hdfs:///cms/users/vk/aaa --date=20170411
 
 # DBS+EOS
-dbs_eos_spark --verbose --yarn --fout=hdfs:///cms/users/vk/eos --date=20170412 2>&1 &> eos.log
+run_spark dbs_eos.py --verbose --yarn --fout=hdfs:///cms/users/vk/eos --date=20170411
 ```
 
 ### CMS metadata
