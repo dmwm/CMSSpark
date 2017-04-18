@@ -21,8 +21,8 @@ from pyspark.sql import HiveContext
 
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
-from CMSSpark.spark_utils import spark_context, cern_monit_spark
-from CMSSpark.utils import elapsed_time, cern_monit
+from CMSSpark.spark_utils import spark_context
+from CMSSpark.utils import elapsed_time
 
 class OptionParser():
     def __init__(self):

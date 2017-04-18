@@ -1,20 +1,16 @@
 #!/bin/sh
 # Author: Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
-# A wrapper script to submit spark job with dbs_spark.py script
-# from WMArchive project.
+# A wrapper script to submit spark job with CMSSpark python script.
 
 # test arguments
-#if [ "$#" -eq 0 ]; then
-#    echo "Usage: dbs_spark <options>"
-#    echo "       dbs_spark --help"
-#    exit 1
-#fi
-
-# Load WMArchive environment which setup all spark stuff
-source /data/srv/current/apps/wmarchive/etc/profile.d/init.sh
+if [ "$#" -eq 0 ]; then
+    echo "Usage: run_spark <cmsspark_script> <options>"
+    exit 1
+fi
 
 # find out where CMSSpark is installed on a system
 droot=`python -c "import CMSSpark; print '/'.join(CMSSpark.__file__.split('/')[:-1])"`
+cmsspark=$droot/$1
 
 # allow to disable spark output, client should setup his/her own log4j.properties
 # via WMA_LOG4J environment variable
@@ -34,7 +30,7 @@ sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
 
 if [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-help" ]; then
     # run help
-    python $droot/dbs_spark.py --help
+    python $cmsspark --help
 elif [[  $1 =~ -?-yarn(-cluster)?$ ]]; then
     # to tune up these numbers:
     #  - executor-memory not more than 5G
@@ -48,7 +44,7 @@ elif [[  $1 =~ -?-yarn(-cluster)?$ ]]; then
         --driver-class-path '/usr/lib/hive/lib/*' \
         --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
         --executor-memory 5g \
-        $conf $droot/dbs_spark.py ${1+"$@"}
+        $conf $cmsspark ${2+"$@"}
 else
     # submit spark job with our file, please note
     # that user may increase memory options if necessary
@@ -63,5 +59,5 @@ else
         --master local[$((`nproc`/4))] \
         --driver-class-path '/usr/lib/hive/lib/*' \
         --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
-        $conf $droot/dbs_spark.py ${1+"$@"}
+        $conf $cmsspark ${2+"$@"}
 fi
