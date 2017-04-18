@@ -248,7 +248,7 @@ def run(path, amq, stomp, yarn=None, verbose=False):
     else:
         raise Exception('No stomp module egg is provided')
     if  amq and os.path.isfile(amq):
-        if  amq.endswith('/amq_broker.json'):
+        if  amq.split('/')[-1] == 'amq_broker.json':
             ctx.addFile(amq)
         else:
             raise Exception('Wrong AMQ broker file name, please name it as amq_broker.json')

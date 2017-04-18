@@ -28,6 +28,9 @@ csvjar=/afs/cern.ch/user/l/lmeniche/public/spark-csv-assembly-1.4.0.jar
 avrojar=/usr/lib/avro/avro-mapred.jar
 sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
 
+args="${@:2}"
+echo "$cmsspark $args"
+
 if [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-help" ]; then
     # run help
     python $cmsspark --help
@@ -44,7 +47,7 @@ elif [[  $1 =~ -?-yarn(-cluster)?$ ]]; then
         --driver-class-path '/usr/lib/hive/lib/*' \
         --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
         --executor-memory 5g \
-        $conf $cmsspark ${2+"$@"}
+        $conf $cmsspark $args
 else
     # submit spark job with our file, please note
     # that user may increase memory options if necessary
@@ -53,11 +56,12 @@ else
 
     # Modify with local[*] to use all the available cores in the node
     #   optionally increase driver memory with --driver-memory 2G (default 1G)
+    echo "$cmsspark ${2+\"$@\"}"
     PYSPARK_PYTHON='/afs/cern.ch/user/v/valya/public/python27' \
     spark-submit --jars $csvjar,$avrojar,$sparkexjar \
         --executor-memory $((`nproc`/4))G \
         --master local[$((`nproc`/4))] \
         --driver-class-path '/usr/lib/hive/lib/*' \
         --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
-        $conf $cmsspark ${2+"$@"}
+        $conf $cmsspark $args
 fi
