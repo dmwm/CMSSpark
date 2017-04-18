@@ -145,10 +145,13 @@ def print_rows(df, dfname, verbose, head=5):
         for row in df.head(head):
             print("### row", row)
 
-def spark_context(appname='cms', yarn=None, verbose=False):
+def spark_context(appname='cms', yarn=None, verbose=False, python_files=[]):
     # define spark context, it's main object which allow
     # to communicate with spark
-    ctx = SparkContext(appName=appname)
+    if  python_files:
+        ctx = SparkContext(appName=appname, pyFiles=python_files)
+    else:
+        ctx = SparkContext(appName=appname)
     logger = SparkLogger(ctx)
     if  not verbose:
         logger.set_level('ERROR')

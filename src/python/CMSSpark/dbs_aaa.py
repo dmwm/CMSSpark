@@ -22,8 +22,9 @@ from pyspark.sql import HiveContext
 from pyspark.sql.functions import lit
 
 # CMSSpark modules
-from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows, spark_context, aaa_tables
-from CMSSpark.utils import elapsed_time, cern_monit
+from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
+from CMSSpark.spark_utils import spark_context, aaa_tables
+from CMSSpark.utils import elapsed_time
 
 class OptionParser():
     def __init__(self):
@@ -45,9 +46,6 @@ class OptionParser():
             dest="yarn", default=False, help="run job on analytics cluster via yarn resource manager")
         self.parser.add_argument("--verbose", action="store_true",
             dest="verbose", default=False, help="verbose output")
-        msg = "Send results via StompAMQ to a broker, provide broker credentials in JSON file"
-        self.parser.add_argument("--amq", action="store",
-            dest="amq", default="", help=msg)
 
 def aaa_date(date):
     "Convert given date into AAA date format"
@@ -65,13 +63,11 @@ def aaa_date_unix(date):
     "Convert AAA date into UNIX timestamp"
     return time.mktime(time.strptime(date, '%Y/%m/%d'))
 
-def run(fout, verbose=None, yarn=None, date=None):
+def run(date, fout, yarn=None, verbose=None):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
     """
-    time0 = time.time()
-
     # define spark context, it's main object which allow to communicate with spark
     ctx = spark_context('cms', yarn, verbose)
     sqlContext = HiveContext(ctx)
@@ -111,37 +107,6 @@ def run(fout, verbose=None, yarn=None, date=None):
                 .option("header", "true").save(fout)
 
     ctx.stop()
-    if  verbose:
-        print("Elapsed time %s" % elapsed_time(time0))
-    return fjoin
-
-def tmp():
-    # output results
-    out = []
-    idx = 0
-    for row in fjoin.collect():
-        rdict = row.asDict()
-        rdict['date'] = date
-        out.append(rdict)
-        if  verbose and idx < 5:
-            print(rdict)
-        idx += 1
-
-    # write out output
-    if  fout and out:
-        with open(fout, 'w') as ostream:
-            headers = sorted(out[0].keys())
-            ostream.write(','.join(headers)+'\n')
-            for rdict in out:
-                arr = []
-                for key in headers:
-                    arr.append(str(rdict[key]))
-                ostream.write(','.join(arr)+'\n')
-
-    ctx.stop()
-    if  verbose:
-        print("Elapsed time %s" % elapsed_time(time0))
-    return out
 
 def main():
     "Main function"
@@ -149,14 +114,7 @@ def main():
     opts = optmgr.parser.parse_args()
     print("Input arguments: %s" % opts)
     time0 = time.time()
-    fout = opts.fout
-    verbose = opts.verbose
-    yarn = opts.yarn
-    date = opts.date
-    res = run(fout, verbose, yarn, date)
-    if  opts.amq:
-        cern_monit(res)
-
+    run(opts.date, opts.fout, opts.yarn, opts.verbose)
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s sec' % elapsed_time(time0))

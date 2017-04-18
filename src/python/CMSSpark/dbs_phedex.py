@@ -20,7 +20,8 @@ from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
 
 # CMSSpark modules
-from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows, spark_context
+from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
+from CMSSpark.spark_utils import spark_context, cern_monit_spark
 from CMSSpark.utils import elapsed_time, cern_monit
 
 class OptionParser():
@@ -56,17 +57,12 @@ class OptionParser():
             dest="yarn", default=False, help="run job on analytics cluster via yarn resource manager")
         self.parser.add_argument("--verbose", action="store_true",
             dest="verbose", default=False, help="verbose output")
-        msg = "Send results via StompAMQ to a broker, provide broker credentials in JSON file"
-        self.parser.add_argument("--amq", action="store",
-            dest="amq", default="", help=msg)
 
-def run(fout, verbose=None, yarn=None, patterns=[], antipatterns=[]):
+def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
     """
-    time0 = time.time()
-
     # define spark context, it's main object which allow to communicate with spark
     ctx = spark_context('cms', yarn, verbose)
     sqlContext = HiveContext(ctx)
@@ -142,10 +138,10 @@ def run(fout, verbose=None, yarn=None, patterns=[], antipatterns=[]):
     cols = ['dataset_name','evts','size','date','dataset_access_type','acquisition_era_name','r_release_version','node_name','pbr_size','dataset_is_open','max_replica_time']
     stmt = 'SELECT %s FROM agg_dbs_df JOIN newpdf ON agg_dbs_df.d_dataset = newpdf.dataset_name' % ','.join(cols)
     finaldf = sqlContext.sql(stmt)
-    print_rows(finaldf, stmt, verbose)
 
     # keep agg_dbs_df table around
     finaldf.persist(StorageLevel.MEMORY_AND_DISK)
+    print_rows(finaldf, stmt, verbose)
 
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
@@ -154,9 +150,6 @@ def run(fout, verbose=None, yarn=None, patterns=[], antipatterns=[]):
                 .option("header", "true").save(fout)
 
     ctx.stop()
-    if  verbose:
-        print("Elapsed time %s" % elapsed_time(time0))
-    return finaldf
 
 def main():
     "Main function"
@@ -169,10 +162,7 @@ def main():
     yarn = opts.yarn
     patterns = opts.patterns.split(',') if opts.patterns else []
     antipatterns = opts.antipatterns.split(',') if opts.antipatterns else []
-    res = run(fout, verbose, yarn, patterns, antipatterns)
-    if  opts.amq:
-        cern_monit(res)
-
+    run(fout, yarn, verbose, patterns, antipatterns)
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s sec' % elapsed_time(time0))

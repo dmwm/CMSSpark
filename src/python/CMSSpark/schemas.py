@@ -268,3 +268,24 @@ def schema_phedex():
                      StructField("replica_time_create", DoubleType(), True),
                      StructField("replica_time_updater", DoubleType(), True)])
 
+def schema_dbs_phedex():
+    """
+    Schema for DBS+PhEDEx aggregation, see dbs_phedex.py and adjust accordingly.
+
+    dataset_name,evts,size,date,dataset_access_type,acquisition_era_name,r_release_version,node_name,pbr_size,dataset_is_open,max_replica_time
+    "/14TeV_T1T1_2BC_350_100_MadGraph/Summer12-UpgrdStdGeom_DESIGN42_V17-v1/GEN",73528,4.4569181E7,1.343676821E9,VALID,DBS2_UNKNOWN_ACQUISION_ERA,CMSSW_4_2_8_SLHCstd2_patch2,T1_US_FNAL_Buffer,4.4569181E7,y,1.361368512E9
+    """
+    return StructType([
+            StructField("dataset_name", StringType(), True),
+            StructField("evts", IntegerType(), True),
+            StructField("size", DoubleType(), True),
+            StructField("date", DoubleType(), True),
+            StructField("dataset_access_type", StringType(), True),
+            StructField("acquisition_era_name", StringType(), True),
+            StructField("r_release_version", StringType(), True),
+            StructField("node_name", StringType(), True),
+            StructField("pbr_size", DoubleType(), True),
+            StructField("dataset_is_open", StringType(), True),
+            StructField("max_replica_time", DoubleType(), True)
+        ])
+
