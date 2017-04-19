@@ -91,8 +91,8 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None):
             .withColumnRenamed('sum(block_bytes)', 'pbr_size')\
             .withColumnRenamed('max(replica_time_create)', 'max_replica_time')
     newpdf.registerTempTable('newpdf')
-    print_rows(newpdf, 'newpdf', verbose)
-    newpdf.persist(StorageLevel.MEMORY_AND_DISK)
+#    print_rows(newpdf, 'newpdf', verbose)
+#    newpdf.persist(StorageLevel.MEMORY_AND_DISK)
 
     # join tables
     cols = ['*'] # to select all fields from table
@@ -102,10 +102,10 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None):
     stmt = 'SELECT %s FROM ddf JOIN fdf on ddf.d_dataset_id = fdf.f_dataset_id JOIN daf ON ddf.d_dataset_access_type_id = daf.dataset_access_type_id JOIN aef ON ddf.d_acquisition_era_id = aef.acquisition_era_id JOIN pef ON ddf.d_processing_era_id = pef.processing_era_id' % ','.join(cols)
     print(stmt)
     joins = sqlContext.sql(stmt)
-    print_rows(joins, 'joins', verbose)
+#    print_rows(joins, 'joins', verbose)
 
     # keep joins table around
-    joins.persist(StorageLevel.MEMORY_AND_DISK)
+#    joins.persist(StorageLevel.MEMORY_AND_DISK)
 
     # construct conditions
     cond = 'dataset_access_type = "VALID" AND d_is_dataset_valid = 1'
@@ -128,10 +128,10 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None):
     stmt = 'SELECT %s FROM newdf JOIN mcf ON newdf.d_dataset_id = mcf.mc_dataset_id JOIN ocf ON mcf.mc_output_mod_config_id = ocf.oc_output_mod_config_id JOIN rvf ON ocf.oc_release_version_id = rvf.r_release_version_id' % ','.join(cols)
     agg_dbs_df = sqlContext.sql(stmt)
     agg_dbs_df.registerTempTable('agg_dbs_df')
-    print_rows(agg_dbs_df, 'agg_dbs_df', verbose)
+#    print_rows(agg_dbs_df, 'agg_dbs_df', verbose)
 
     # keep agg_dbs_df table around
-    agg_dbs_df.persist(StorageLevel.MEMORY_AND_DISK)
+#    agg_dbs_df.persist(StorageLevel.MEMORY_AND_DISK)
 
     # join dbs and phedex tables
 #    cols = ['d_dataset_id','d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','processing_version','r_release_version','dataset_name','node_name','pbr_size','dataset_is_open','max_replica_time']
@@ -140,8 +140,8 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None):
     finaldf = sqlContext.sql(stmt)
 
     # keep agg_dbs_df table around
-    finaldf.persist(StorageLevel.MEMORY_AND_DISK)
-    print_rows(finaldf, stmt, verbose)
+#    finaldf.persist(StorageLevel.MEMORY_AND_DISK)
+#    print_rows(finaldf, stmt, verbose)
 
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
