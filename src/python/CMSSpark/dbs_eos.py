@@ -102,7 +102,7 @@ def run(date, fout, yarn=None, verbose=None):
             .agg({'file_lfn':'count'})\
             .withColumnRenamed('count(file_lfn)', 'count')\
             .withColumnRenamed('d_dataset', 'dataset')\
-            .withColumn('date', lit(aaa_date_unix(date)))\
+            .withColumn('date', lit(eos_date_unix(date)))\
             .withColumn('count_type', lit('eos'))\
 
     # keep table around
