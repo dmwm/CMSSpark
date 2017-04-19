@@ -31,17 +31,21 @@ sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
 
 args="${@:2}"
 echo "$cmsspark $args"
+yarn=`echo $args | grep yarn`
 
-if [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-help" ]; then
+if [ "$2" == "-h" ] || [ "$2" == "--help" ] || [ "$2" == "-help" ]; then
     # run help
     python $cmsspark --help
-elif [[  $1 =~ -?-yarn(-cluster)?$ ]]; then
+    exit 0
+fi
+if [ -n "$yarn" ]; then
     # to tune up these numbers:
     #  - executor-memory not more than 5G
     #  - num-executor can be increased (suggested not more than 10)
     #  - cores = 2/4/8
     # Temp solution to have a wrapper for python27 on spark cluster
     # once CERN IT will resolve python version we can remove PYSPARK_PYTHON
+    echo "YARN execution"
     PYSPARK_PYTHON='/afs/cern.ch/user/v/valya/public/python27' \
     spark-submit --jars $csvjar,$avrojar,$sparkexjar \
         --master yarn-client \
@@ -57,7 +61,7 @@ else
 
     # Modify with local[*] to use all the available cores in the node
     #   optionally increase driver memory with --driver-memory 2G (default 1G)
-    echo "$cmsspark ${2+\"$@\"}"
+    echo "LOCAL (NO-YARN) execution"
     PYSPARK_PYTHON='/afs/cern.ch/user/v/valya/public/python27' \
     spark-submit --jars $csvjar,$avrojar,$sparkexjar \
         --executor-memory $((`nproc`/4))G \
