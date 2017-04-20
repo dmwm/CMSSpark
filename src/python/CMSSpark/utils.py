@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 #pylint: disable=
+# Author: Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
 """
-File       : utils.py
-Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
-Description: Set of utililities
+Set of utililities
 """
 
 # system modules

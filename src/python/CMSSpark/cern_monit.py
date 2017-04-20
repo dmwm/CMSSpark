@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 #pylint: disable=
+# Author: Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
 """
-File       : dbs_phedex.py
-Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
-Description: Spark script to parse DBS and PhEDEx content on HDFS
+Spark script to read data from HDFS location and send them to CERN MONIT system.
 """
 
 # system modules
@@ -218,7 +217,8 @@ def send2monit(data):
 class OptionParser():
     def __init__(self):
         "User based option parser"
-        self.parser = argparse.ArgumentParser(prog='PROG')
+        desc = "Spark script to send data from HDFS area to CERN MONIT"
+        self.parser = argparse.ArgumentParser(prog='PROG', description=desc)
         year = time.strftime("%Y", time.localtime())
         msg = 'Location of data on HDFS in CSV data-format'
         self.parser.add_argument("--hdir", action="store",

@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 #pylint: disable=
+# Author: Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
 """
-File       : spark_utils.py
-Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
-Description: Set of spark utils
+Spark utililities
 """
 
 # system modules
@@ -277,6 +276,19 @@ def cmssw_tables(ctx, sqlContext,
     rdd = avro_rdd(ctx, sqlContext, hdir, date, verbose)
 
     # create new spark DataFrame
+    jdf = sqlContext.createDataFrame(rdd, schema=schema_cmssw())
+    df = jdf.withColumn("READ_BYTES", jdf["READ_BYTES"].cast(LongType()))\
+            .withColumn("READ_BYTES_AT_CLOSE", jdf["READ_BYTES_AT_CLOSE"].cast(LongType()))\
+            .withColumn("READ_SINGLE_BYTES", jdf["READ_SINGLE_BYTES"].cast(LongType()))\
+            .withColumn("READ_SINGLE_OPERATIONS", jdf["READ_SINGLE_OPERATIONS"].cast(DoubleType()))\
+            .withColumn("READ_SINGLE_AVERAGE", jdf["READ_SINGLE_AVERAGE"].cast(DoubleType()))\
+            .withColumn("READ_SINGLE_SIGMA", jdf["READ_SINGLE_SIGMA"].cast(DoubleType()))\
+            .withColumn("READ_VECTOR_BYTES", jdf["READ_VECTOR_BYTES"].cast(LongType()))\
+            .withColumn("READ_VECTOR_OPERATIONS", jdf["READ_VECTOR_OPERATIONS"].cast(DoubleType()))\
+            .withColumn("READ_VECTOR_AVERAGE", jdf["READ_VECTOR_AVERAGE"].cast(DoubleType()))\
+            .withColumn("READ_VECTOR_SIGMA", jdf["READ_VECTOR_SIGMA"].cast(DoubleType()))\
+            .withColumn("READ_VECTOR_COUNT_AVERAGE", jdf["READ_VECTOR_COUNT_AVERAGE"].cast(DoubleType()))\
+            .withColumn("READ_VECTOR_COUNT_SIGMA", jdf["READ_VECTOR_COUNT_SIGMA"].cast(DoubleType()))
     df = sqlContext.createDataFrame(rdd, schema=schema_cmssw())
     df.registerTempTable('cmssw_df')
     tables = {'cmssw_df': df}

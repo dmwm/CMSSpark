@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 #pylint: disable=
+# Author: Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
 """
-File       : dbs_phedex.py
-Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
-Description: Spark script to parse DBS and PhEDEx content on HDFS
+Spark script to parse and aggregate DBS and PhEDEx records on HDFS.
 """
 
 # system modules
@@ -27,7 +26,8 @@ from CMSSpark.utils import elapsed_time
 class OptionParser():
     def __init__(self):
         "User based option parser"
-        self.parser = argparse.ArgumentParser(prog='PROG')
+        desc = "Spark script to process DBS+PhEDEx metadata"
+        self.parser = argparse.ArgumentParser(prog='PROG', description=desc)
         year = time.strftime("%Y", time.localtime())
         hdir = 'hdfs:///project/awg/cms'
         msg = 'Location of CMS folders on HDFS, default %s' % hdir

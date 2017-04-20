@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 #pylint: disable=
+# Author: Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
 """
-File       : schemas.py
-Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
-Description: Schema module for DBS/PhEDEx/AAA/EOS/CMSSW meta-data on HDFS
+Schema module for DBS/PhEDEx/AAA/EOS/CMSSW/JobMonitoring meta-data on HDFS
 """
 
 # system modules

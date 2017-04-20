@@ -5,7 +5,7 @@
 # test arguments
 if [ "$#" -eq 0 ]; then
     echo "Usage: run_spark <cmsspark_script> <options>"
-    echo "Supported scripts: dbs_phedex.py dbs_aaa.py, dbs_eos.py dbs_cmssw.py cern_monit.py"
+    echo "Supported scripts: dbs_phedex.py dbs_aaa.py dbs_eos.py dbs_cmssw.py dbs_jm.py cern_monit.py"
     exit 1
 fi
 
