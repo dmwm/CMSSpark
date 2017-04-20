@@ -259,7 +259,7 @@ def cmssw_tables(ctx, sqlContext,
     """
     Parse CMSSW HDFS records.
 
-    Example of CMSSW JSON record on HDFS
+    Example of CMSSW record on HDFS
     {"UNIQUE_ID":"08F8DD3A-0FFE-E611-B710-BC305B3909F1-1","FILE_LFN":"/s.root",
     "FILE_SIZE":"3865077537","CLIENT_DOMAIN":"in2p3.fr","CLIENT_HOST":"sbgwn141",
     "SERVER_DOMAIN":"in2p3.fr","SERVER_HOST":"sbgse20","SITE_NAME":"T2_FR_IPHC",
@@ -273,6 +273,35 @@ def cmssw_tables(ctx, sqlContext,
     "END_DATE":1488322800000,"INSERT_DATE":1488323999000}
 
     :returns: a dictionary with CMSSW Spark DataFrame
+    """
+    return avro_tables(ctx, sqlContext, schema_file, hdir, 'cmssw_df', date, verbose)
+
+def jm_tables(ctx, sqlContext,
+        schema_file='hdfs:///cms/schemas/jm-data-popularity.avsc',
+        hdir='hdfs:///project/awg/cms/job-monitoring/avro-snappy', date=None, verbose=None):
+    """
+    Parse JobMonitoring popularity HDFS records.
+
+    Example of jm-data-popularity record on HDFS
+    {"JobId":"1672451388","FileName":"//store/file.root","IsParentFile":"0","ProtocolUsed":"Remote",
+    "SuccessFlag":"1","FileType":"EDM","LumiRanges":"unknown","StrippedFiles":"0","BlockId":"602064",
+    "StrippedBlocks":"0","BlockName":"Dummy","InputCollection":"DoesNotApply","Application":"CMSSW",
+    "Type":"reprocessing","SubmissionTool":"wmagent","InputSE":"","TargetCE":"","SiteName":"T0_CH_CERN",
+    "SchedulerName":"PYCONDOR","JobMonitorId":"unknown","TaskJobId":"1566463230",
+    "SchedulerJobIdV2":"664eef36-f1c3-11e6-88b9-02163e0184a6-367_0","TaskId":"35076445",
+    "TaskMonitorId":"wmagent_pdmvserv_task_S_640","JobExecExitCode":"0",
+    "JobExecExitTimeStamp":1488375506000,"StartedRunningTimeStamp":1488374686000,
+    "FinishedTimeStamp":1488375506000,"WrapWC":"820","WrapCPU":"1694.3","ExeCPU":"0",
+    "UserId":"124370","GridName":"Alan Malta Rodrigues"}
+
+    :returns: a dictionary with JobMonitoring Spark DataFrame
+    """
+    return avro_tables(ctx, sqlContext, schema_file, hdir, 'jm_df', date, verbose)
+
+def avro_tables(ctx, sqlContext, schema_file, hdir, dfname, date=None, verbose=None):
+    """
+    Parse avro-snappy files on HDFS
+    :returns: a Spark DataFrame
     """
 
     if  not date:
@@ -308,9 +337,9 @@ def cmssw_tables(ctx, sqlContext,
         print("### cmssw avro records", records, type(records))
 
     # create new spark DataFrame
-    cmssw_df = sqlContext.createDataFrame(avro_rdd)
-    cmssw_df.registerTempTable('cmssw_df')
-    tables = {'cmssw_df': cmssw_df}
+    df = sqlContext.createDataFrame(avro_rdd)
+    df.registerTempTable(dfname)
+    tables = {dfname: df}
     return tables
 
 def aaa_tables(sqlContext,
