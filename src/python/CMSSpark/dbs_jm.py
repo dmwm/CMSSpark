@@ -72,15 +72,17 @@ def run(date, fout, yarn=None, verbose=None):
     ctx = spark_context('cms', yarn, verbose)
     sqlContext = HiveContext(ctx)
 
-    # read DBS and Phedex tables
+    # read DBS and JobMonitoring tables
     tables = {}
-    tables.update(dbs_tables(sqlContext, verbose=verbose))
-    ddf = tables['ddf'] # dataset table
-    fdf = tables['fdf'] # file table
 
     # read JobMonitoring avro rdd
     date = jm_date(date)
     jm_df = jm_tables(ctx, sqlContext, date=date, verbose=verbose)
+
+    # DBS tables
+    tables.update(dbs_tables(sqlContext, verbose=verbose))
+    ddf = tables['ddf'] # dataset table
+    fdf = tables['fdf'] # file table
 
     # merge DBS and JobMonitoring data
     cols = ['d_dataset','d_dataset_id','f_logical_file_name','FileName','FileType','Type','SiteName','WrapWC','WrapCPU','JobExecExitCode']

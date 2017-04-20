@@ -22,6 +22,7 @@ from CMSSpark.schemas import schema_processing_eras, schema_dataset_access_types
 from CMSSpark.schemas import schema_acquisition_eras,  schema_datasets, schema_blocks
 from CMSSpark.schemas import schema_files, schema_mod_configs, schema_out_configs
 from CMSSpark.schemas import schema_rel_versions, schema_phedex
+from CMSSpark.schemas import schema_jm, schema_cmssw
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import Row
@@ -254,7 +255,6 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     return tables
 
 def cmssw_tables(ctx, sqlContext,
-        schema_file='hdfs:///cms/schemas/cmssw.avsc',
         hdir='hdfs:///project/awg/cms/cmssw-popularity/avro-snappy', date=None, verbose=None):
     """
     Parse CMSSW HDFS records.
@@ -274,10 +274,15 @@ def cmssw_tables(ctx, sqlContext,
 
     :returns: a dictionary with CMSSW Spark DataFrame
     """
-    return avro_tables(ctx, sqlContext, schema_file, hdir, 'cmssw_df', date, verbose)
+    rdd = avro_rdd(ctx, sqlContext, hdir, date, verbose)
+
+    # create new spark DataFrame
+    df = sqlContext.createDataFrame(rdd, schema=schema_cmssw())
+    df.registerTempTable('cmssw_df')
+    tables = {'cmssw_df': df}
+    return tables
 
 def jm_tables(ctx, sqlContext,
-        schema_file='hdfs:///cms/schemas/jm-data-popularity.avsc',
         hdir='hdfs:///project/awg/cms/jm-data-popularity/avro-snappy', date=None, verbose=None):
     """
     Parse JobMonitoring popularity HDFS records.
@@ -296,29 +301,31 @@ def jm_tables(ctx, sqlContext,
 
     :returns: a dictionary with JobMonitoring Spark DataFrame
     """
-    return avro_tables(ctx, sqlContext, schema_file, hdir, 'jm_df', date, verbose)
+    rdd = avro_rdd(ctx, sqlContext, hdir, date, verbose)
 
-def avro_tables(ctx, sqlContext, schema_file, hdir, dfname, date=None, verbose=None):
+    # create new spark DataFrame
+    jdf = sqlContext.createDataFrame(rdd, schema=schema_jm())
+    df = jdf.withColumn("WrapWC", jdf["WrapWC"].cast(DoubleType()))\
+            .withColumn("WrapCPU", jdf["WrapCPU"].cast(DoubleType()))\
+            .withColumn("ExeCPU", jdf["ExeCPU"].cast(DoubleType()))
+    df.registerTempTable('jm_df')
+    tables = {'jm_df': df}
+    return tables
+
+def avro_rdd(ctx, sqlContext, hdir, date=None, verbose=None):
     """
     Parse avro-snappy files on HDFS
-    :returns: a Spark DataFrame
+    :returns: a Spark RDD object
     """
 
     if  not date:
         date = time.strftime("year=%Y/month=%-m/date=%d", time.gmtime(time.time()-60*60*24))
 
     path = '%s/%s' % (hdir, date)
+    print("### hdir", path)
     # get avro files from HDFS
     afiles = avro_files(path, verbose=verbose)
     print("### avro_files", afiles)
-
-    # load FWJR schema
-    rdd = ctx.textFile(schema_file, 1).collect()
-
-    # define input avro schema, the rdd is a list of lines (sc.textFile similar to readlines)
-    avsc = reduce(lambda x, y: x + y, rdd) # merge all entries from rdd list
-    schema = ''.join(avsc.split()) # remove spaces in avsc map
-    conf = {"avro.schema.input.key": schema}
 
     # define newAPIHadoopFile parameters, java classes
     aformat="org.apache.avro.mapreduce.AvroKeyInputFormat"
@@ -327,20 +334,15 @@ def avro_tables(ctx, sqlContext, schema_file, hdir, dfname, date=None, verbose=N
     aconv="org.apache.spark.examples.pythonconverters.AvroWrapperToJavaConverter"
 
     # load data from HDFS
-    rdd = ctx.union([ctx.newAPIHadoopFile(f, aformat, akey, awrite, aconv, conf=conf) for f in afiles])
+    rdd = ctx.union([ctx.newAPIHadoopFile(f, aformat, akey, awrite, aconv) for f in afiles])
 
-    # the CMSSW are stored as [(dict, None), (dict, None)], therefore we take first element
+    # the records are stored as [(dict, None), (dict, None)], therefore we take first element
     # and assign them to new rdd
     avro_rdd = rdd.map(lambda x: x[0])
     records = avro_rdd.take(1) # take function will return list of records
     if  verbose:
-        print("### %s avro records" % dfname, records, type(records))
-
-    # create new spark DataFrame
-    df = sqlContext.createDataFrame(avro_rdd)
-    df.registerTempTable(dfname)
-    tables = {dfname: df}
-    return tables
+        print("### avro records", records, type(records))
+    return avro_rdd
 
 def aaa_tables(sqlContext,
         hdir='hdfs:///project/monitoring/archive/xrootd/raw/gled',

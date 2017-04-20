@@ -289,3 +289,73 @@ def schema_dbs_phedex():
             StructField("max_replica_time", DoubleType(), True)
         ])
 
+def schema_cmssw():
+    """Schema for CMSSW record
+    {"UNIQUE_ID":{"string":"08F8DD3A-0FFE-E611-B710-BC305B3909F1-1"},"FILE_LFN":{"string":"/store/data/Run2016F/JetHT/AOD/23Sep2016-v1/70000/D2B97318-A186-E611-A1EA-F8BC123BBE3C.root"},"FILE_SIZE":{"string":"3865077537"},"CLIENT_DOMAIN":{"string":"in2p3.fr"},"CLIENT_HOST":{"string":"sbgwn141"},"SERVER_DOMAIN":{"string":"in2p3.fr"},"SERVER_HOST":{"string":"sbgse20"},"SITE_NAME":{"string":"T2_FR_IPHC"},"READ_BYTES_AT_CLOSE":{"string":"438385807"},"READ_BYTES":{"string":"438385807"},"READ_SINGLE_BYTES":{"string":"8913451"},"READ_SINGLE_OPERATIONS":{"string":"19"},"READ_SINGLE_AVERAGE":{"string":"469129"},"READ_SINGLE_SIGMA":{"string":"1956390"},"READ_VECTOR_BYTES":{"string":"429472356"},"READ_VECTOR_OPERATIONS":{"string":"58"},"READ_VECTOR_AVERAGE":{"string":"7404700"},"READ_VECTOR_SIGMA":{"string":"6672770"},"READ_VECTOR_COUNT_AVERAGE":{"string":"37.4138"},"READ_VECTOR_COUNT_SIGMA":{"string":"35.242"},"FALLBACK":{"string":"-"},"USER_DN":{"string":"/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=vmariani/CN=751637/CN=Valentina Mariani/CN=1516526926/CN=481221408/CN=1301887600/CN=1846615186/CN=2041527197"},"APP_INFO":{"string":"3809_https://glidein.cern.ch/3809/170228:163214:vmariani:crab:JetHT:Run2016F:DSm:4b_0"},"START_TIME":{"string":"1488325657"},"END_TIME":{"string":"1488326400"},"START_DATE":{"long":1488322057000},"END_DATE":{"long":1488322800000},"INSERT_DATE":{"long":1488323999000}}
+    """
+    return StructType([
+        StructField("UNIQUE_ID", StringType(), True),
+        StructField("FILE_LFN", StringType(), True),
+        StructField("FILE_SIZE", StringType(), True),
+        StructField("CLIENT_DOMAIN", StringType(), True),
+        StructField("CLIENT_HOST", StringType(), True),
+        StructField("SERVER_DOMAIN", StringType(), True),
+        StructField("SERVER_HOST", StringType(), True),
+        StructField("SITE_NAME", StringType(), True),
+        StructField("READ_BYTES_AT_CLOSE", StringType(), True),
+        StructField("READ_BYTES", StringType(), True),
+        StructField("READ_SINGLE_BYTES", StringType(), True),
+        StructField("READ_SINGLE_OPERATIONS", StringType(), True),
+        StructField("READ_SINGLE_AVERAGE", StringType(), True),
+        StructField("READ_SINGLE_SIGMA", StringType(), True),
+        StructField("READ_VECTOR_BYTES", StringType(), True),
+        StructField("READ_VECTOR_OPERATIONS", StringType(), True),
+        StructField("READ_VECTOR_AVERAGE", StringType(), True),
+        StructField("READ_VECTOR_SIGMA", StringType(), True),
+        StructField("READ_VECTOR_COUNT_AVERAGE", StringType(), True),
+        StructField("READ_VECTOR_COUNT_SIGMA", StringType(), True),
+        StructField("USER_DN", StringType(), True),
+        StructField("APP_INFO", StringType(), True),
+        StructField("START_TIME", LongType(), True),
+        StructField("END_TIME", StringType(), True),
+        StructField("START_DATE", LongType(), True),
+        StructField("END_DATE", LongType(), True),
+        StructField("INSERT_DATE", LongType(), True)
+    ])
+
+def schema_jm():
+    """Schema for JobMonitoring record
+    {"JobId":{"string":"1672451388"},"FileName":{"string":"//store/mc/PhaseIIFall16GS82/QCD_Flat_Pt-15to7000_TuneCUETP8M1_14TeV_pythia8/GEN-SIM/90X_upgrade2023_realistic_v1-v1/110000/92A9E11F-C0F1-E611-9A55-001E67E6F8AF.root"},"IsParentFile":{"string":"0"},"ProtocolUsed":{"string":"Remote"},"SuccessFlag":{"string":"1"},"FileType":{"string":"EDM"},"LumiRanges":{"string":"unknown"},"StrippedFiles":{"string":"0"},"BlockId":{"string":"602064"},"StrippedBlocks":{"string":"0"},"BlockName":{"string":"Dummy"},"InputCollection":{"string":"DoesNotApply"},"Application":{"string":"CMSSW"},"Type":{"string":"reprocessing"},"SubmissionTool":{"string":"wmagent"},"InputSE":null,"TargetCE":null,"SiteName":{"string":"T0_CH_CERN"},"SchedulerName":{"string":"PYCONDOR"},"JobMonitorId":{"string":"unknown"},"TaskJobId":{"string":"1566463230"},"SchedulerJobIdV2":{"string":"664eef36-f1c3-11e6-88b9-02163e0184a6-367_0"},"TaskId":{"string":"35076445"},"TaskMonitorId":{"string":"wmagent_pdmvserv_task_SMP-PhaseIIFall16GS82-00005__v1_T_170213_041344_640"},"JobExecExitCode":{"string":"0"},"JobExecExitTimeStamp":{"long":1488375506000},"StartedRunningTimeStamp":{"long":1488374686000},"FinishedTimeStamp":{"long":1488375506000},"WrapWC":{"string":"820"},"WrapCPU":{"string":"1694.3"},"ExeCPU":{"string":"0"},"UserId":{"string":"124370"},"GridName":{"string":"Alan Malta Rodrigues"}}
+    """
+    return StructType([
+        StructField("JobId", StringType(), True),
+        StructField("FileName", StringType(), True),
+        StructField("ProtocolUsed", StringType(), True),
+        StructField("SuccessFlag", StringType(), True),
+        StructField("FileType", StringType(), True),
+        StructField("LumiRanges", StringType(), True),
+        StructField("StrippedFiles", StringType(), True),
+        StructField("BlockId", StringType(), True),
+        StructField("StrippedBlocks", StringType(), True),
+        StructField("BlockName", StringType(), True),
+        StructField("InputCollection", StringType(), True),
+        StructField("Application", StringType(), True),
+        StructField("Type", StringType(), True),
+        StructField("SubmissionTool", StringType(), True),
+        StructField("InputSE", StringType(), True),
+        StructField("TargetCE", StringType(), True),
+        StructField("SiteName", StringType(), True),
+        StructField("SchedulerJobIdV2", StringType(), True),
+        StructField("TaskId", StringType(), True),
+        StructField("TaskMonitorId", StringType(), True),
+        StructField("JobExecExitCode", StringType(), True),
+        StructField("JobExecExitTimeStamp", LongType(), True),
+        StructField("StartedRunningTimeStamp", LongType(), True),
+        StructField("FinishedTimeStamp", LongType(), True),
+        StructField("WrapWC", StringType(), True),
+        StructField("WrapCPU", StringType(), True),
+        StructField("ExeCPU", StringType(), True),
+        StructField("UserId", StringType(), True),
+        StructField("GridName", StringType(), True)
+        ])
+
