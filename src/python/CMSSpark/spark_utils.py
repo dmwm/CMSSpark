@@ -278,7 +278,7 @@ def cmssw_tables(ctx, sqlContext,
 
 def jm_tables(ctx, sqlContext,
         schema_file='hdfs:///cms/schemas/jm-data-popularity.avsc',
-        hdir='hdfs:///project/awg/cms/job-monitoring/avro-snappy', date=None, verbose=None):
+        hdir='hdfs:///project/awg/cms/jm-data-popularity/avro-snappy', date=None, verbose=None):
     """
     Parse JobMonitoring popularity HDFS records.
 
@@ -334,7 +334,7 @@ def avro_tables(ctx, sqlContext, schema_file, hdir, dfname, date=None, verbose=N
     avro_rdd = rdd.map(lambda x: x[0])
     records = avro_rdd.take(1) # take function will return list of records
     if  verbose:
-        print("### cmssw avro records", records, type(records))
+        print("### %s avro records" % dfname, records, type(records))
 
     # create new spark DataFrame
     df = sqlContext.createDataFrame(avro_rdd)
