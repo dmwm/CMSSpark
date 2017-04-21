@@ -29,7 +29,7 @@ from pyspark.sql import SQLContext
 from pyspark.sql import HiveContext
 from pyspark.sql import DataFrame
 from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField, StringType, BooleanType, LongType
-from pyspark.sql.functions import split
+from pyspark.sql.functions import split, col
 
 class SparkLogger(object):
     "Control Spark Logger"
