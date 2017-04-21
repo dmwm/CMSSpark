@@ -135,7 +135,7 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None):
 
     # join dbs and phedex tables
 #    cols = ['d_dataset_id','d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','processing_version','r_release_version','dataset_name','node_name','pbr_size','dataset_is_open','max_replica_time']
-    cols = ['dataset_name','evts','size','date','dataset_access_type','acquisition_era_name','r_release_version','node_name','pbr_size','dataset_is_open','max_replica_time']
+    cols = ['d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','r_release_version','node_name','pbr_size','dataset_is_open','max_replica_time']
     stmt = 'SELECT %s FROM agg_dbs_df JOIN newpdf ON agg_dbs_df.d_dataset = newpdf.dataset_name' % ','.join(cols)
     finaldf = sqlContext.sql(stmt)
 
@@ -146,7 +146,8 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None):
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
     if  fout:
-        finaldf.write.format("com.databricks.spark.csv")\
+        ndf = split_dataset(finaldf, 'd_dataset')
+        ndf.write.format("com.databricks.spark.csv")\
                 .option("header", "true").save(fout)
 
     ctx.stop()

@@ -426,3 +426,11 @@ def eos_tables(sqlContext,
     eos_df.registerTempTable('eos_df')
     tables = {'eos_df':eos_df}
     return tables
+
+def split_dataset(df, dcol):
+    "Split dataset name in DataFrame into primds,procds,tier components"
+    ndf = df.withColumn("primds", split(col(dcol), "/").alias('primds').getItem(1))\
+            .withColumn("procds", split(col(dcol), "/").alias('procds').getItem(2))\
+            .withColumn("tier", split(col(dcol), "/").alias('tier').getItem(3))\
+            .drop(dcol)
+    return ndf
