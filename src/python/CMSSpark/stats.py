@@ -27,7 +27,7 @@ class OptionParser():
         self.parser.add_argument("--fout", action="store",
             dest="fout", default="", help="Output file")
         self.parser.add_argument("--agg", action="store",
-            dest="agg", default="release", help="Aggregate by (release, era, tier)")
+            dest="agg", default="release", help="Aggregate by (release, era, tier, primds, procds)")
         self.parser.add_argument("--verbose", action="store_true",
             dest="verbose", default=False, help="verbose output")
 
@@ -38,12 +38,6 @@ def summary(fname, agg):
     with PdfPages('%s.pdf' % agg) as pdf:
         for site in sorted(sites):
             ndf = df[df.node_name==site]
-
-            if  agg == 'tier':
-                # split dataset name such that we'll append tier
-                tiers = [r.split('/')[-1] for r in ndf.dataset_name]
-                ndf = ndf.assign(tier=pd.Series(tiers).values)
-
             gb = ndf.groupby(agg)
             data = gb['evts', 'size', 'pbr_size'].agg(np.sum)
             tot_evts = np.sum(data['evts'])

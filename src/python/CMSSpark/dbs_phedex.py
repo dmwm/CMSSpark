@@ -20,7 +20,7 @@ from pyspark.sql import HiveContext
 
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
-from CMSSpark.spark_utils import spark_context
+from CMSSpark.spark_utils import spark_context, split_dataset
 from CMSSpark.utils import elapsed_time
 
 class OptionParser():
