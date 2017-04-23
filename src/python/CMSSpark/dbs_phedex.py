@@ -48,9 +48,9 @@ class OptionParser():
             dest="patterns", default="", help='Select datasets patterns')
         self.parser.add_argument("--antipatterns", action="store",
             dest="antipatterns", default="", help='Select datasets antipatterns')
-        msg = 'Perform action over DBS info on HDFS: tier_stats, dataset_stats'
-        self.parser.add_argument("--action", action="store",
-            dest="action", default="tier_stats", help=msg)
+        msg = 'DBS instance on HDFS: global (default), phys01, phys02, phys03'
+        self.parser.add_argument("--inst", action="store",
+            dest="inst", default="global", help=msg)
         self.parser.add_argument("--no-log4j", action="store_true",
             dest="no-log4j", default=False, help="Disable spark log4j messages")
         self.parser.add_argument("--yarn", action="store_true",
@@ -58,7 +58,7 @@ class OptionParser():
         self.parser.add_argument("--verbose", action="store_true",
             dest="verbose", default=False, help="verbose output")
 
-def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None):
+def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None, inst='GLOBAL'):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
@@ -69,7 +69,7 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None):
 
     # read DBS and Phedex tables
     tables = {}
-    tables.update(dbs_tables(sqlContext, verbose=verbose))
+    tables.update(dbs_tables(sqlContext, inst=inst, verbose=verbose))
     tables.update(phedex_tables(sqlContext, verbose=verbose))
     phedex_df = tables['phedex_df']
     daf = tables['daf']
@@ -161,9 +161,14 @@ def main():
     fout = opts.fout
     verbose = opts.verbose
     yarn = opts.yarn
+    inst = opts.inst
+    if  inst in ['global', 'phys01', 'phys02', 'phys03']:
+        inst = inst.upper()
+    else:
+        raise Exception('Unsupported DBS instance "%s"' % inst)
     patterns = opts.patterns.split(',') if opts.patterns else []
     antipatterns = opts.antipatterns.split(',') if opts.antipatterns else []
-    run(fout, yarn, verbose, patterns, antipatterns)
+    run(fout, yarn, verbose, patterns, antipatterns, inst)
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s sec' % elapsed_time(time0))

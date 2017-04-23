@@ -40,6 +40,9 @@ class OptionParser():
             dest="fout", default=fout, help='Output file name, default %s' % fout)
         self.parser.add_argument("--date", action="store",
             dest="date", default="", help='Select CMSSW data for specific date (YYYYMMDD)')
+        msg = 'DBS instance on HDFS: global (default), phys01, phys02, phys03'
+        self.parser.add_argument("--inst", action="store",
+            dest="inst", default="global", help=msg)
         self.parser.add_argument("--no-log4j", action="store_true",
             dest="no-log4j", default=False, help="Disable spark log4j messages")
         self.parser.add_argument("--yarn", action="store_true",
@@ -63,7 +66,7 @@ def eos_date_unix(date):
     "Convert EOS date into UNIX timestamp"
     return time.mktime(time.strptime(date, '%Y/%m/%d'))
 
-def run(date, fout, yarn=None, verbose=None):
+def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
@@ -74,7 +77,7 @@ def run(date, fout, yarn=None, verbose=None):
 
     # read DBS and Phedex tables
     tables = {}
-    tables.update(dbs_tables(sqlContext, verbose=verbose))
+    tables.update(dbs_tables(sqlContext, inst=inst, verbose=verbose))
     ddf = tables['ddf'] # dataset table
     fdf = tables['fdf'] # file table
 
@@ -123,7 +126,12 @@ def main():
     opts = optmgr.parser.parse_args()
     print("Input arguments: %s" % opts)
     time0 = time.time()
-    run(opts.date, opts.fout, opts.yarn, opts.verbose)
+    inst = opts.inst
+    if  inst in ['global', 'phys01', 'phys02', 'phys03']:
+        inst = inst.upper()
+    else:
+        raise Exception('Unsupported DBS instance "%s"' % inst)
+    run(opts.date, opts.fout, opts.yarn, opts.verbose, inst)
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s sec' % elapsed_time(time0))

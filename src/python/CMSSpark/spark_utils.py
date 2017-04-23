@@ -181,12 +181,12 @@ def phedex_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     tables = {'phedex_df':phedex_df}
     return tables
 
-def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
+def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', inst='GLOBAL', verbose=False):
     """
     Parse DBS records on HDFS via mapping DBS tables to Spark SQLContext.
     :returns: a dictionary with DBS Spark DataFrame.
     """
-    dbsdir = hdir+'/CMS_DBS3_PROD_GLOBAL/current'
+    dbsdir = hdir+'/CMS_DBS3_PROD_%s/current' % inst
     paths = {'dpath':apath(dbsdir, 'DATASETS'),
              'bpath':apath(dbsdir, 'BLOCKS'),
              'fpath':apath(dbsdir, 'FILES'),
