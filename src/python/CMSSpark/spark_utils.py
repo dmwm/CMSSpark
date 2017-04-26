@@ -330,13 +330,20 @@ def avro_rdd(ctx, sqlContext, hdir, date=None, verbose=None):
     :returns: a Spark RDD object
     """
 
-    if  not date:
+    if  date == None:
         date = time.strftime("year=%Y/month=%-m/date=%d", time.gmtime(time.time()-60*60*24))
+        path = '%s/%s' % (hdir, date)
+    else:
+        path = hdir
+        if  date:
+            path = '%s/%s' % (hdir, date)
 
-    path = '%s/%s' % (hdir, date)
     print("### hdir", path)
-    # get avro files from HDFS
-    afiles = avro_files(path, verbose=verbose)
+    if  isinstance(path, list):
+        afiles = path
+    else:
+        # get avro files from HDFS
+        afiles = avro_files(path, verbose=verbose)
     print("### avro_files", afiles)
 
     # define newAPIHadoopFile parameters, java classes
