@@ -48,3 +48,4 @@ analytix cluster:
 - PhedexCatalog: /project/awg/cms/phedex/catalog (daily snapshots in CSV data-format)
 - AAA: /project/monitoring/archive/xrootd (daily snapshots in JSON data-format)
 - EOS: /project/monitoring/archive/eos (daily snapshots in JSON data-format)
+- WMArchive: /cms/wmarchive/avro (daily snapshots in Avro data-format)
