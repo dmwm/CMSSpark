@@ -23,6 +23,11 @@ run_spark dbs_aaa.py --verbose --yarn --fout=hdfs:///cms/users/vk/aaa --date=201
 
 # DBS+EOS
 run_spark dbs_eos.py --verbose --yarn --fout=hdfs:///cms/users/vk/eos --date=20170411
+
+# WMArchive examples:
+run_spark wmarchive.py --fout=hdfs:///cms/users/vk/wma --date=20170411
+run_spark wmarchive.py --fout=hdfs:///cms/users/vk/wma --date=20170411,20170420 --yarn
+run_spark wmarchive.py --fout=hdfs:///cms/users/vk/wma --date=20170411-20170420 --yarn
 ```
 
 *Please note*: in order to run cern_monit.py script user must supply two
