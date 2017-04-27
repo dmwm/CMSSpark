@@ -434,6 +434,37 @@ def eos_tables(sqlContext,
     tables = {'eos_df':eos_df}
     return tables
 
+def fts_tables(sqlContext,
+        hdir='hdfs:///project/monitoring/archive/fts/raw/complete',
+        date=None, verbose=False):
+    """
+    Parse fts HDFS records
+
+    Example of fts JSON record on HDFS
+    {"data":{"activity":"Data Consolidation","block_size":0,"buf_size":0,"channel_type":"urlcopy","chk_timeout":0,"dest_srm_v":"2.2.0","dst_hostname":"grid002.ft.uam.es","dst_se":"srm://grid002.ft.uam.es","dst_site_name":"","dst_url":"srm://grid002.ft.uam.es:8443/srm/managerv2?SFN=/pnfs/ft.uam.es/data/atlas/atlasdatadisk/rucio/mc15_13TeV/60/36/EVNT.11173001._023578.pool.root.1","endpnt":"fts3.cern.ch","f_size":10556847,"file_id":"1461431003","file_metadata":{"activity":"Data Consolidation","adler32":"d02c0375","dest_rse_id":"a07afdb2953442f78bd87136e32c2674","dst_rse":"UAM-LCG2_DATADISK","dst_type":"DISK","filesize":1.0556847E7,"name":"EVNT.11173001._023578.pool.root.1","request_id":"faebf1c016ad4c8a89d4be53b67347ce","request_type":"transfer","scope":"mc15_13TeV","src_rse":"INFN-T1_DATADISK","src_rse_id":"8ebac4c63f98418a8e4b7e9da4ced658","src_type":"DISK","verify_checksum":true},"file_size":10556847,"ipv6":false,"job_id":"f9b18c10-0132-51df-b341-3031a0a9ea39","job_metadata":{"issuer":"rucio","multi_sources":true},"job_state":"FINISHED","latency":9960,"log_link":"https://fts3.cern.ch:8449/fts3/ftsmon/#/f9b18c10-0132-51df-b341-3031a0a9ea39","nstreams":1,"operation_time":2308,"remote_access":true,"retry":0,"retry_max":0,"src_hostname":"storm-fe.cr.cnaf.infn.it","src_se":"srm://storm-fe.cr.cnaf.infn.it","src_site_name":"","src_srm_v":"2.2.0","src_url":"srm://storm-fe.cr.cnaf.infn.it:8444/srm/managerv2?SFN=/atlas/atlasdatadisk/rucio/mc15_13TeV/60/36/EVNT.11173001._023578.pool.root.1","srm_finalization_time":9371,"srm_overhead_percentage":95.6715802107948,"srm_overhead_time":51014,"srm_preparation_time":41643,"srm_space_token_dst":"ATLASDATADISK","srm_space_token_src":"","t__error_message":"","t_channel":"storm-fe.cr.cnaf.infn.it__grid002.ft.uam.es","t_error_code":"0","t_failure_phase":"","t_final_transfer_state":"Ok","t_final_transfer_state_flag":1,"t_timeout":621,"tcp_buf_size":0,"time_srm_fin_end":1493217343934,"time_srm_fin_st":1493217334563,"time_srm_prep_end":1493217332255,"time_srm_prep_st":1493217290612,"timestamp_checksum_dest_ended":1493217343970,"timestamp_checksum_dest_st":1493217343934,"timestamp_checksum_dst_diff":36,"timestamp_checksum_src_diff":124,"timestamp_chk_src_ended":1493217290736,"timestamp_chk_src_st":1493217290612,"timestamp_tr_comp":1493217334563,"timestamp_tr_st":1493217332255,"tr_bt_transfered":10556847,"tr_error_category":"","tr_error_scope":"","tr_id":"2017-04-26-1435__storm-fe.cr.cnaf.infn.it__grid002.ft.uam.es__1461431003__f9b18c10-0132-51df-b341-3031a0a9ea39","tr_timestamp_complete":1493217344240,"tr_timestamp_start":1493217290323,"user":"","user_dn":"","vo":"atlas"},"metadata":{"event_timestamp":1493217334563,"hostname":"monit-amqsource-9b83c9b3a5.cern.ch","kafka_timestamp":1493217345874,"original-destination":"/topic/transfer.fts_monitoring_complete","partition":"13","producer":"fts","timestamp":1493217344523,"topic":"fts_raw_complete","type":"complete","type_prefix":"raw","version":"006"}}
+
+    The fts record consist of data and metadata parts where data part squashed
+    into single string all requested parameters.
+
+    :returns: a dictionary with fts Spark DataFrame
+    """
+    if  not date:
+        # by default we read yesterdate data
+        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+
+    hpath = '%s/%s' % (hdir, date)
+    rdd = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
+    fts_rdd = rdd.map(lambda r: r['data'])
+    records = rdd.take(1) # take function will return list of records
+    if  verbose:
+        print("### fts_rdd records", records, type(records))
+
+    # create new spark DataFrame
+    fts_df = sqlContext.createDataFrame(fts_rdd)
+    fts_df.registerTempTable('fts_df')
+    tables = {'fts_df':fts_df}
+    return tables
+
 def split_dataset(df, dcol):
     "Split dataset name in DataFrame into primds,procds,tier components"
     ndf = df.withColumn("primds", split(col(dcol), "/").alias('primds').getItem(1))\
