@@ -453,14 +453,9 @@ def fts_tables(sqlContext,
         date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
 
     hpath = '%s/%s' % (hdir, date)
-    rdd = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
-    fts_rdd = rdd.map(lambda r: r['data'])
-    records = rdd.take(1) # take function will return list of records
-    if  verbose:
-        print("### fts_rdd records", records, type(records))
 
     # create new spark DataFrame
-    fts_df = sqlContext.createDataFrame(fts_rdd)
+    fts_df = sqlContext.read.json(hpath)
     fts_df.registerTempTable('fts_df')
     tables = {'fts_df':fts_df}
     return tables

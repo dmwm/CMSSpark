@@ -21,8 +21,8 @@ from pyspark.sql import HiveContext
 from pyspark.sql.functions import lit
 
 # CMSSpark modules
-from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
-from CMSSpark.spark_utils import spark_context, aaa_tables, split_dataset
+from CMSSpark.spark_utils import fts_tables, print_rows
+from CMSSpark.spark_utils import spark_context, split_dataset
 from CMSSpark.utils import elapsed_time
 
 class OptionParser():
@@ -74,31 +74,30 @@ def run(date, fout, yarn=None, verbose=None):
 
     # read FTS tables
     date = fts_date(date)
+    tables = {}
     tables.update(fts_tables(sqlContext, date=date, verbose=verbose))
     fts_df = tables['fts_df'] # fts table
 
     # example to extract transfer records for ASO
     cols = ['*']
-    stmt = 'SELECT %s FROM fts_df WHERE fts_df.job_metadata.issuer = "ASO"' % ','.join(cols)
+    stmt = 'SELECT %s FROM fts_df WHERE fts_df.data.job_metadata.issuer = "ASO"' % ','.join(cols)
     joins = sqlContext.sql(stmt)
     print_rows(joins, stmt, verbose)
 
     # perform aggregation
-#     fjoin = joins.groupBy(['d_dataset'])\
-#             .agg({'file_lfn':'count'})\
-#             .withColumnRenamed('count(file_lfn)', 'count')\
-#             .withColumnRenamed('d_dataset', 'dataset')\
-#             .withColumn('date', lit(aaa_date_unix(date)))\
-#             .withColumn('count_type', lit('aaa'))\
+    fjoin = joins.groupBy(['data.dst_se'])\
+            .agg({'data.f_size':'sum'})\
+            .withColumnRenamed('sum(data.f_size)', 'sum_file_size')\
+            .withColumnRenamed('data.dst_se', 'dst_se')
 
     # keep table around
-#     fjoin.persist(StorageLevel.MEMORY_AND_DISK)
+    fjoin.persist(StorageLevel.MEMORY_AND_DISK)
 
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
-#     if  fout:
-#         fjoin.write.format("com.databricks.spark.csv")\
-#                 .option("header", "true").save(fout)
+    if  fout:
+        fjoin.write.format("com.databricks.spark.csv")\
+                .option("header", "true").save(fout)
 
     ctx.stop()
 
@@ -108,12 +107,7 @@ def main():
     opts = optmgr.parser.parse_args()
     print("Input arguments: %s" % opts)
     time0 = time.time()
-    inst = opts.inst
-    if  inst in ['global', 'phys01', 'phys02', 'phys03']:
-        inst = inst.upper()
-    else:
-        raise Exception('Unsupported DBS instance "%s"' % inst)
-    run(opts.date, opts.fout, opts.yarn, opts.verbose, inst)
+    run(opts.date, opts.fout, opts.yarn, opts.verbose)
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s sec' % elapsed_time(time0))
