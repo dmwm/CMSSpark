@@ -18,11 +18,11 @@ from types import NoneType
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
-from pyspark.sql.functions import lit
+from pyspark.sql.functions import sum as agg_sum
 
 # CMSSpark modules
 from CMSSpark.spark_utils import fts_tables, print_rows
-from CMSSpark.spark_utils import spark_context, split_dataset
+from CMSSpark.spark_utils import spark_context, unpack_struct
 from CMSSpark.utils import elapsed_time
 
 class OptionParser():
@@ -79,16 +79,18 @@ def run(date, fout, yarn=None, verbose=None):
     fts_df = tables['fts_df'] # fts table
 
     # example to extract transfer records for ASO
-    cols = ['*']
-    stmt = 'SELECT %s FROM fts_df WHERE fts_df.data.job_metadata.issuer = "ASO"' % ','.join(cols)
-    joins = sqlContext.sql(stmt)
-    print_rows(joins, stmt, verbose)
+    # VK: the commented lines show how to extract some info from fts_df via SQL
+#    cols = ['data.job_metadata.issuer', 'data.f_size']
+#    stmt = 'SELECT %s FROM fts_df' % ','.join(cols)
+#    joins = sqlContext.sql(stmt)
+#    fjoin = joins.groupBy(['issuer'])\
+#            .agg({'f_size':'sum'})\
+#            .withColumnRenamed('sum(f_size)', 'sum_file_size')\
+#            .withColumnRenamed('issuer', 'issuer')
 
-    # perform aggregation
-    fjoin = joins.groupBy(['data.dst_se'])\
-            .agg({'data.f_size':'sum'})\
-            .withColumnRenamed('sum(data.f_size)', 'sum_file_size')\
-            .withColumnRenamed('data.dst_se', 'dst_se')
+    # we can use fts_df directly for groupby/aggregated tasks
+    fjoin = fts_df.groupBy(['job_metadata.issuer'])\
+            .agg(agg_sum(fts_df.f_size).alias("sum_f_size"))
 
     # keep table around
     fjoin.persist(StorageLevel.MEMORY_AND_DISK)

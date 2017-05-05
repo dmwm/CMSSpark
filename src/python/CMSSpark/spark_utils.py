@@ -457,6 +457,8 @@ def fts_tables(sqlContext,
     # create new spark DataFrame
     fts_df = sqlContext.read.json(hpath)
     fts_df.registerTempTable('fts_df')
+    fts_df = fts_df.select(unpack_struct("data", fts_df)) # extract data part of JSON records
+    fts_df.printSchema()
     tables = {'fts_df':fts_df}
     return tables
 
@@ -467,3 +469,10 @@ def split_dataset(df, dcol):
             .withColumn("tier", split(col(dcol), "/").alias('tier').getItem(3))\
             .drop(dcol)
     return ndf
+
+def unpack_struct(colname, df):
+    "Unpack structure and extract specific column from dataframe"
+    parent = filter(lambda field: field.name == colname, df.schema.fields).pop()
+    fields = parent.dataType.fields \
+            if isinstance(parent.dataType, StructType) else []
+    return map(lambda x : col(colname+"."+x.name), fields)
