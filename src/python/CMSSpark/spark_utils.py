@@ -20,7 +20,7 @@ from subprocess import Popen, PIPE
 from CMSSpark.schemas import schema_processing_eras, schema_dataset_access_types
 from CMSSpark.schemas import schema_acquisition_eras,  schema_datasets, schema_blocks
 from CMSSpark.schemas import schema_files, schema_mod_configs, schema_out_configs
-from CMSSpark.schemas import schema_rel_versions, schema_phedex
+from CMSSpark.schemas import schema_rel_versions, schema_file_lumis, schema_phedex
 from CMSSpark.schemas import schema_jm, schema_cmssw
 
 from pyspark import SparkContext, StorageLevel
@@ -195,6 +195,7 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', inst='GLOBAL', verbos
              'mcpath':apath(dbsdir, 'DATASET_OUTPUT_MOD_CONFIGS'),
              'ocpath':apath(dbsdir, 'OUTPUT_MODULE_CONFIGS'),
              'rvpath':apath(dbsdir, 'RELEASE_VERSIONS'),
+             'flpath':apath(dbsdir, 'FILE_LUMIS'),
              'dapath':apath(dbsdir, 'DATASET_ACCESS_TYPES')}
     print("Use the following data on HDFS")
     for key, val in paths.items():
@@ -238,6 +239,10 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', inst='GLOBAL', verbos
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
                         .load(path, schema = schema_rel_versions()) \
                         for path in files(paths['rvpath'], verbose)])
+    flf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
+                        .load(path, schema = schema_file_lumis()) \
+                        for path in files(paths['flpath'], verbose)])
 
     # Register temporary tables to be able to use sqlContext.sql
     daf.registerTempTable('daf')
@@ -249,8 +254,9 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', inst='GLOBAL', verbos
     mcf.registerTempTable('mcf')
     ocf.registerTempTable('ocf')
     rvf.registerTempTable('rvf')
+    flf.registerTempTable('flf')
 
-    tables = {'daf':daf, 'ddf':ddf, 'bdf':bdf, 'fdf':fdf, 'aef':aef, 'pef':pef, 'mcf':mcf, 'ocf':ocf, 'rvf':rvf}
+    tables = {'daf':daf, 'ddf':ddf, 'bdf':bdf, 'fdf':fdf, 'aef':aef, 'pef':pef, 'mcf':mcf, 'ocf':ocf, 'rvf':rvf, 'flf': flf}
     return tables
 
 def cmssw_tables(ctx, sqlContext,

@@ -232,6 +232,16 @@ def schema_rel_versions():
             StructField("r_release_version", StringType(), True)
         ])
 
+def schema_file_lumis():
+    """DBS FILE_LUMIS table schema
+
+    :returns: StructType consisting StructField array
+    """
+    return StructType([
+            StructField("fl_run_num", IntegerType(), True),
+            StructField("fl_lumi_section_num", StringType(), True),
+            StructField("fl_file_id", IntegerType(), True)
+        ])
 def schema_phedex():
     """
     PhEDEx schema on HDFS
