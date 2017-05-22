@@ -34,7 +34,11 @@ run_spark wmarchive.py --fout=hdfs:///cms/users/vk/wma --date=20170411-20170420 
 additional parameters. The StompAMQ library file and AMQ credentials.
 The former is located in static are of this package. The later contains
 CERN MONIT end-point parameters and should be individually obtained from CERN
-MONIT team.
+MONIT team. For example
+
+```
+run_spark cern_monit.py --hdir=/cms/users/vk/datasets --amq=amq_broker.json --stomp=/path/stomp.py-4.1.15-py2.7.egg
+```
 
 ### CMS metadata
 CMS metadata are stored in the following location on HDFS and accessing from
