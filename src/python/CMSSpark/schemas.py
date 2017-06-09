@@ -368,3 +368,67 @@ def schema_jm():
         StructField("GridName", StringType(), True)
         ])
 
+def schema_asodb():
+		"""
+    ASO table schema
+    Map for values of tm_transfer_state and tm_publication_state in https://github.com/dmwm/CRABServer/blob/master/src/python/ServerUtilities.py#L61-L77
+    
+    tm_id VARCHAR(60) NOT NULL,
+    tm_username VARCHAR(30) NOT NULL,
+    tm_taskname VARCHAR(255) NOT NULL,
+    tm_destination VARCHAR(100) NOT NULL,
+    tm_destination_lfn VARCHAR(1000) NOT NULL,
+    tm_source VARCHAR(100) NOT NULL,
+    tm_source_lfn VARCHAR(1000) NOT NULL,
+    tm_filesize NUMBER(20) NOT NULL,
+    tm_publish NUMBER(1) NOT NULL,
+    tm_jobid NUMBER(10) NOT NULL,
+    tm_job_retry_count NUMBER(5),
+    tm_type VARCHAR(20) NOT NULL,
+    tm_aso_worker VARCHAR(100),
+    tm_transfer_retry_count NUMBER(5) DEFAULT 0,
+    tm_transfer_max_retry_count NUMBER(5) DEFAULT 2,
+    tm_publication_retry_count NUMBER(5) DEFAULT 0,
+    tm_publication_max_retry_count NUMBER(5) DEFAULT 2,
+    tm_rest_host VARCHAR(50) NOT NULL,
+    tm_rest_uri VARCHAR(255) NOT NULL,
+    tm_transfer_state NUMBER(1) NOT NULL,
+    tm_publication_state NUMBER(1) NOT NULL,
+    tm_transfer_failure_reason VARCHAR(1000),
+    tm_publication_failure_reason VARCHAR(1000),
+    tm_fts_id VARCHAR(255),
+    tm_fts_instance VARCHAR(255),
+    tm_last_update NUMBER(11) NOT NULL,
+    tm_start_time NUMBER(11) NOT NULL,
+    tm_end_time NUMBER(11)
+    """
+    return StructType([
+        StructField("tm_id", StringType(), True),
+        StructField("tm_username", StringType(), True),
+        StructField("tm_taskname", StringType(), True),
+        StructField("tm_destination", StringType(), True),
+        StructField("tm_destination_lfn", StringType(), True),
+        StructField("tm_source", StringType(), True),
+        StructField("tm_source_lfn", StringType(), True),
+        StructField("tm_filesize", IntegerType(), True),
+        StructField("tm_publish", IntegerType(), True),
+        StructField("tm_jobid", IntegerType(), True),
+        StructField("tm_job_retry_count", IntegerType(), True),
+        StructField("tm_type", StringType(), True),
+        StructField("tm_aso_worker", StringType(), True),
+        StructField("tm_transfer_retry_count", IntegerType(), True),
+        StructField("tm_transfer_max_retry_count", IntegerType(), True),
+        StructField("tm_publication_retry_count", IntegerType(), True),
+        StructField("tm_publication_max_retry_count", IntegerType(), True),
+        StructField("tm_rest_host", StringType(), True),
+        StructField("tm_rest_uri", StringType(), True),
+        StructField("tm_transfer_state", IntegerType(), True),
+        StructField("tm_publication_state", IntegerType(), True),
+        StructField("tm_transfer_failure_reason", StringType(), True),
+        StructField("tm_publication_failure_reason", StringType(), True),
+        StructField("tm_fts_id", StringType(), True),
+        StructField("tm_fts_instance", StringType(), True),
+        StructField("tm_last_update", IntegerType(), True),
+        StructField("tm_start_time", IntegerType(), True),
+        StructField("tm_end_time", IntegerType(), True),
+    ])
