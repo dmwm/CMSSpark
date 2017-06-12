@@ -371,7 +371,8 @@ def schema_jm():
 def schema_asodb():
 		"""
     ASO table schema
-    Map for values of tm_transfer_state and tm_publication_state in https://github.com/dmwm/CRABServer/blob/master/src/python/ServerUtilities.py#L61-L77
+    Map for values of tm_transfer_state and tm_publication_state in
+    https://github.com/dmwm/CRABServer/blob/master/src/python/ServerUtilities.py#L61-L77
     
     tm_id VARCHAR(60) NOT NULL,
     tm_username VARCHAR(30) NOT NULL,

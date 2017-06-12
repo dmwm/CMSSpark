@@ -21,7 +21,7 @@ from CMSSpark.schemas import schema_processing_eras, schema_dataset_access_types
 from CMSSpark.schemas import schema_acquisition_eras,  schema_datasets, schema_blocks
 from CMSSpark.schemas import schema_files, schema_mod_configs, schema_out_configs
 from CMSSpark.schemas import schema_rel_versions, schema_file_lumis, schema_phedex
-from CMSSpark.schemas import schema_jm, schema_cmssw
+from CMSSpark.schemas import schema_jm, schema_cmssw, schema_asodb
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import Row
@@ -482,3 +482,25 @@ def unpack_struct(colname, df):
     fields = parent.dataType.fields \
             if isinstance(parent.dataType, StructType) else []
     return map(lambda x : col(colname+"."+x.name), fields)
+
+def aso_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
+    """
+    Parse ASO records on HDFS via mapping ASO tables to Spark SQLContext.
+    :returns: a dictionary with ASO Spark DataFrame.
+    """
+    adir = hdir+'/CMS_ASO/filetransfersdb/merged'
+
+    # aso data
+    pfiles = file_list(adir)
+    msg = "ASO snapshot found %d directories" % len(pfiles)
+    print(msg)
+    aso_df = unionAll([sqlContext.read.format('com.databricks.spark.csv')
+                    .options(treatEmptyValuesAsNulls='true', nullValue='null')\
+                    .load(file_path, schema = schema_asodb()) \
+                    for file_path in pfiles])
+
+    # Register temporary tables to be able to use sqlContext.sql
+    aso_df.registerTempTable('aso_df')
+
+    tables = {'aso_df':aso_df}
+    return tables
