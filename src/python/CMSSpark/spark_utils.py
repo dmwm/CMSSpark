@@ -491,7 +491,7 @@ def aso_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     adir = hdir+'/CMS_ASO/filetransfersdb/merged'
 
     # aso data
-    pfiles = file_list(adir)
+    pfiles = os.popen("hadoop fs -ls %s | grep part | awk '{print $8}'" % adir).read().splitlines()
     msg = "ASO snapshot found %d directories" % len(pfiles)
     print(msg)
     aso_df = unionAll([sqlContext.read.format('com.databricks.spark.csv')

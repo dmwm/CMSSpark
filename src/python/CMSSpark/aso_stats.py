@@ -21,7 +21,7 @@ from pyspark.sql import HiveContext
 from pyspark.sql.functions import sum as agg_sum
 
 # CMSSpark modules
-from CMSSpark.spark_utils import fts_tables, print_rows
+from CMSSpark.spark_utils import aso_tables, print_rows
 from CMSSpark.spark_utils import spark_context, unpack_struct
 from CMSSpark.utils import elapsed_time
 
@@ -75,8 +75,9 @@ def run(date, fout, yarn=None, verbose=None):
     # read ASO tables
     date = aso_date(date)
     tables = {}
-    tables.update(asodb_tables(sqlContext, date=date, verbose=verbose))
+    tables.update(aso_tables(sqlContext, verbose=verbose))
     aso_df = tables['aso_df'] # fts table
+    print_rows(aso_df, 'aso_df', verbose)
 
     # we can use aso_df directly for groupby/aggregated tasks
     fjoin = aso_df.groupBy(['tm_destination','tm_source'])\

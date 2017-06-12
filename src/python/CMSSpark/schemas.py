@@ -369,7 +369,7 @@ def schema_jm():
         ])
 
 def schema_asodb():
-		"""
+    """
     ASO table schema
     Map for values of tm_transfer_state and tm_publication_state in
     https://github.com/dmwm/CRABServer/blob/master/src/python/ServerUtilities.py#L61-L77
@@ -411,8 +411,8 @@ def schema_asodb():
         StructField("tm_destination_lfn", StringType(), True),
         StructField("tm_source", StringType(), True),
         StructField("tm_source_lfn", StringType(), True),
-        StructField("tm_filesize", IntegerType(), True),
-        StructField("tm_publish", IntegerType(), True),
+        StructField("tm_filesize", DoubleType(), True),
+        StructField("tm_publish", DoubleType(), True),
         StructField("tm_jobid", IntegerType(), True),
         StructField("tm_job_retry_count", IntegerType(), True),
         StructField("tm_type", StringType(), True),
@@ -429,7 +429,7 @@ def schema_asodb():
         StructField("tm_publication_failure_reason", StringType(), True),
         StructField("tm_fts_id", StringType(), True),
         StructField("tm_fts_instance", StringType(), True),
-        StructField("tm_last_update", IntegerType(), True),
-        StructField("tm_start_time", IntegerType(), True),
-        StructField("tm_end_time", IntegerType(), True),
+        StructField("tm_last_update", DoubleType(), True),
+        StructField("tm_start_time", DoubleType(), True),
+        StructField("tm_end_time", DoubleType(), True),
     ])
