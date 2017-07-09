@@ -14,7 +14,7 @@ from pyspark.sql import HiveContext
 from pyspark.sql.functions import lit
 
 # CMSSpark modules
-from CMSSpark.spark_utils import dbs_tables, cmssw_tables
+from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables
 from CMSSpark.spark_utils import spark_context, print_rows, split_dataset
 from CMSSpark.utils import elapsed_time
 
@@ -36,33 +36,84 @@ class OptionParser():
         self.parser.add_argument("--fout", action="store",
             dest="fout", default="", help='Output file name')
 
+
+def aaa_date(date):
+
+    # Convert given date into AAA date format - 2017/07/05
+    # Date is with leading zeros (if needed)
+
+    if  not date:
+        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+        return date
+    if  len(date) != 8:
+        raise Exception("Given date %s is not in YYYYMMDD format")
+    year = date[:4]
+    month = date[4:6]
+    day = date[6:]
+    return '%s/%s/%s' % (year, month, day)
+
+
 def cmssw_date(date):
-    # Convert given date into CMSSW date format
+
+    # Convert given date into CMSSW date format - 2017/7/5
+    # Date is without leading zeros
+
     if  not date:
         date = time.strftime("year=%Y/month=%-m/date=%d", time.gmtime(time.time()-60*60*24))
         return date
     if  len(date) != 8:
         raise Exception("Given date %s is not in YYYYMMDD format")
-    year = int(date[:4])
+    year = date[:4]
     month = int(date[4:6])
     day = int(date[6:])
-
     return 'year=%s/month=%s/day=%s' % (year, month, day)
 
-def run_cmssw(date=None, fout=None, yarn=None, verbose=None, inst='GLOBAL'):
-    """
-    Main function to run pyspark job. It requires a schema file, an HDFS directory
-    with data and optional script with mapper/reducer functions.
-    """
-    # define spark context, it's main object which allow to communicate with spark
-    ctx = spark_context('cms', yarn, verbose)
-    sqlContext = HiveContext(ctx)
 
-    tables = {}
+def run_query(query=None, sql_context=None, fout=None, verbose=False):
 
-    # Update tables dictionary by loading and adding DBS and CMSSW tables
-    tables.update(dbs_tables(sqlContext, inst=inst, verbose=verbose))
-    tables.update(cmssw_tables(ctx, sqlContext, date=cmssw_date(date), verbose=verbose))
+    # This function runs query in given sql_context and outputs result to
+    # directory specified by fout
+
+    if verbose:
+        print 'SQL Query: ' + query
+
+    # Execute query
+    query_result = sql_context.sql(query)
+
+    if verbose:
+        print 'Query done. Will split "dataset" column'
+
+    # Split "dataset" column into "primds", "procds" and "tier"
+    query_result = split_dataset(query_result, 'd_dataset')
+
+    if verbose:
+        print 'Will output data'
+
+    query_result.persist(StorageLevel.MEMORY_AND_DISK)
+
+    # If verbose is enabled, print first three rows (for debug reasons)
+    print_rows(query_result, query, verbose, 3)
+
+    # Write out results back to HDFS, the fout parameter defines area on HDFS
+    # It is either absolute path or area under /user/USERNAME
+    if fout:
+        if verbose:
+            print 'Output destination: ' + fout
+
+        # This outputs one record per line
+        # There is no comma at the end of each line!
+        query_result.toJSON().saveAsTextFile(fout)
+    else:
+        print 'No output destination is specified!'
+
+
+def run_cmssw(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
+
+    # Convert date
+    date = cmssw_date(date)
+
+    # Create CMSSW tables in sql_context
+    cmssw_tables(ctx, sql_context, date=date, verbose=verbose)
 
     if verbose:
         print 'Will build query for CMSSW and DBS tables'
@@ -88,7 +139,7 @@ def run_cmssw(date=None, fout=None, yarn=None, verbose=None, inst='GLOBAL'):
                   'START_TIME AS start_time',
                   'END_TIME as end_time',
                   'READ_BYTES as read_bytes',
-                  '"cmssw" as source']
+                  '"cmssw" AS source']
 
     # DBS columns
     ddf_cols = ['d_dataset']
@@ -101,43 +152,61 @@ def run_cmssw(date=None, fout=None, yarn=None, verbose=None, inst='GLOBAL'):
              "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "
              "JOIN cmssw_df ON fdf.f_logical_file_name = cmssw_df.FILE_LFN") % ','.join(cols)
 
+    fout = fout + "/CMSSW"
+    run_query(query, sql_context, fout, verbose)
+
+
+def run_aaa(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
+
+    # Convert date
+    date = aaa_date(date)
+
+    # Create AAA tables in sql_context
+    aaa_tables(sql_context, date=date, verbose=verbose)
+
     if verbose:
-        print 'SQL Query: ' + query
+        print 'Will build query for AAA and DBS tables'
 
-    # Execute query
-    cmssw_result = sqlContext.sql(query)
+    # - file name         +
+    # - file size         +
+    # - primds            +
+    # - procds            +
+    # - tier              +
+    # - site name
+    # - file replicas
+    # - user dn           +
+    # - start/end time    +
+    # - read bytes        +
+    # - cpu/wc values
+    # - source: xrootd    +
 
-    if verbose:
-        print 'Query done. Will split "dataset" column'
+    # AAA columns
+    aaa_cols = ['file_lfn AS file_name',
+                'file_size',
+                'user_dn',
+                'start_time',
+                'end_time',
+                'read_bytes',
+                '"xrootd" AS source']
 
-    # Split "dataset" column into "primds", "procds" and "tier"
-    cmssw_result = split_dataset(cmssw_result, 'd_dataset')
+    # DBS columns
+    ddf_cols = ['d_dataset']
 
-    if verbose:
-        print 'Will output data'
+    # Concatenate arrays with column names (i.e. use all column names from arrays)
+    cols = aaa_cols + ddf_cols
 
-    # If verbose is enabled, print first three rows (for debug reasons)
-    print_rows(cmssw_result, query, verbose, 3)
+    # Build a query with "cols" columns. Join DDF, FDF and AAA tables
+    query = ("SELECT %s FROM ddf "
+             "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "
+             "JOIN aaa_df ON fdf.f_logical_file_name = aaa_df.file_lfn") % ','.join(cols)
 
-    # Write out results back to HDFS, the fout parameter defines area on HDFS
-    # It is either absolute path or area under /user/USERNAME
-    if  fout:
-        fout = fout + "/CMSSW"
+    fout = fout + "/AAA"
+    run_query(query, sql_context, fout, verbose)
 
-        if verbose:
-            print 'Output destination: ' + fout
-
-        # This outputs one record per line
-        # There is no comma at the end of each line!
-        cmssw_result.toJSON().saveAsTextFile(fout)
-    else:
-        print 'No output destination is specified!'
-
-    ctx.stop()
 
 def main():
     "Main function"
-    optmgr  = OptionParser()
+    optmgr = OptionParser()
     opts = optmgr.parser.parse_args()
 
     print("Input arguments: %s" % opts)
@@ -154,7 +223,20 @@ def main():
     else:
         raise Exception('Unsupported DBS instance "%s"' % inst)
 
-    run_cmssw(date, fout, yarn, verbose, inst)
+    # Create spark context
+    ctx = spark_context('cms', yarn, verbose)
+
+    # Create SQL context to be used for SQL queries
+    sql_context = HiveContext(ctx)
+
+    # Initialize DBS tables (will be used with AAA, CMSSW)
+    dbs_tables(sql_context, inst=inst, verbose=verbose)
+
+    run_aaa(date, fout, verbose, ctx, sql_context)
+
+    run_cmssw(date, fout, verbose, ctx, sql_context)
+
+    ctx.stop()
 
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
