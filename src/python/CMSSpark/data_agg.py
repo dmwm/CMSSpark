@@ -14,7 +14,7 @@ from pyspark.sql import HiveContext
 from pyspark.sql.functions import lit
 
 # CMSSpark modules
-from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables
+from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables
 from CMSSpark.spark_utils import spark_context, print_rows, split_dataset
 from CMSSpark.utils import elapsed_time
 
@@ -55,7 +55,7 @@ def aaa_date(date):
 
 def cmssw_date(date):
 
-    # Convert given date into CMSSW date format - 2017/7/5
+    # Convert given date into CMSSW date format - year=2017/month=7/day=5
     # Date is without leading zeros
 
     if  not date:
@@ -69,6 +69,37 @@ def cmssw_date(date):
     return 'year=%s/month=%s/day=%s' % (year, month, day)
 
 
+def eos_date(date):
+
+    # Convert given date into EOS date format - 2017/07/05
+    # Date is with leading zeros (if needed)
+
+    if  not date:
+        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+        return date
+    if  len(date) != 8:
+        raise Exception("Given date %s is not in YYYYMMDD format")
+    year = date[:4]
+    month = date[4:6]
+    day = date[6:]
+    return '%s/%s/%s' % (year, month, day)
+
+
+def output(fout=None, df=None, verbose=None):
+
+    # Write out results back to HDFS, the fout parameter defines area on HDFS
+    # It is either absolute path or area under /user/USERNAME
+
+    if fout:
+        if verbose:
+            print 'Output destination: ' + fout
+
+        # This outputs one record per line
+        # There is no comma at the end of each line!
+        df.toJSON().saveAsTextFile(fout)
+    else:
+        print 'No output destination is specified!'
+
 def run_query(query=None, sql_context=None, fout=None, verbose=False):
 
     # This function runs query in given sql_context and outputs result to
@@ -81,12 +112,6 @@ def run_query(query=None, sql_context=None, fout=None, verbose=False):
     query_result = sql_context.sql(query)
 
     if verbose:
-        print 'Query done. Will split "dataset" column'
-
-    # Split "dataset" column into "primds", "procds" and "tier"
-    query_result = split_dataset(query_result, 'd_dataset')
-
-    if verbose:
         print 'Will output data'
 
     query_result.persist(StorageLevel.MEMORY_AND_DISK)
@@ -94,17 +119,7 @@ def run_query(query=None, sql_context=None, fout=None, verbose=False):
     # If verbose is enabled, print first three rows (for debug reasons)
     print_rows(query_result, query, verbose, 3)
 
-    # Write out results back to HDFS, the fout parameter defines area on HDFS
-    # It is either absolute path or area under /user/USERNAME
-    if fout:
-        if verbose:
-            print 'Output destination: ' + fout
-
-        # This outputs one record per line
-        # There is no comma at the end of each line!
-        query_result.toJSON().saveAsTextFile(fout)
-    else:
-        print 'No output destination is specified!'
+    return query_result
 
 
 def run_cmssw(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
@@ -153,7 +168,15 @@ def run_cmssw(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
              "JOIN cmssw_df ON fdf.f_logical_file_name = cmssw_df.FILE_LFN") % ','.join(cols)
 
     fout = fout + "/CMSSW"
-    run_query(query, sql_context, fout, verbose)
+    result = run_query(query, sql_context, fout, verbose)
+
+    if verbose:
+        print 'Query done. Will split "dataset" column'
+
+    # Split "dataset" column into "primds", "procds" and "tier"
+    result = split_dataset(result, 'd_dataset')
+
+    output(fout,result, verbose)
 
 
 def run_aaa(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
@@ -201,7 +224,62 @@ def run_aaa(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
              "JOIN aaa_df ON fdf.f_logical_file_name = aaa_df.file_lfn") % ','.join(cols)
 
     fout = fout + "/AAA"
-    run_query(query, sql_context, fout, verbose)
+    result = run_query(query, sql_context, fout, verbose)
+
+    # Split "dataset" column into "primds", "procds" and "tier"
+    result = split_dataset(result, 'd_dataset')
+
+    output(fout, result, verbose)
+
+
+def run_eos(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
+
+    # Convert date
+    date = eos_date(date)
+
+    # Create EOS tables in sql_context
+    eos_tables(sql_context, date=date, verbose=verbose)
+
+    if verbose:
+        print 'Will build query for EOS and DBS tables'
+
+    # - file name       +
+    # - file size       +
+    # - primds          +
+    # - procds          +
+    # - tier            +
+    # - site name
+    # - file replicas
+    # - user dn         +
+    # - start/end time
+    # - read bytes
+    # - cpu/wc values
+    # - source: eos     +
+
+    # EOS columns
+    eos_cols = ['file_lfn AS file_name',
+                'user_dn',
+                '"eos" AS source']
+
+    # DBS columns
+    ddf_cols = ['d_dataset']
+    fdf_cols = ['f_file_size AS file_size']
+
+    # Concatenate arrays with column names (i.e. use all column names from arrays)
+    cols = eos_cols + ddf_cols + fdf_cols
+
+    # Build a query with "cols" columns. Join DDF, FDF and EOS tables
+    query = ("SELECT %s FROM ddf "
+             "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "
+             "JOIN eos_df ON fdf.f_logical_file_name = eos_df.file_lfn") % ','.join(cols)
+
+    fout = fout + "/EOS"
+    result = run_query(query, sql_context, fout, verbose)
+
+    # Split "dataset" column into "primds", "procds" and "tier"
+    result = split_dataset(result, 'd_dataset')
+
+    output(fout, result, verbose)
 
 
 def main():
@@ -235,6 +313,8 @@ def main():
     run_aaa(date, fout, verbose, ctx, sql_context)
 
     run_cmssw(date, fout, verbose, ctx, sql_context)
+
+    run_eos(date, fout, verbose, ctx, sql_context)
 
     ctx.stop()
 
