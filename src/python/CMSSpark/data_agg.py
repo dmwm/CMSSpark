@@ -37,9 +37,10 @@ class OptionParser():
             dest="fout", default="", help='Output file name')
 
 
-def aaa_date(date):
+def short_date_string(date):
 
-    # Convert given date into AAA date format - 2017/07/05
+    # Convert given date into YYYY/MM/DD date format - 2017/07/05
+    # Used by EOS and AAA
     # Date is with leading zeros (if needed)
 
     if  not date:
@@ -53,41 +54,10 @@ def aaa_date(date):
     return '%s/%s/%s' % (year, month, day)
 
 
-def cmssw_date(date):
+def long_date_string(date):
 
-    # Convert given date into CMSSW date format - year=2017/month=7/day=5
-    # Date is without leading zeros
-
-    if  not date:
-        date = time.strftime("year=%Y/month=%-m/date=%d", time.gmtime(time.time()-60*60*24))
-        return date
-    if  len(date) != 8:
-        raise Exception("Given date %s is not in YYYYMMDD format")
-    year = date[:4]
-    month = int(date[4:6])
-    day = int(date[6:])
-    return 'year=%s/month=%s/day=%s' % (year, month, day)
-
-
-def eos_date(date):
-
-    # Convert given date into EOS date format - 2017/07/05
-    # Date is with leading zeros (if needed)
-
-    if  not date:
-        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
-        return date
-    if  len(date) != 8:
-        raise Exception("Given date %s is not in YYYYMMDD format")
-    year = date[:4]
-    month = date[4:6]
-    day = date[6:]
-    return '%s/%s/%s' % (year, month, day)
-
-
-def jm_date(date):
-
-    # Convert given date into JobMonitoring (CRAB) date format - year=2017/month=7/day=5
+    # Convert given date into year=YYYY/month=MM/day=DD date format - year=2017/month=7/day=5
+    # Used by CMSSW and JobMonitoring (CRAB)
     # Date is without leading zeros
 
     if  not date:
@@ -144,8 +114,11 @@ def run_query(query=None, sql_context=None, fout=None, verbose=False):
 
 def run_cmssw(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
 
+    # Create fout by adding stream name and date paths
+    fout = fout + "/CMSSW/" + short_date_string(date)
+
     # Convert date
-    date = cmssw_date(date)
+    date = long_date_string(date)
 
     # Create CMSSW tables in sql_context
     cmssw_tables(ctx, sql_context, date=date, verbose=verbose)
@@ -187,7 +160,6 @@ def run_cmssw(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
              "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "
              "JOIN cmssw_df ON fdf.f_logical_file_name = cmssw_df.FILE_LFN") % ','.join(cols)
 
-    fout = fout + "/CMSSW"
     result = run_query(query, sql_context, fout, verbose)
 
     if verbose:
@@ -201,8 +173,11 @@ def run_cmssw(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
 
 def run_aaa(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
 
+    # Create fout by adding stream name and date paths
+    fout = fout + "/AAA/" + short_date_string(date)
+
     # Convert date
-    date = aaa_date(date)
+    date = short_date_string(date)
 
     # Create AAA tables in sql_context
     aaa_tables(sql_context, date=date, verbose=verbose)
@@ -243,7 +218,6 @@ def run_aaa(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
              "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "
              "JOIN aaa_df ON fdf.f_logical_file_name = aaa_df.file_lfn") % ','.join(cols)
 
-    fout = fout + "/AAA"
     result = run_query(query, sql_context, fout, verbose)
 
     # Split "dataset" column into "primds", "procds" and "tier"
@@ -254,8 +228,11 @@ def run_aaa(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
 
 def run_eos(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
 
+    # Create fout by adding stream name and date paths
+    fout = fout + "/EOS/" + short_date_string(date)
+
     # Convert date
-    date = eos_date(date)
+    date = short_date_string(date)
 
     # Create EOS tables in sql_context
     eos_tables(sql_context, date=date, verbose=verbose)
@@ -296,7 +273,6 @@ def run_eos(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
              "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "
              "JOIN eos_df ON fdf.f_logical_file_name = eos_df.file_lfn") % ','.join(cols)
 
-    fout = fout + "/EOS"
     result = run_query(query, sql_context, fout, verbose)
 
     # Split "dataset" column into "primds", "procds" and "tier"
@@ -307,8 +283,11 @@ def run_eos(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
 
 def run_jm(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
 
+    # Create fout by adding stream name and date paths
+    fout = fout + "/CRAB/" + short_date_string(date)
+
     # Convert date
-    date = jm_date(date)
+    date = long_date_string(date)
 
     # Create JobMonitoring tables in sql_context
     jm_tables(ctx, sql_context, date=date, verbose=verbose)
@@ -351,7 +330,6 @@ def run_jm(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
              "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "
              "JOIN jm_df ON fdf.f_logical_file_name = jm_df.FileName") % ','.join(cols)
 
-    fout = fout + "/CRAB"
     result = run_query(query, sql_context, fout, verbose)
 
     # Split "dataset" column into "primds", "procds" and "tier"
