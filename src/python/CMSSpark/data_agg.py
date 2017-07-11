@@ -94,11 +94,15 @@ def output(fout=None, df=None, verbose=None):
         if verbose:
             print 'Output destination: ' + fout
 
-        # This outputs one record per line
+        # This outputs one record per line in JSON format
         # There is no comma at the end of each line!
-        df.toJSON().saveAsTextFile(fout)
+        # df.toJSON().saveAsTextFile(fout)
+
+        # This outputs records in CSV format
+        df.write.format("com.databricks.spark.csv").option("header", "true").save(fout)
     else:
         print 'No output destination is specified!'
+
 
 def run_query(query=None, sql_context=None, fout=None, verbose=False):
 
@@ -259,7 +263,9 @@ def run_eos(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
     # EOS columns
     eos_cols = ['file_lfn AS file_name',
                 'user_dn',
-                '"eos" AS source']
+                '"eos" AS source',
+                'timestamp AS start_time',
+                'timestamp AS end_time']
 
     # DBS columns
     ddf_cols = ['d_dataset']

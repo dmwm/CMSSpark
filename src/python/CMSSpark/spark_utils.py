@@ -420,16 +420,20 @@ def eos_tables(sqlContext,
     def parse_log(r):
         "Local helper function to parse EOS record and extract intersting fields"
         rdict = {}
-        for item in r.split('&'):
+        for item in r['data'].split('&'):
             if  item.startswith('path='):
                 rdict['file_lfn'] = item.split('path=')[-1]
             if  item.startswith('sec.info='):
                 rdict['user_dn'] = item.split('sec.info=')[-1]
             if  item.startswith('sec.host='):
                 rdict['host'] = item.split('sec.host=')[-1]
+
+        rdict['timestamp'] = r['metadata']['timestamp']
+
         return rdict
 
-    eos_rdd = rdd.map(lambda r: parse_log(r['data']))
+    eos_rdd = rdd.map(lambda r: parse_log(r))
+
     records = eos_rdd.take(1) # take function will return list of records
     if  verbose:
         print("### eos_rdd records", records, type(records))
