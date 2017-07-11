@@ -14,7 +14,7 @@ from pyspark.sql import HiveContext
 from pyspark.sql.functions import lit
 
 # CMSSpark modules
-from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables
+from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables, jm_tables
 from CMSSpark.spark_utils import spark_context, print_rows, split_dataset
 from CMSSpark.utils import elapsed_time
 
@@ -83,6 +83,22 @@ def eos_date(date):
     month = date[4:6]
     day = date[6:]
     return '%s/%s/%s' % (year, month, day)
+
+
+def jm_date(date):
+
+    # Convert given date into JobMonitoring (CRAB) date format - year=2017/month=7/day=5
+    # Date is without leading zeros
+
+    if  not date:
+        date = time.strftime("year=%Y/month=%-m/date=%d", time.gmtime(time.time()-60*60*24))
+        return date
+    if  len(date) != 8:
+        raise Exception("Given date %s is not in YYYYMMDD format")
+    year = date[:4]
+    month = int(date[4:6])
+    day = int(date[6:])
+    return 'year=%s/month=%s/day=%s' % (year, month, day)
 
 
 def output(fout=None, df=None, verbose=None):
@@ -255,12 +271,13 @@ def run_eos(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
     # - site name
     # - file replicas
     # - user dn         +
-    # - start/end time
+    # - start/end time  +
     # - read bytes
     # - cpu/wc values
     # - source: eos     +
 
     # EOS columns
+    # Same timestamp is used in both start and end times
     eos_cols = ['file_lfn AS file_name',
                 'user_dn',
                 '"eos" AS source',
@@ -280,6 +297,61 @@ def run_eos(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
              "JOIN eos_df ON fdf.f_logical_file_name = eos_df.file_lfn") % ','.join(cols)
 
     fout = fout + "/EOS"
+    result = run_query(query, sql_context, fout, verbose)
+
+    # Split "dataset" column into "primds", "procds" and "tier"
+    result = split_dataset(result, 'd_dataset')
+
+    output(fout, result, verbose)
+
+
+def run_jm(date=None, fout=None, verbose=None, ctx=None, sql_context=None):
+
+    # Convert date
+    date = jm_date(date)
+
+    # Create JobMonitoring tables in sql_context
+    jm_tables(ctx, sql_context, date=date, verbose=verbose)
+
+    if verbose:
+        print 'Will build query for JM and DBS tables'
+
+    # - file name       +
+    # - file size       +
+    # - primds          +
+    # - procds          +
+    # - tier            +
+    # - site name       +
+    # - file replicas
+    # - user dn
+    # - start/end time  +
+    # - read bytes
+    # - cpu/wc values   +
+    # - source: crab    +
+
+    # JobMonitoring (CRAB) columns
+    # For cpu value WrapCPU is used. Records also have ExeCPU.
+    jm_cols = ['FileName AS file_name',
+               'SiteName AS site_name',
+               'WrapWC AS wc',
+               'WrapCPU AS cpu',
+               'StartedRunningTimeStamp AS start_time',
+               'FinishedTimeStamp AS end_time',
+               '"crab" AS source']
+
+    # DBS columns
+    ddf_cols = ['d_dataset']
+    fdf_cols = ['f_file_size AS file_size']
+
+    # Concatenate arrays with column names (i.e. use all column names from arrays)
+    cols = jm_cols + ddf_cols + fdf_cols
+
+    # Build a query with "cols" columns. Join DDF, FDF and JobMonitoring tables
+    query = ("SELECT %s FROM ddf "
+             "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "
+             "JOIN jm_df ON fdf.f_logical_file_name = jm_df.FileName") % ','.join(cols)
+
+    fout = fout + "/CRAB"
     result = run_query(query, sql_context, fout, verbose)
 
     # Split "dataset" column into "primds", "procds" and "tier"
@@ -321,6 +393,8 @@ def main():
     run_cmssw(date, fout, verbose, ctx, sql_context)
 
     run_eos(date, fout, verbose, ctx, sql_context)
+
+    run_jm(date, fout,verbose, ctx, sql_context)
 
     ctx.stop()
 
