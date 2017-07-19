@@ -401,19 +401,37 @@ def main():
     # Initialize DBS tables (will be used with AAA, CMSSW)
     dbs_tables(sql_context, inst=inst, verbose=verbose)
 
+    aaa_start_time = time.time()
+
     run_aaa(date, fout, ctx, sql_context, verbose)
+
+    aaa_elapsed_time = elapsed_time(aaa_start_time)
+    cmssw_start_time = time.time()
 
     run_cmssw(date, fout, ctx, sql_context, verbose)
 
+    cmssw_elapsed_time = elapsed_time(cmssw_start_time)
+    eos_start_time = time.time()
+
     run_eos(date, fout, ctx, sql_context, verbose)
+
+    eos_elapsed_time = elapsed_time(eos_start_time)
+    jm_start_time = time.time()
 
     run_jm(date, fout, ctx, sql_context, verbose)
 
+    jm_elapsed_time = elapsed_time(jm_start_time)
+
     ctx.stop()
 
-    print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
-    print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
-    print('Elapsed time: %s sec' % elapsed_time(start_time))
+    print('Start time         : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
+    print('End time           : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
+    print('Total elapsed time : %s' % elapsed_time(start_time))
+
+    print('AAA elapsed time   : %s' % aaa_elapsed_time)
+    print('CMSSW elapsed time : %s' % cmssw_elapsed_time)
+    print('EOS elapsed time   : %s' % eos_elapsed_time)
+    print('JM elapsed time    : %s' % jm_elapsed_time)
 
 
 if __name__ == '__main__':

@@ -174,11 +174,13 @@ def main():
     # Initialize PhEDEx tables (join with AAA, EOS)
     phedex_tables(sql_context, verbose=verbose)
 
+    cmssw_start_time = time.time()
     aggregated_cmssw_df = run_agg_cmssw(date, fout, ctx, sql_context, verbose)
+    cmssw_elapsed_time = elapsed_time(cmssw_start_time)
 
-    fout = fout + "/Aggregated/" + short_date_string(date)
-
+    aaa_start_time = time.time()
     aggregated_aaa_df = run_agg_aaa(date, fout, ctx, sql_context, verbose)
+    aaa_elapsed_time = elapsed_time(aaa_start_time)
 
     all_df = aggregated_cmssw_df.unionAll(aggregated_aaa_df)
     all_df = all_df.sort(desc("nacc"))
@@ -199,15 +201,22 @@ def main():
     all_df.printSchema()
     all_df_size = all_df.count()
 
+    fout = fout + "/Aggregated/" + short_date_string(date)
+
     output_dataframe(fout, all_df, verbose)
 
     ctx.stop()
 
     print "Record count: CMSSW: " + str(cmssw_df_size) + " AAA: " + str(aaa_df_size) + " Total: " + str(all_df_size)
 
-    print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
-    print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
-    print('Elapsed time: %s ' % elapsed_time(start_time))
+    print('Start time         : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
+    print('End time           : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
+    print('Total elapsed time : %s' % elapsed_time(start_time))
+
+    print('AAA elapsed time   : %s' % aaa_elapsed_time)
+    print('CMSSW elapsed time : %s' % cmssw_elapsed_time)
+    # print('EOS elapsed time   : %s' % eos_elapsed_time)
+    # print('JM elapsed time    : %s' % jm_elapsed_time)
 
 
 if __name__ == '__main__':
