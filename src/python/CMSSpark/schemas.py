@@ -433,3 +433,22 @@ def schema_asodb():
         StructField("tm_start_time", DoubleType(), True),
         StructField("tm_end_time", DoubleType(), True),
     ])
+
+
+def aggregated_data_schema():
+    """
+    root
+ |-- site_name: string (nullable = true)
+ |-- nacc: integer (nullable = true)
+ |-- distinct_users: integer (nullable = true)
+ |-- stream: string (nullable = true)
+ |-- dataset_name: string (nullable = true)
+
+    """
+    return StructType([
+        StructField("site_name", StringType(), True),
+        StructField("nacc", IntegerType(), True),
+        StructField("distinct_users", IntegerType(), True),
+        StructField("stream", StringType(), True),
+        StructField("dataset_name", StringType(), True),
+    ])

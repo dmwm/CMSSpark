@@ -14,9 +14,11 @@ from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
 
 # CMSSpark modules
-from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables, jm_tables
+from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables, jm_tables, phedex_tables
 from CMSSpark.spark_utils import spark_context, print_rows, split_dataset
 from CMSSpark.utils import elapsed_time
+from CMSSpark.data_collection import  yesterday, short_date_string, long_date_string, output_dataframe, run_query
+from pyspark.sql.functions import desc
 
 class OptionParser():
     def __init__(self):
@@ -37,103 +39,78 @@ class OptionParser():
             dest="fout", default="", help='Output directory path')
 
 
-def yesterday():
-
-    # Current time - 24 hours
-    return time.gmtime(time.time() - 60 * 60 * 24)
-
-
-def short_date_string(date):
-
-    # Convert given date into YYYY/MM/DD date format - 2017/07/05
-    # Used by EOS and AAA
-    # Date is with leading zeros (if needed)
-
-    if  not date:
-        # If no date is present, use yesterday as default
-        date = time.strftime("%Y/%m/%d", yesterday())
-        return date
-
-    if  len(date) != 8:
-        raise Exception("Given date %s is not in YYYYMMDD format")
-
-    year = date[:4]
-    month = date[4:6]
-    day = date[6:]
-    return '%s/%s/%s' % (year, month, day)
-
-
-def long_date_string(date):
-
-    # Convert given date into year=YYYY/month=MM/day=DD date format - year=2017/month=7/day=5
-    # Used by CMSSW and JobMonitoring (CRAB)
-    # Date is without leading zeros
-
-    if  not date:
-        date = time.strftime("year=%Y/month=%-m/date=%d", yesterday())
-        return date
-
-    if  len(date) != 8:
-        raise Exception("Given date %s is not in YYYYMMDD format")
-
-    year = date[:4]
-    month = int(date[4:6])
-    day = int(date[6:])
-    return 'year=%s/month=%s/day=%s' % (year, month, day)
-
-
-def output_dataframe(fout, df, verbose=False):
-
-    # Write out results back to HDFS
-    # fout parameter defines area on HDFS
-    # It is either absolute path or area under /user/USERNAME
-
-    if df:
-        if fout:
-            if verbose:
-                print 'Output destination: ' + fout
-
-            # This outputs one record per line in JSON format
-            # There is no comma at the end of each line!
-            # df.toJSON().saveAsTextFile(fout)
-
-            # This outputs records in CSV format
-            df.write.format("com.databricks.spark.csv").option("header", "true").save(fout)
-        else:
-            print 'No output destination is specified!'
-    else:
-        print 'No dataframe!'
-
-
-def run_query(query, sql_context, verbose=False):
-
-    # This function runs query in given sql_context and outputs result to
-    # directory specified by fout
+def run_agg_aaa(date, fout, ctx, sql_context, verbose=False):
 
     if verbose:
-        print 'SQL Query: ' + query
+        print 'Starting AAA part'
 
-    # Execute query
-    query_result = sql_context.sql(query)
+    # Convert date
+    date = short_date_string(date)
 
-    query_result.persist(StorageLevel.MEMORY_AND_DISK)
+    # Create AAA tables in sql_context
+    aaa_tables(sql_context, date=date, verbose=verbose)
 
-    # If verbose is enabled, print first three rows (for debug reasons)
-    print_rows(query_result, query, verbose, 3)
+    # - dataset name             +
+    # - site name                +
+    # - number of access (nacc)  +
+    # - distinct users           +
+    # - stream: cmssw            +
 
-    return query_result
+    # AAA columns
+    aaa_cols = ['count(d_dataset) AS nacc',
+                'count(distinct(aaa_df.user_dn)) AS distinct_users',
+                '\"aaa\" as stream']
+
+    # DBS columns
+    ddf_cols = ['d_dataset AS dataset_name']
+
+    # AAA has dataset/block id. Join it with DBS to get dataset/block names.
+    # PhEDEx has dataset/block name (as well as ids). Join by names to be sure.
+    # Use PhEDEx node_name as site name
+
+    # PhEDEx columns
+    phedex_cols = ['node_name AS site_name']
+
+    # Concatenate arrays with column names (i.e. use all column names from arrays)
+    cols = aaa_cols + ddf_cols + phedex_cols
+
+    # Build a query with "cols" columns
+    query = ("SELECT %s FROM ddf "\
+             "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "\
+             "JOIN bdf ON fdf.f_block_id = bdf.b_block_id "\
+             "JOIN phedex_df ON (phedex_df.block_name = bdf.b_block_name AND phedex_df.dataset_name = ddf.d_dataset) "\
+             "JOIN aaa_df ON fdf.f_logical_file_name = aaa_df.file_lfn "\
+             "GROUP BY node_name, d_dataset") % ','.join(cols)
+
+    result = run_query(query, sql_context, verbose)
+
+    result = result.sort(desc("nacc"))
+
+    if verbose:
+        print 'Query done'
+
+    if verbose:
+        print 'Finished AAA part'
+
+    return result
 
 
 def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
 
-    # Create fout by adding stream name and date paths
-    fout = fout + "/AGGREGATED/" + short_date_string(date)
+    if verbose:
+        print 'Starting CMSSW part'
 
     # Convert date
     date = long_date_string(date)
 
     # Create CMSSW tables in sql_context
     cmssw_tables(ctx, sql_context, date=date, verbose=verbose)
+
+    # - dataset name             +
+    # - site name                +
+    # - number of access (nacc)  +
+    # - distinct users           +
+    # - stream: cmssw            +
 
     # CMSSW columns
     cmssw_cols = ['SITE_NAME AS site_name',
@@ -155,12 +132,15 @@ def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
 
     result = run_query(query, sql_context, verbose)
 
-    result.show()
+    result = result.sort(desc("nacc"))
 
-    # output_dataframe(fout, result, verbose)
+    if verbose:
+        print 'Query done'
 
     if verbose:
         print 'Finished CMSSW part'
+
+    return result
 
 
 def main():
@@ -191,13 +171,43 @@ def main():
     # Initialize DBS tables
     dbs_tables(sql_context, inst=inst, verbose=verbose)
 
-    run_agg_cmssw(date, fout, ctx, sql_context, verbose)
+    # Initialize PhEDEx tables (join with AAA, EOS)
+    phedex_tables(sql_context, verbose=verbose)
+
+    aggregated_cmssw_df = run_agg_cmssw(date, fout, ctx, sql_context, verbose)
+
+    fout = fout + "/Aggregated/" + short_date_string(date)
+
+    aggregated_aaa_df = run_agg_aaa(date, fout, ctx, sql_context, verbose)
+
+    all_df = aggregated_cmssw_df.unionAll(aggregated_aaa_df)
+    all_df = all_df.sort(desc("nacc"))
+
+    print "CMSSW:"
+    aggregated_cmssw_df.show(20)
+    aggregated_cmssw_df.printSchema()
+    cmssw_df_size = aggregated_cmssw_df.count()
+
+    print "AAA:"
+    aggregated_aaa_df.show(20)
+    aggregated_aaa_df.printSchema()
+    aaa_df_size = aggregated_aaa_df.count()
+
+    print "Aggregated all:"
+
+    all_df.show(20)
+    all_df.printSchema()
+    all_df_size = all_df.count()
+
+    output_dataframe(fout, all_df, verbose)
 
     ctx.stop()
 
+    print "Record count: CMSSW: " + str(cmssw_df_size) + " AAA: " + str(aaa_df_size) + " Total: " + str(all_df_size)
+
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
-    print('Elapsed time: %s sec' % elapsed_time(start_time))
+    print('Elapsed time: %s ' % elapsed_time(start_time))
 
 
 if __name__ == '__main__':

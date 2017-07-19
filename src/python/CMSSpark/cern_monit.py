@@ -22,6 +22,7 @@ from pyspark.sql import HiveContext
 # CMSSpark modules
 from CMSSpark.spark_utils import spark_context, print_rows, unionAll
 from CMSSpark.utils import elapsed_time
+from CMSSpark.schemas import aggregated_data_schema
 
 def send2monit(data):
     """
@@ -264,11 +265,14 @@ def run(path, amq, stomp, yarn=None, verbose=False):
     pfiles = [f for f in pipe.stdout.read().split('\n') if f.find('part-') != -1]
     df = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                     .options(treatEmptyValuesAsNulls='true', nullValue='null', header='true')\
-                    .load(fname) for fname in pfiles])
+                    .load(fname, schema = aggregated_data_schema()) for fname in pfiles])
 
     # Register temporary tables to be able to use sqlContext.sql
     df.registerTempTable('df')
     print_rows(df, "DataFrame", verbose)
+
+    print 'Schema:'
+    df.printSchema()
 
     # send data to CERN MONIT via stomp AMQ, see send2monit function
     df.toJSON().foreachPartition(send2monit)
