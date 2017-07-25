@@ -39,62 +39,6 @@ class OptionParser():
             dest="fout", default="", help='Output directory path')
 
 
-def run_agg_eos(date, fout, ctx, sql_context, verbose=False):
-
-    if verbose:
-        print 'Starting EOS part'
-
-    # Convert date
-    date = short_date_string(date)
-
-    # Create EOS tables in sql_context
-    eos_tables(sql_context, date=date, verbose=verbose)
-
-    # - dataset name             +
-    # - site name                +
-    # - number of access (nacc)  +
-    # - distinct users           +
-    # - stream: cmssw            +
-
-    # EOS columns
-    eos_cols = ['count(d_dataset) AS nacc',
-                'count(distinct(eos_df.user_dn)) AS distinct_users',
-                '\"eos\" as stream']
-
-    # DBS columns
-    ddf_cols = ['d_dataset AS dataset_name']
-
-    # EOS has file name. Join it with DBS to get dataset/block names.
-    # PhEDEx has dataset/block name. Join by names to be sure.
-    # Use PhEDEx node_name as site name
-
-    # PhEDEx columns
-    phedex_cols = ['node_name AS site_name']
-
-    # Concatenate arrays with column names (i.e. use all column names from arrays)
-    cols = phedex_cols + eos_cols + ddf_cols
-
-    # Build a query with "cols" columns
-    query = ("SELECT %s FROM ddf "\
-             "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "\
-             "JOIN bdf ON fdf.f_block_id = bdf.b_block_id "\
-             "JOIN phedex_df ON (phedex_df.block_name = bdf.b_block_name AND phedex_df.dataset_name = ddf.d_dataset) "\
-             "JOIN eos_df ON fdf.f_logical_file_name = eos_df.file_lfn "\
-             "GROUP BY node_name, d_dataset") % ','.join(cols)
-
-    result = run_query(query, sql_context, verbose)
-
-    result = result.sort(desc("nacc"))
-
-    if verbose:
-        print 'Query done'
-
-    if verbose:
-        print 'Finished EOS part'
-
-    return result
-
-
 def run_agg_aaa(date, fout, ctx, sql_context, verbose=False):
 
     if verbose:
@@ -104,49 +48,42 @@ def run_agg_aaa(date, fout, ctx, sql_context, verbose=False):
     date = short_date_string(date)
 
     # Create AAA tables in sql_context
-    aaa_tables(sql_context, date=date, verbose=verbose)
+    # Use enr instead of raw files
+    aaa_df = aaa_tables(sql_context, hdir='hdfs:///project/monitoring/archive/xrootd/enr/gled', date=date, verbose=verbose)
 
-    # - dataset name             +
+    if verbose:
+        print 'Found ' + str(aaa_df['aaa_df'].count()) + ' records in AAA stream'
+
     # - site name                +
     # - number of access (nacc)  +
     # - distinct users           +
-    # - stream: cmssw            +
+    # - stream: aaa              +
+    # - dataset name             +
 
     # AAA columns
-    aaa_cols = ['count(d_dataset) AS nacc',
+    aaa_cols = ['src_experiment_site AS site_name',
+                'count(d_dataset) AS nacc',
                 'count(distinct(aaa_df.user_dn)) AS distinct_users',
                 '\"aaa\" as stream']
 
     # DBS columns
     ddf_cols = ['d_dataset AS dataset_name']
 
-    # AAA has file name. Join it with DBS to get dataset/block names.
-    # PhEDEx has dataset/block name. Join by names to be sure.
-    # Use PhEDEx node_name as site name
-
-    # PhEDEx columns
-    phedex_cols = ['node_name AS site_name']
-
     # Concatenate arrays with column names (i.e. use all column names from arrays)
-    cols = phedex_cols + aaa_cols + ddf_cols
+    cols = aaa_cols + ddf_cols
 
     # Build a query with "cols" columns
-    query = ("SELECT %s FROM ddf "\
-             "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "\
-             "JOIN bdf ON fdf.f_block_id = bdf.b_block_id "\
-             "JOIN phedex_df ON (phedex_df.block_name = bdf.b_block_name AND phedex_df.dataset_name = ddf.d_dataset) "\
-             "JOIN aaa_df ON fdf.f_logical_file_name = aaa_df.file_lfn "\
-             "GROUP BY node_name, d_dataset") % ','.join(cols)
+    query = ("SELECT %s FROM ddf " \
+             "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id " \
+             "JOIN aaa_df ON fdf.f_logical_file_name = aaa_df.file_lfn " \
+             "GROUP BY src_experiment_site, d_dataset") % ','.join(cols)
 
     result = run_query(query, sql_context, verbose)
 
     result = result.sort(desc("nacc"))
 
     if verbose:
-        print 'Query done'
-
-    if verbose:
-        print 'Finished AAA part'
+        print 'Finished AAA part (output is ' + str(result.count()) + ' records)'
 
     return result
 
@@ -160,13 +97,16 @@ def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
     date = long_date_string(date)
 
     # Create CMSSW tables in sql_context
-    cmssw_tables(ctx, sql_context, date=date, verbose=verbose)
+    cmssw_df = cmssw_tables(ctx, sql_context, date=date, verbose=verbose)
 
-    # - dataset name             +
+    if verbose:
+        print 'Found ' + str(cmssw_df['cmssw_df'].count()) + ' records in CMSSW stream'
+
     # - site name                +
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: cmssw            +
+    # - dataset name             +
 
     # CMSSW columns
     cmssw_cols = ['SITE_NAME AS site_name',
@@ -191,10 +131,7 @@ def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
     result = result.sort(desc("nacc"))
 
     if verbose:
-        print 'Query done'
-
-    if verbose:
-        print 'Finished CMSSW part'
+        print 'Finished CMSSW part (output is ' + str(result.count()) + ' records)'
 
     return result
 
@@ -227,8 +164,6 @@ def main():
     # Initialize DBS tables
     dbs_tables(sql_context, inst=inst, verbose=verbose)
 
-    # Initialize PhEDEx tables (join with AAA, EOS)
-    phedex_tables(sql_context, verbose=verbose)
 
     cmssw_start_time = time.time()
     aggregated_cmssw_df = run_agg_cmssw(date, fout, ctx, sql_context, verbose)
@@ -238,49 +173,54 @@ def main():
     aggregated_aaa_df = run_agg_aaa(date, fout, ctx, sql_context, verbose)
     aaa_elapsed_time = elapsed_time(aaa_start_time)
 
-    eos_start_time = time.time()
-    aggregated_eos_df = run_agg_eos(date, fout, ctx, sql_context, verbose)
-    eos_elapsed_time = elapsed_time(eos_start_time)
+#    eos_start_time = time.time()
+#    aggregated_eos_df = run_agg_eos(date, fout, ctx, sql_context, verbose)
+#    eos_elapsed_time = elapsed_time(eos_start_time)
 
-    all_df = aggregated_cmssw_df.unionAll(aggregated_aaa_df)
-    all_df = all_df.unionAll(aggregated_eos_df)
-    all_df = all_df.sort(desc("nacc"))
+#    all_df = aggregated_cmssw_df.unionAll(aggregated_aaa_df)
+#    all_df = all_df.unionAll(aggregated_eos_df)
+#    all_df = all_df.sort(desc("nacc"))
 
-    print "CMSSW:"
-    aggregated_cmssw_df.show(20)
-    aggregated_cmssw_df.printSchema()
-    cmssw_df_size = aggregated_cmssw_df.count()
+    if verbose:
+        cmssw_df_size = aggregated_cmssw_df.count()
+        aaa_df_size = aggregated_aaa_df.count()
+#        eos_df_size = aggregated_eos_df.count()
 
-    print "AAA:"
-    aggregated_aaa_df.show(20)
-    aggregated_aaa_df.printSchema()
-    aaa_df_size = aggregated_aaa_df.count()
+        print "CMSSW:"
+        aggregated_cmssw_df.show(20)
+        aggregated_cmssw_df.printSchema()
 
-    print "EOS:"
-    aggregated_eos_df.show(20)
-    aggregated_eos_df.printSchema()
-    eos_df_size = aggregated_eos_df.count()
+        print "AAA:"
+        aggregated_aaa_df.show(20)
+        aggregated_aaa_df.printSchema()
 
-    print "Aggregated all:"
-    # Schema for output is:
-    # site name, number of accesses, distinct users, stream, dataset
+#        print "EOS:"
+#        aggregated_eos_df.show(20)
+#        aggregated_eos_df.printSchema()
 
-    all_df.show(20)
-    all_df.printSchema()
-    all_df_size = all_df.count()
 
-    # fout = fout + "/Aggregated/" + short_date_string(date)
+#    print "Aggregated all:"
+#    Schema for output is:
+#    site name, number of accesses, distinct users, stream, dataset
 
-    output_dataframe(fout + "/Aggregated/CMSSW/" + short_date_string(date), aggregated_cmssw_df, verbose)
-    output_dataframe(fout + "/Aggregated/AAA/" + short_date_string(date), aggregated_aaa_df, verbose)
-    output_dataframe(fout + "/Aggregated/EOS/" + short_date_string(date), aggregated_eos_df, verbose)
+#    all_df.show(20)
+#    all_df.printSchema()
+#    all_df_size = all_df.count()
+
+#    fout = fout + "/Aggregated/" + short_date_string(date)
+
+#    output_dataframe(fout + "/Aggregated/CMSSW/" + short_date_string(date), aggregated_cmssw_df, verbose)
+#    output_dataframe(fout + "/Aggregated/AAA/" + short_date_string(date), aggregated_aaa_df, verbose)
+#    output_dataframe(fout + "/Aggregated/EOS/" + short_date_string(date), aggregated_eos_df, verbose)
 
     ctx.stop()
 
-    print "Output record count:\n  CMSSW: " + str(cmssw_df_size) + \
-          "\n  AAA: " + str(aaa_df_size) + \
-          "\n  EOS: " + str(eos_df_size) + \
-          "\n  Total: " + str(all_df_size)
+    if verbose:
+        print 'Output record count:'
+        print 'Output record count CMSSW: ' + str(cmssw_df_size)
+        print 'Output record count AAA: ' + str(aaa_df_size)
+#        print 'Output record count EOS: ' + str(eos_df_size)
+#        print 'Output record count Total: ' + str(all_df_size)
 
     print('Start time         : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
     print('End time           : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
@@ -288,8 +228,8 @@ def main():
 
     print('AAA elapsed time   : %s' % aaa_elapsed_time)
     print('CMSSW elapsed time : %s' % cmssw_elapsed_time)
-    print('EOS elapsed time   : %s' % eos_elapsed_time)
-    # print('JM elapsed time    : %s' % jm_elapsed_time)
+#    print('EOS elapsed time   : %s' % eos_elapsed_time)
+#    print('JM elapsed time    : %s' % jm_elapsed_time)
 
 
 if __name__ == '__main__':
