@@ -110,15 +110,15 @@ def run_query(query, sql_context, verbose=False):
     # directory specified by fout
 
     if verbose:
-        print 'SQL Query: ' + query
+        print 'Will execute SQL Query: ' + query
 
     # Execute query
     query_result = sql_context.sql(query)
 
     query_result.persist(StorageLevel.MEMORY_AND_DISK)
 
-    # If verbose is enabled, print first three rows (for debug reasons)
-    print_rows(query_result, query, verbose, 3)
+    if verbose:
+        print 'Executed SQL Query: ' + query + '. Number of rows ' + str(query_result.count())
 
     return query_result
 

@@ -47,9 +47,11 @@ def run_agg_aaa(date, fout, ctx, sql_context, verbose=False):
     # Convert date
     date = short_date_string(date)
 
-    # Create AAA tables in sql_context
     # Use enr instead of raw files
-    aaa_df = aaa_tables(sql_context, hdir='hdfs:///project/monitoring/archive/xrootd/enr/gled', date=date, verbose=verbose)
+    hdir = 'hdfs:///project/monitoring/archive/xrootd/enr/gled'
+
+    # Create AAA tables in sql_context
+    aaa_df = aaa_tables(sql_context, hdir=hdir, date=date, verbose=verbose)
 
     if verbose:
         print 'Found ' + str(aaa_df['aaa_df'].count()) + ' records in AAA stream'
@@ -60,23 +62,17 @@ def run_agg_aaa(date, fout, ctx, sql_context, verbose=False):
     # - stream: aaa              +
     # - dataset name             +
 
-    # AAA columns
-    aaa_cols = ['src_experiment_site AS site_name',
-                'count(d_dataset) AS nacc',
-                'count(distinct(aaa_df.user_dn)) AS distinct_users',
-                '\"aaa\" as stream']
+    cols = ['src_experiment_site AS site_name',
+            'count(dataset_name) AS nacc',
+            'count(distinct(aaa_df.user_dn)) AS distinct_users',
+            '\"aaa\" as stream',
+            'dataset_name']
 
-    # DBS columns
-    ddf_cols = ['d_dataset AS dataset_name']
-
-    # Concatenate arrays with column names (i.e. use all column names from arrays)
-    cols = aaa_cols + ddf_cols
 
     # Build a query with "cols" columns
-    query = ("SELECT %s FROM ddf " \
-             "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id " \
-             "JOIN aaa_df ON fdf.f_logical_file_name = aaa_df.file_lfn " \
-             "GROUP BY src_experiment_site, d_dataset") % ','.join(cols)
+    query = ("SELECT %s FROM aaa_df " \
+             "JOIN f_b_s_df ON f_b_s_df.file_name = aaa_df.file_lfn " \
+             "GROUP BY src_experiment_site, dataset_name") % ','.join(cols)
 
     result = run_query(query, sql_context, verbose)
 
@@ -108,23 +104,16 @@ def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
     # - stream: cmssw            +
     # - dataset name             +
 
-    # CMSSW columns
-    cmssw_cols = ['SITE_NAME AS site_name',
-                  'count(d_dataset) AS nacc',
-                  'count(distinct(USER_DN)) AS distinct_users',
-                  '\"cmssw\" as stream']
-
-    # DBS columns
-    ddf_cols = ['d_dataset AS dataset_name']
-
-    # Concatenate arrays with column names (i.e. use all column names from arrays)
-    cols = cmssw_cols + ddf_cols
+    cols = ['cmssw_df.SITE_NAME AS site_name',
+            'count(dataset_name) AS nacc',
+            'count(distinct(USER_DN)) AS distinct_users',
+            '\"cmssw\" as stream',
+            'dataset_name']
 
     # Build a query with "cols" columns
-    query = ("SELECT %s FROM ddf "\
-             "JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id "\
-             "JOIN cmssw_df ON fdf.f_logical_file_name = cmssw_df.FILE_LFN "\
-             "GROUP BY SITE_NAME, d_dataset") % ','.join(cols)
+    query = ("SELECT %s FROM cmssw_df "\
+             "JOIN f_b_s_df ON f_b_s_df.file_name = cmssw_df.FILE_LFN "\
+             "GROUP BY cmssw_df.SITE_NAME, dataset_name") % ','.join(cols)
 
     result = run_query(query, sql_context, verbose)
 
@@ -134,6 +123,58 @@ def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
         print 'Finished CMSSW part (output is ' + str(result.count()) + ' records)'
 
     return result
+
+
+def quiet_logs( sc ):
+    print '*** WILL QUIET LOGS ***'
+    logger = sc._jvm.org.apache.log4j
+    logger.LogManager.getRootLogger().setLevel(logger.Level.ERROR)
+    print '*** DID QUIET LOGS ***'
+
+
+def create_file_block_site_table(ctx, sql_context, verbose=False):
+    if verbose:
+        print 'Starting file_block_site generation'
+
+    cols = ['f_logical_file_name AS file_name',
+            'b_block_name AS block_name',
+            'clean_site_name(node_name) AS site_name',
+            'd_dataset AS dataset_name']
+
+    # Join FDF and BDF by f_block_id and b_block_id
+    query = ("SELECT %s FROM fdf " \
+             "JOIN bdf ON fdf.f_block_id = bdf.b_block_id "\
+             "JOIN ddf ON fdf.f_dataset_id = ddf.d_dataset_id "\
+             "JOIN phedex_df ON bdf.b_block_name = phedex_df.block_name") % ','.join(cols)
+
+    if verbose:
+        print 'Will run query to generate temp file_block_site table'
+
+    result = run_query(query, sql_context, verbose)
+    result.registerTempTable('f_b_all_df')
+
+    query_distinct = ("SELECT DISTINCT * FROM f_b_all_df ORDER  BY file_name")
+    result_distinct = run_query(query_distinct, sql_context, verbose)
+    result_distinct.registerTempTable('f_b_s_df')
+
+    if verbose:
+        print 'Temp table from joined DDF, FDF, BDF and PhEDEx'
+        print 'After DISTINCT: ' + str(result.count()) + ' -> ' + str(result_distinct.count())
+        result_distinct.show(20)
+        print_rows(result_distinct, query_distinct, verbose, 5)
+        result_distinct.printSchema()
+        print 'Finished file_block_site generation'
+
+
+def clean_site_name(s):
+    split = s.split('_')
+    split = split[0:3]
+
+    # Remove empty strings which may appear when s is T0_USA_
+    split = filter(None, split)
+
+    join = '_'.join(split)
+    return join
 
 
 def main():
@@ -158,12 +199,22 @@ def main():
     # Create spark context
     ctx = spark_context('cms', yarn, verbose)
 
+    quiet_logs(ctx)
+
     # Create SQL context to be used for SQL queries
     sql_context = HiveContext(ctx)
 
     # Initialize DBS tables
     dbs_tables(sql_context, inst=inst, verbose=verbose)
 
+    # Initialize PhEDEx table to be used in file_block_site table
+    phedex_tables(sql_context, verbose=verbose)
+
+    # Register clean_site_name to be used with SQL queries
+    sql_context.udf.register("clean_site_name", clean_site_name)
+
+    # Create temp table with file name, block name, site name and site from PhEDEx
+    create_file_block_site_table(ctx, sql_context, verbose)
 
     cmssw_start_time = time.time()
     aggregated_cmssw_df = run_agg_cmssw(date, fout, ctx, sql_context, verbose)
