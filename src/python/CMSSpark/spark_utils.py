@@ -161,6 +161,11 @@ def spark_context(appname='cms', yarn=None, verbose=False, python_files=[]):
         logger.info("YARN client mode enabled")
     return ctx
 
+
+def delete_hadoop_directory(path):
+    os.popen("hadoop -rm -r \"" + path + "\"")
+
+
 def phedex_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     """
     Parse PhEDEx records on HDFS via mapping PhEDEx tables to Spark SQLContext.

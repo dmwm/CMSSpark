@@ -15,6 +15,7 @@ from pyspark.sql import HiveContext
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables, jm_tables
 from CMSSpark.spark_utils import spark_context, print_rows, split_dataset
+from CMSSpark.spark_utils import delete_hadoop_directory
 from CMSSpark.utils import elapsed_time
 
 class OptionParser():
@@ -91,6 +92,9 @@ def output_dataframe(fout, df, verbose=False):
         if fout:
             if verbose:
                 print 'Output destination: ' + fout
+
+            # Try to remove output directory if it exists
+            delete_hadoop_directory(fout)
 
             # This outputs one record per line in JSON format
             # There is no comma at the end of each line!
