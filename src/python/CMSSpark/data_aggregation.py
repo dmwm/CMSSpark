@@ -39,6 +39,47 @@ class OptionParser():
             dest="fout", default="", help='Output directory path')
 
 
+def run_agg_jm(date, fout, ctx, sql_context, verbose=False):
+
+    if verbose:
+        print 'Starting JobMonitoring part'
+
+    # Convert date
+    date = long_date_string(date)
+
+    # Create JobMonitoring tables in sql_context
+    jm_df = jm_tables(ctx, sql_context, date=date, verbose=verbose)
+
+    if verbose:
+        print 'Found ' + str(jm_df['jm_df'].count()) + ' records in JobMonitoring stream'
+
+    # - site name                +
+    # - dataset name             +
+    # - number of access (nacc)  +
+    # - distinct users           +
+    # - stream: crab             +
+
+    cols = ['SiteName AS site_name',
+            'dataset_name',
+            'count(dataset_name) AS nacc',
+            'count(distinct(UserId)) AS distinct_users',
+            '\"crab\" as stream']
+
+    # Build a query with "cols" columns
+    query = ("SELECT %s FROM jm_df "\
+             "JOIN f_b_s_df ON f_b_s_df.file_name = jm_df.FileName "\
+             "GROUP BY jm_df.SiteName, dataset_name") % ','.join(cols)
+
+    result = run_query(query, sql_context, verbose)
+
+    result = result.sort(desc("nacc"))
+
+    if verbose:
+        print 'Finished JobMonitoring part (output is ' + str(result.count()) + ' records)'
+
+    return result
+
+
 def run_agg_eos(date, fout, ctx, sql_context, verbose=False):
 
     if verbose:
@@ -53,16 +94,16 @@ def run_agg_eos(date, fout, ctx, sql_context, verbose=False):
         print 'Found ' + str(eos_df['eos_df'].count()) + ' records in EOS stream'
 
     # - site name                +
+    # - dataset name             +
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: eos              +
-    # - dataset name             +
 
     cols = ['site_name',
+            'dataset_name',
             'count(dataset_name) AS nacc',
             'count(distinct(eos_df.user_dn)) AS distinct_users',
-            '\"eos\" as stream',
-            'dataset_name']
+            '\"eos\" as stream']
 
 
     # Build a query with "cols" columns
@@ -98,16 +139,16 @@ def run_agg_aaa(date, fout, ctx, sql_context, verbose=False):
         print 'Found ' + str(aaa_df['aaa_df'].count()) + ' records in AAA stream'
 
     # - site name                +
+    # - dataset name             +
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: aaa              +
-    # - dataset name             +
 
     cols = ['src_experiment_site AS site_name',
+            'dataset_name',
             'count(dataset_name) AS nacc',
             'count(distinct(aaa_df.user_dn)) AS distinct_users',
-            '\"aaa\" as stream',
-            'dataset_name']
+            '\"aaa\" as stream']
 
 
     # Build a query with "cols" columns
@@ -140,16 +181,16 @@ def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
         print 'Found ' + str(cmssw_df['cmssw_df'].count()) + ' records in CMSSW stream'
 
     # - site name                +
+    # - dataset name             +
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: cmssw            +
-    # - dataset name             +
 
     cols = ['cmssw_df.SITE_NAME AS site_name',
+            'dataset_name',
             'count(dataset_name) AS nacc',
             'count(distinct(USER_DN)) AS distinct_users',
-            '\"cmssw\" as stream',
-            'dataset_name']
+            '\"cmssw\" as stream']
 
     # Build a query with "cols" columns
     query = ("SELECT %s FROM cmssw_df "\
@@ -269,6 +310,10 @@ def main():
     aggregated_eos_df = run_agg_eos(date, fout, ctx, sql_context, verbose)
     eos_elapsed_time = elapsed_time(eos_start_time)
 
+    jm_start_time = time.time()
+    aggregated_jm_df = run_agg_jm(date, fout, ctx, sql_context, verbose)
+    jm_elapsed_time = elapsed_time(jm_start_time)
+
 #    all_df = aggregated_cmssw_df.unionAll(aggregated_aaa_df)
 #    all_df = all_df.unionAll(aggregated_eos_df)
 #    all_df = all_df.sort(desc("nacc"))
@@ -277,6 +322,7 @@ def main():
         cmssw_df_size = aggregated_cmssw_df.count()
         aaa_df_size = aggregated_aaa_df.count()
         eos_df_size = aggregated_eos_df.count()
+        jm_df_size = aggregated_jm_df.count()
 
         print "CMSSW:"
         aggregated_cmssw_df.show(20)
@@ -290,10 +336,14 @@ def main():
         aggregated_eos_df.show(20)
         aggregated_eos_df.printSchema()
 
+        print "JobMonitoring:"
+        aggregated_jm_df.show(20)
+        aggregated_jm_df.printSchema()
+
 
 #    print "Aggregated all:"
 #    Schema for output is:
-#    site name, number of accesses, distinct users, stream, dataset
+#    site name, dataset name, number of accesses, distinct users, stream
 
 #    all_df.show(20)
 #    all_df.printSchema()
@@ -304,24 +354,26 @@ def main():
     output_dataframe(fout + "/Aggregated/CMSSW/" + short_date_string(date), aggregated_cmssw_df, verbose)
     output_dataframe(fout + "/Aggregated/AAA/" + short_date_string(date), aggregated_aaa_df, verbose)
     output_dataframe(fout + "/Aggregated/EOS/" + short_date_string(date), aggregated_eos_df, verbose)
+    output_dataframe(fout + "/Aggregated/JobMonitoring/" + short_date_string(date), aggregated_jm_df, verbose)
 
     ctx.stop()
 
     if verbose:
         print 'Output record count:'
-        print 'Output record count CMSSW: ' + str(cmssw_df_size)
-        print 'Output record count AAA: ' + str(aaa_df_size)
-        print 'Output record count EOS: ' + str(eos_df_size)
+        print 'Output record count CMSSW         : ' + str(cmssw_df_size)
+        print 'Output record count AAA           : ' + str(aaa_df_size)
+        print 'Output record count EOS           : ' + str(eos_df_size)
+        print 'Output record count JobMonitoring : ' + str(jm_df_size)
 #        print 'Output record count Total: ' + str(all_df_size)
 
     print('Start time         : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
     print('End time           : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Total elapsed time : %s' % elapsed_time(start_time))
 
-    print('AAA elapsed time   : %s' % aaa_elapsed_time)
-    print('CMSSW elapsed time : %s' % cmssw_elapsed_time)
-    print('EOS elapsed time   : %s' % eos_elapsed_time)
-#    print('JM elapsed time    : %s' % jm_elapsed_time)
+    print('AAA elapsed time           : %s' % aaa_elapsed_time)
+    print('CMSSW elapsed time         : %s' % cmssw_elapsed_time)
+    print('EOS elapsed time           : %s' % eos_elapsed_time)
+    print('JobMonitoring elapsed time : %s' % jm_elapsed_time)
 
 
 if __name__ == '__main__':
