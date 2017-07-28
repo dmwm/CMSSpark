@@ -314,57 +314,62 @@ def main():
     aggregated_jm_df = run_agg_jm(date, fout, ctx, sql_context, verbose)
     jm_elapsed_time = elapsed_time(jm_start_time)
 
-#    all_df = aggregated_cmssw_df.unionAll(aggregated_aaa_df)
-#    all_df = all_df.unionAll(aggregated_eos_df)
-#    all_df = all_df.sort(desc("nacc"))
+    if verbose:
+        print 'Will union outputs from all streams to a single dataframe'
+    # Schema for output is:
+    # site name, dataset name, number of accesses, distinct users, stream
+    all_df = aggregated_cmssw_df.unionAll(aggregated_aaa_df)
+    all_df = all_df.unionAll(aggregated_eos_df)
+    all_df = all_df.unionAll(aggregated_jm_df)
+    all_df = all_df.sort(desc("nacc"))
+
+    if verbose:
+        print 'Done joining all outputs to a single dataframe'
+
+    fout = fout + "/Aggregated/" + short_date_string(date)
+
+    # output_dataframe(fout + "/Aggregated/CMSSW/" + short_date_string(date), aggregated_cmssw_df, verbose)
+    # output_dataframe(fout + "/Aggregated/AAA/" + short_date_string(date), aggregated_aaa_df, verbose)
+    # output_dataframe(fout + "/Aggregated/EOS/" + short_date_string(date), aggregated_eos_df, verbose)
+    # output_dataframe(fout + "/Aggregated/JobMonitoring/" + short_date_string(date), aggregated_jm_df, verbose)
+
+    output_dataframe(fout, all_df, verbose)
 
     if verbose:
         cmssw_df_size = aggregated_cmssw_df.count()
         aaa_df_size = aggregated_aaa_df.count()
         eos_df_size = aggregated_eos_df.count()
         jm_df_size = aggregated_jm_df.count()
+        all_df_size = all_df.count()
 
         print "CMSSW:"
-        aggregated_cmssw_df.show(20)
+        aggregated_cmssw_df.show(10)
         aggregated_cmssw_df.printSchema()
 
         print "AAA:"
-        aggregated_aaa_df.show(20)
+        aggregated_aaa_df.show(10)
         aggregated_aaa_df.printSchema()
 
         print "EOS:"
-        aggregated_eos_df.show(20)
+        aggregated_eos_df.show(10)
         aggregated_eos_df.printSchema()
 
         print "JobMonitoring:"
-        aggregated_jm_df.show(20)
+        aggregated_jm_df.show(10)
         aggregated_jm_df.printSchema()
 
+        print "Aggregated all:"
+        all_df.show(10)
+        all_df.printSchema()
 
-#    print "Aggregated all:"
-#    Schema for output is:
-#    site name, dataset name, number of accesses, distinct users, stream
-
-#    all_df.show(20)
-#    all_df.printSchema()
-#    all_df_size = all_df.count()
-
-#    fout = fout + "/Aggregated/" + short_date_string(date)
-
-    output_dataframe(fout + "/Aggregated/CMSSW/" + short_date_string(date), aggregated_cmssw_df, verbose)
-    output_dataframe(fout + "/Aggregated/AAA/" + short_date_string(date), aggregated_aaa_df, verbose)
-    output_dataframe(fout + "/Aggregated/EOS/" + short_date_string(date), aggregated_eos_df, verbose)
-    output_dataframe(fout + "/Aggregated/JobMonitoring/" + short_date_string(date), aggregated_jm_df, verbose)
-
-    ctx.stop()
-
-    if verbose:
         print 'Output record count:'
         print 'Output record count CMSSW         : ' + str(cmssw_df_size)
         print 'Output record count AAA           : ' + str(aaa_df_size)
         print 'Output record count EOS           : ' + str(eos_df_size)
         print 'Output record count JobMonitoring : ' + str(jm_df_size)
-#        print 'Output record count Total: ' + str(all_df_size)
+        print 'Output record count Total:        : ' + str(all_df_size)
+
+    ctx.stop()
 
     print('Start time         : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
     print('End time           : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
