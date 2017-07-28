@@ -163,7 +163,7 @@ def spark_context(appname='cms', yarn=None, verbose=False, python_files=[]):
 
 
 def delete_hadoop_directory(path):
-    os.popen("hadoop -rm -r \"" + path + "\"")
+    os.popen("hadoop fs -rm -r \"" + path + "\"")
 
 
 def phedex_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
