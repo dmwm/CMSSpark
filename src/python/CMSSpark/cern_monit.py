@@ -22,7 +22,6 @@ from pyspark.sql import HiveContext
 # CMSSpark modules
 from CMSSpark.spark_utils import spark_context, print_rows, unionAll
 from CMSSpark.utils import elapsed_time
-from CMSSpark.schemas import aggregated_data_schema
 
 def send2monit(data):
     """
