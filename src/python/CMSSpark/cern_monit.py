@@ -265,7 +265,7 @@ def run(path, amq, stomp, yarn=None, verbose=False):
     pfiles = [f for f in pipe.stdout.read().split('\n') if f.find('part-') != -1]
     df = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
                     .options(treatEmptyValuesAsNulls='true', nullValue='null', header='true')\
-                    .load(fname, schema = aggregated_data_schema()) for fname in pfiles])
+                    .load(fname) for fname in pfiles])
 
     # Register temporary tables to be able to use sqlContext.sql
     df.registerTempTable('df')
