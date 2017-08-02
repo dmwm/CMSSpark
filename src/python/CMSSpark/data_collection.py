@@ -15,6 +15,7 @@ from pyspark.sql import HiveContext
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables, jm_tables
 from CMSSpark.spark_utils import spark_context, print_rows, split_dataset
+from CMSSpark.spark_utils import delete_hadoop_directory
 from CMSSpark.utils import elapsed_time
 
 class OptionParser():
@@ -90,7 +91,10 @@ def output_dataframe(fout, df, verbose=False):
     if df:
         if fout:
             if verbose:
-                print 'Output destination: ' + fout
+                print('Output destination: %s' % fout)
+
+            # Try to remove output directory if it exists
+            delete_hadoop_directory(fout)
 
             # This outputs one record per line in JSON format
             # There is no comma at the end of each line!
@@ -99,9 +103,9 @@ def output_dataframe(fout, df, verbose=False):
             # This outputs records in CSV format
             df.write.format("com.databricks.spark.csv").option("header", "true").save(fout)
         else:
-            print 'No output destination is specified!'
+            print('No output destination is specified!')
     else:
-        print 'No dataframe!'
+        print('No dataframe!')
 
 
 def run_query(query, sql_context, verbose=False):
@@ -110,15 +114,15 @@ def run_query(query, sql_context, verbose=False):
     # directory specified by fout
 
     if verbose:
-        print 'SQL Query: ' + query
+        print('Will execute SQL Query: %s' % query)
 
     # Execute query
     query_result = sql_context.sql(query)
 
     query_result.persist(StorageLevel.MEMORY_AND_DISK)
 
-    # If verbose is enabled, print first three rows (for debug reasons)
-    print_rows(query_result, query, verbose, 3)
+    if verbose:
+        print('Executed SQL Query: %s. Number of rows %s' % (query, query_result.count()))
 
     return query_result
 
@@ -126,7 +130,7 @@ def run_query(query, sql_context, verbose=False):
 def run_cmssw(date, fout, ctx, sql_context, verbose=False):
 
     if verbose:
-        print 'Starting CMSSW part'
+        print('Starting CMSSW part')
 
     # Create fout by adding stream name and date paths
     fout = fout + "/CMSSW/" + short_date_string(date)
@@ -138,7 +142,7 @@ def run_cmssw(date, fout, ctx, sql_context, verbose=False):
     cmssw_tables(ctx, sql_context, date=date, verbose=verbose)
 
     if verbose:
-        print 'Will build query for CMSSW and DBS tables'
+        print('Will build query for CMSSW and DBS tables')
 
     # - file name         +
     # - file size         +
@@ -177,7 +181,7 @@ def run_cmssw(date, fout, ctx, sql_context, verbose=False):
     result = run_query(query, sql_context, verbose)
 
     if verbose:
-        print 'Query done. Will split "dataset" column'
+        print('Query done. Will split "dataset" column')
 
     # Split "dataset" column into "primds", "procds" and "tier"
     result = split_dataset(result, 'd_dataset')
@@ -185,13 +189,13 @@ def run_cmssw(date, fout, ctx, sql_context, verbose=False):
     output_dataframe(fout, result, verbose)
 
     if verbose:
-        print 'Finished CMSSW part'
+        print('Finished CMSSW part')
 
 
 def run_aaa(date, fout, ctx, sql_context, verbose=False):
 
     if verbose:
-        print 'Starting AAA part'
+        print('Starting AAA part')
 
     # Create fout by adding stream name and date paths
     fout = fout + "/AAA/" + short_date_string(date)
@@ -203,7 +207,7 @@ def run_aaa(date, fout, ctx, sql_context, verbose=False):
     aaa_tables(sql_context, date=date, verbose=verbose)
 
     if verbose:
-        print 'Will build query for AAA and DBS tables'
+        print('Will build query for AAA and DBS tables')
 
     # - file name         +
     # - file size         +
@@ -246,13 +250,13 @@ def run_aaa(date, fout, ctx, sql_context, verbose=False):
     output_dataframe(fout, result, verbose)
 
     if verbose:
-        print 'Finished AAA part'
+        print('Finished AAA part')
 
 
 def run_eos(date, fout, ctx, sql_context, verbose=False):
 
     if verbose:
-        print 'Starting EOS part'
+        print('Starting EOS part')
 
     # Create fout by adding stream name and date paths
     fout = fout + "/EOS/" + short_date_string(date)
@@ -264,7 +268,7 @@ def run_eos(date, fout, ctx, sql_context, verbose=False):
     eos_tables(sql_context, date=date, verbose=verbose)
 
     if verbose:
-        print 'Will build query for EOS and DBS tables'
+        print('Will build query for EOS and DBS tables')
 
     # - file name       +
     # - file size       +
@@ -307,13 +311,13 @@ def run_eos(date, fout, ctx, sql_context, verbose=False):
     output_dataframe(fout, result, verbose)
 
     if verbose:
-        print 'Finished EOS part'
+        print('Finished EOS part')
 
 
 def run_jm(date, fout, ctx, sql_context, verbose=False):
 
     if verbose:
-        print 'Starting JobMonitoring part'
+        print('Starting JobMonitoring part')
 
     # Create fout by adding stream name and date paths
     fout = fout + "/CRAB/" + short_date_string(date)
@@ -325,7 +329,7 @@ def run_jm(date, fout, ctx, sql_context, verbose=False):
     jm_tables(ctx, sql_context, date=date, verbose=verbose)
 
     if verbose:
-        print 'Will build query for JM and DBS tables'
+        print('Will build query for JM and DBS tables')
 
     # - file name       +
     # - file size       +
@@ -370,7 +374,7 @@ def run_jm(date, fout, ctx, sql_context, verbose=False):
     output_dataframe(fout, result, verbose)
 
     if verbose:
-        print 'Finished JobMonitoring part'
+        print('Finished JobMonitoring part')
 
 
 def main():
@@ -401,19 +405,37 @@ def main():
     # Initialize DBS tables (will be used with AAA, CMSSW)
     dbs_tables(sql_context, inst=inst, verbose=verbose)
 
+    aaa_start_time = time.time()
+
     run_aaa(date, fout, ctx, sql_context, verbose)
+
+    aaa_elapsed_time = elapsed_time(aaa_start_time)
+    cmssw_start_time = time.time()
 
     run_cmssw(date, fout, ctx, sql_context, verbose)
 
+    cmssw_elapsed_time = elapsed_time(cmssw_start_time)
+    eos_start_time = time.time()
+
     run_eos(date, fout, ctx, sql_context, verbose)
+
+    eos_elapsed_time = elapsed_time(eos_start_time)
+    jm_start_time = time.time()
 
     run_jm(date, fout, ctx, sql_context, verbose)
 
+    jm_elapsed_time = elapsed_time(jm_start_time)
+
     ctx.stop()
 
-    print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
-    print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
-    print('Elapsed time: %s sec' % elapsed_time(start_time))
+    print('Start time         : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
+    print('End time           : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
+    print('Total elapsed time : %s' % elapsed_time(start_time))
+
+    print('AAA elapsed time   : %s' % aaa_elapsed_time)
+    print('CMSSW elapsed time : %s' % cmssw_elapsed_time)
+    print('EOS elapsed time   : %s' % eos_elapsed_time)
+    print('JM elapsed time    : %s' % jm_elapsed_time)
 
 
 if __name__ == '__main__':
