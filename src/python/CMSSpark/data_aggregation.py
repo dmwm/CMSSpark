@@ -37,12 +37,18 @@ class OptionParser():
             dest="verbose", default=False, help="Verbose output")
         self.parser.add_argument("--fout", action="store",
             dest="fout", default="", help='Output directory path')
+        self.parser.add_argument("--aaa_hdir", action="store",
+            dest="aaa_hdir", default="", help='AAA input directory path')
 
 
 def run_agg_jm(date, fout, ctx, sql_context, verbose=False):
-
+    """
+    Runs aggregation for JobMonitoring stream for a certain date.
+    Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
+    Result dataframe is sorted by nacc.
+    """
     if verbose:
-        print 'Starting JobMonitoring part'
+        print('Starting JobMonitoring part')
 
     # Convert date
     date = long_date_string(date)
@@ -51,7 +57,7 @@ def run_agg_jm(date, fout, ctx, sql_context, verbose=False):
     jm_df = jm_tables(ctx, sql_context, date=date, verbose=verbose)
 
     if verbose:
-        print 'Found ' + str(jm_df['jm_df'].count()) + ' records in JobMonitoring stream'
+        print('Found %s records in JobMonitoring stream' % jm_df['jm_df'].count())
 
     # - site name                +
     # - dataset name             +
@@ -75,15 +81,20 @@ def run_agg_jm(date, fout, ctx, sql_context, verbose=False):
     result = result.sort(desc("nacc"))
 
     if verbose:
-        print 'Finished JobMonitoring part (output is ' + str(result.count()) + ' records)'
+        print('Finished JobMonitoring part (output is %s records)' % result.count())
 
     return result
 
 
 def run_agg_eos(date, fout, ctx, sql_context, verbose=False):
-
+    """
+    Runs aggregation for EOS stream for a certain date.
+    Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
+    Site name is taken from f_b_s_df table which is joined by file name.
+    Result dataframe is sorted by nacc.
+    """
     if verbose:
-        print 'Starting EOS part'
+        print('Starting EOS part')
 
     date = short_date_string(date)
 
@@ -91,7 +102,7 @@ def run_agg_eos(date, fout, ctx, sql_context, verbose=False):
     eos_df = eos_tables(sql_context, date=date, verbose=verbose)
 
     if verbose:
-        print 'Found ' + str(eos_df['eos_df'].count()) + ' records in EOS stream'
+        print('Found %s records in EOS stream' % eos_df['eos_df'].count())
 
     # - site name                +
     # - dataset name             +
@@ -116,27 +127,30 @@ def run_agg_eos(date, fout, ctx, sql_context, verbose=False):
     result = result.sort(desc("nacc"))
 
     if verbose:
-        print 'Finished EOS part (output is ' + str(result.count()) + ' records)'
+        print('Finished EOS part (output is %s records)' % result.count())
 
     return result
 
 
-def run_agg_aaa(date, fout, ctx, sql_context, verbose=False):
-
+def run_agg_aaa(date, fout, ctx, sql_context, hdir='hdfs:///project/monitoring/archive/xrootd/enr/gled', verbose=False):
+    """
+    Runs aggregation for JobMonitoring stream for a certain date.
+    Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
+    Data is taken from /project/monitoring/archive/xrootd/enr/gled and not the default location (raw instead of enr)
+    because enr records have src_experiment_site. src_experiment_site is used as site_name.
+    Result dataframe is sorted by nacc.
+    """
     if verbose:
-        print 'Starting AAA part'
+        print('Starting AAA part')
 
     # Convert date
     date = short_date_string(date)
-
-    # Use enr instead of raw files
-    hdir = 'hdfs:///project/monitoring/archive/xrootd/enr/gled'
 
     # Create AAA tables in sql_context
     aaa_df = aaa_tables(sql_context, hdir=hdir, date=date, verbose=verbose)
 
     if verbose:
-        print 'Found ' + str(aaa_df['aaa_df'].count()) + ' records in AAA stream'
+        print('Found %s records in AAA stream' % aaa_df['aaa_df'].count())
 
     # - site name                +
     # - dataset name             +
@@ -161,15 +175,19 @@ def run_agg_aaa(date, fout, ctx, sql_context, verbose=False):
     result = result.sort(desc("nacc"))
 
     if verbose:
-        print 'Finished AAA part (output is ' + str(result.count()) + ' records)'
+        print('Finished AAA part (output is %s records)' % result.count())
 
     return result
 
 
 def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
-
+    """
+    Runs aggregation for CMSSW stream for a certain date.
+    Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
+    Result dataframe is sorted by nacc.
+    """
     if verbose:
-        print 'Starting CMSSW part'
+        print('Starting CMSSW part')
 
     # Convert date
     date = long_date_string(date)
@@ -178,7 +196,7 @@ def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
     cmssw_df = cmssw_tables(ctx, sql_context, date=date, verbose=verbose)
 
     if verbose:
-        print 'Found ' + str(cmssw_df['cmssw_df'].count()) + ' records in CMSSW stream'
+        print('Found %s records in CMSSW stream' % cmssw_df['cmssw_df'].count())
 
     # - site name                +
     # - dataset name             +
@@ -202,21 +220,29 @@ def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
     result = result.sort(desc("nacc"))
 
     if verbose:
-        print 'Finished CMSSW part (output is ' + str(result.count()) + ' records)'
+        print('Finished CMSSW part (output is %s records)' % result.count())
 
     return result
 
 
 def quiet_logs( sc ):
-    print '*** WILL QUIET LOGS ***'
+    """
+    Sets logger's level to ERROR so INFO logs would not show up.
+    """
+    print('Will set log level to ERROR')
     logger = sc._jvm.org.apache.log4j
     logger.LogManager.getRootLogger().setLevel(logger.Level.ERROR)
-    print '*** DID QUIET LOGS ***'
+    print('Did set log level to ERROR')
 
 
 def create_file_block_site_table(ctx, sql_context, verbose=False):
+    """
+    Joins fdf, bdf, ddf and PhEDEx tables and produces table with file name, block name, dataset name and site name.
+    Site name is obtained from PhEDEx. Before site name is used, it is cleaned with clean_site_name function.
+    After join is complete, only unique records are left in the table by using DISTINCT function.
+    """
     if verbose:
-        print 'Starting file_block_site generation'
+        print('Starting file_block_site generation')
 
     cols = ['f_logical_file_name AS file_name',
             'b_block_name AS block_name',
@@ -230,7 +256,7 @@ def create_file_block_site_table(ctx, sql_context, verbose=False):
              "JOIN phedex_df ON bdf.b_block_name = phedex_df.block_name") % ','.join(cols)
 
     if verbose:
-        print 'Will run query to generate temp file_block_site table'
+        print('Will run query to generate temp file_block_site table')
 
     result = run_query(query, sql_context, verbose)
     result.registerTempTable('f_b_all_df')
@@ -240,15 +266,20 @@ def create_file_block_site_table(ctx, sql_context, verbose=False):
     result_distinct.registerTempTable('f_b_s_df')
 
     if verbose:
-        print 'Temp table from joined DDF, FDF, BDF and PhEDEx'
-        print 'After DISTINCT: ' + str(result.count()) + ' -> ' + str(result_distinct.count())
+        print('Temp table from joined DDF, FDF, BDF and PhEDEx')
+        print('After DISTINCT query count changed %s -> %s' % (result.count(), result_distinct.count()))
         result_distinct.show(20)
         print_rows(result_distinct, query_distinct, verbose, 5)
         result_distinct.printSchema()
-        print 'Finished file_block_site generation'
+        print('Finished file_block_site generation')
 
 
 def clean_site_name(s):
+    """
+    Splits site name by _ (underscore), takes no more than first three parts and joins them with _.
+    This way site name always have at most three parts, separated by _.
+    First three parts represent a tier, a country and a lab/university name.
+    """
     split = s.split('_')
     split = split[0:3]
 
@@ -272,6 +303,7 @@ def main():
     inst = opts.inst
     date = opts.date
     fout = opts.fout
+    aaa_hdir = opts.aaa_hdir
 
     if  inst.lower() in ['global', 'phys01', 'phys02', 'phys03']:
         inst = inst.upper()
@@ -303,7 +335,11 @@ def main():
     cmssw_elapsed_time = elapsed_time(cmssw_start_time)
 
     aaa_start_time = time.time()
-    aggregated_aaa_df = run_agg_aaa(date, fout, ctx, sql_context, verbose)
+    if len(aaa_hdir) > 0:
+        aggregated_aaa_df = run_agg_aaa(date, fout, ctx, sql_context, aaa_hdir, verbose)
+    else:
+        aggregated_aaa_df = run_agg_aaa(date, fout, ctx, sql_context, verbose=verbose)
+
     aaa_elapsed_time = elapsed_time(aaa_start_time)
 
     eos_start_time = time.time()
@@ -315,7 +351,7 @@ def main():
     jm_elapsed_time = elapsed_time(jm_start_time)
 
     if verbose:
-        print 'Will union outputs from all streams to a single dataframe'
+        print('Will union outputs from all streams to a single dataframe')
     # Schema for output is:
     # site name, dataset name, number of accesses, distinct users, stream
     all_df = aggregated_cmssw_df.unionAll(aggregated_aaa_df)
@@ -324,7 +360,7 @@ def main():
     all_df = all_df.sort(desc("nacc"))
 
     if verbose:
-        print 'Done joining all outputs to a single dataframe'
+        print('Done joining all outputs to a single dataframe')
 
     fout = fout + "/Aggregated/" + short_date_string(date)
 
@@ -342,32 +378,32 @@ def main():
         jm_df_size = aggregated_jm_df.count()
         all_df_size = all_df.count()
 
-        print "CMSSW:"
+        print('CMSSW:')
         aggregated_cmssw_df.show(10)
         aggregated_cmssw_df.printSchema()
 
-        print "AAA:"
+        print('AAA:')
         aggregated_aaa_df.show(10)
         aggregated_aaa_df.printSchema()
 
-        print "EOS:"
+        print('EOS:')
         aggregated_eos_df.show(10)
         aggregated_eos_df.printSchema()
 
-        print "JobMonitoring:"
+        print('JobMonitoring:')
         aggregated_jm_df.show(10)
         aggregated_jm_df.printSchema()
 
-        print "Aggregated all:"
+        print('Aggregated all:')
         all_df.show(10)
         all_df.printSchema()
 
-        print 'Output record count:'
-        print 'Output record count CMSSW         : ' + str(cmssw_df_size)
-        print 'Output record count AAA           : ' + str(aaa_df_size)
-        print 'Output record count EOS           : ' + str(eos_df_size)
-        print 'Output record count JobMonitoring : ' + str(jm_df_size)
-        print 'Output record count Total:        : ' + str(all_df_size)
+        print('Output record count:')
+        print('Output record count CMSSW         : %s' % cmssw_df_size)
+        print('Output record count AAA           : %s' % aaa_df_size)
+        print('Output record count EOS           : %s' % eos_df_size)
+        print('Output record count JobMonitoring : %s' % jm_df_size)
+        print('Output record count Total:        : %s' % all_df_size)
 
     ctx.stop()
 

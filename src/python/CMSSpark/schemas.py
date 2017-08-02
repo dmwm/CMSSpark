@@ -437,13 +437,11 @@ def schema_asodb():
 
 def aggregated_data_schema():
     """
-    root
- |-- site_name: string (nullable = true)
- |-- dataset_name: string (nullable = true)
- |-- nacc: integer (nullable = true)
- |-- distinct_users: integer (nullable = true)
- |-- stream: string (nullable = true)
-
+    site_name: string (nullable = true)
+    dataset_name: string (nullable = true)
+    nacc: integer (nullable = true)
+    distinct_users: integer (nullable = true)
+    stream: string (nullable = true)S
     """
     return StructType([
         StructField("site_name", StringType(), True),

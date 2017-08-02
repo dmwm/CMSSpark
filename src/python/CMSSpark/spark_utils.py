@@ -141,11 +141,9 @@ def file_list(basedir, fromdate=None, todate=None):
 def print_rows(df, dfname, verbose, head=5):
     "Helper function to print rows from a given dataframe"
     if  verbose:
-        i = 1
-        print("First " + str(head) + " rows of %s" % dfname)
-        for row in df.head(head):
-            print(str(i) + ". ", row)
-            i = i + 1
+        print('First %s rows of %s' % (head, dfname))
+        for i, row in enumerate(df.head(head)):
+            print('%s. %s' % (i, row))
 
 def spark_context(appname='cms', yarn=None, verbose=False, python_files=[]):
     # define spark context, it's main object which allow

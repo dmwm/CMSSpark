@@ -270,7 +270,7 @@ def run(path, amq, stomp, yarn=None, verbose=False):
     df.registerTempTable('df')
     print_rows(df, "DataFrame", verbose)
 
-    print 'Schema:'
+    print('Schema:')
     df.printSchema()
 
     # send data to CERN MONIT via stomp AMQ, see send2monit function
