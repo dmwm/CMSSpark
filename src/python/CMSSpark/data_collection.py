@@ -43,6 +43,12 @@ def yesterday():
     return time.gmtime(time.time() - 60 * 60 * 24)
 
 
+def short_date_to_unix(date):
+
+    #Convert short date string into UNIX timestamp
+    return int(time.mktime(time.strptime(date, '%Y/%m/%d')))
+
+
 def short_date_string(date):
 
     # Convert given date into YYYY/MM/DD date format - 2017/07/05
