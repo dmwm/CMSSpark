@@ -348,8 +348,10 @@ def main():
     # Register clean_site_name to be used with SQL queries
     sql_context.udf.register("clean_site_name", clean_site_name)
 
+    f_b_s_start_time = time.time()
     # Create temp table with file name, block name, site name and site from PhEDEx
     create_file_block_site_table(ctx, sql_context, verbose)
+    f_b_s_elapsed_time = elapsed_time(f_b_s_start_time)
 
     cmssw_start_time = time.time()
     aggregated_cmssw_df = run_agg_cmssw(date, ctx, sql_context, verbose)
@@ -432,6 +434,7 @@ def main():
     print('End time           : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Total elapsed time : %s' % elapsed_time(start_time))
 
+    print('FileBlockSite elapsed time : %s' % f_b_s_elapsed_time)
     print('AAA elapsed time           : %s' % aaa_elapsed_time)
     print('CMSSW elapsed time         : %s' % cmssw_elapsed_time)
     print('EOS elapsed time           : %s' % eos_elapsed_time)
