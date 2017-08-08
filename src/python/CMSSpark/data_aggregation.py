@@ -68,13 +68,15 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
     # - distinct users           +
     # - stream: crab             +
     # - timestamp                +
+    # - site tier                +
 
     cols = ['SiteName AS site_name',
             'dataset_name',
             'count(dataset_name) AS nacc',
             'count(distinct(UserId)) AS distinct_users',
-            '\"crab\" as stream',
-            '%s AS timestamp' % unix_date]
+            '\"crab\" AS stream',
+            '%s AS timestamp' % unix_date,
+            'first(tier_from_site_name(SiteName)) AS site_tier']
 
     # Build a query with "cols" columns
     query = ("SELECT %s FROM jm_df "\
@@ -119,13 +121,15 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
     # - distinct users           +
     # - stream: eos              +
     # - timestamp                +
+    # - site tier                +
 
     cols = ['site_name',
             'dataset_name',
             'count(dataset_name) AS nacc',
             'count(distinct(eos_df.user_dn)) AS distinct_users',
             '\"eos\" as stream',
-            '%s AS timestamp' % unix_date]
+            '%s AS timestamp' % unix_date,
+            'first(tier_from_site_name(site_name)) AS site_tier']
 
 
     # Build a query with "cols" columns
@@ -172,13 +176,15 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
     # - distinct users           +
     # - stream: aaa              +
     # - timestamp                +
+    # - site tier                +
 
     cols = ['src_experiment_site AS site_name',
             'dataset_name',
             'count(dataset_name) AS nacc',
             'count(distinct(aaa_df.user_dn)) AS distinct_users',
             '\"aaa\" as stream',
-            '%s AS timestamp' % unix_date]
+            '%s AS timestamp' % unix_date,
+            'first(tier_from_site_name(src_experiment_site)) AS site_tier']
 
 
     # Build a query with "cols" columns
@@ -223,13 +229,15 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
     # - distinct users           +
     # - stream: cmssw            +
     # - timestamp                +
+    # - site tier                +
 
     cols = ['cmssw_df.SITE_NAME AS site_name',
             'dataset_name',
             'count(dataset_name) AS nacc',
             'count(distinct(USER_DN)) AS distinct_users',
             '\"cmssw\" as stream',
-            '%s AS timestamp' % unix_date]
+            '%s AS timestamp' % unix_date,
+            'first(tier_from_site_name(cmssw_df.SITE_NAME)) AS site_tier']
 
     # Build a query with "cols" columns
     query = ("SELECT %s FROM cmssw_df "\
@@ -311,6 +319,16 @@ def clean_site_name(s):
     return join
 
 
+def tier_from_site_name(s):
+    """
+    Splits site name by _ (underscore), and takes only the first part that represents tier.
+    """
+    split = s.split('_')
+    tier = str(split[0])
+
+    return tier
+
+
 def main():
     "Main function"
     optmgr = OptionParser()
@@ -347,6 +365,9 @@ def main():
 
     # Register clean_site_name to be used with SQL queries
     sql_context.udf.register("clean_site_name", clean_site_name)
+
+    # Register tier_from_site_name to be used with SQL queries
+    sql_context.udf.register("tier_from_site_name", tier_from_site_name)
 
     f_b_s_start_time = time.time()
     # Create temp table with file name, block name, site name and site from PhEDEx
