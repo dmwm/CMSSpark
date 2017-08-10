@@ -441,7 +441,9 @@ def aggregated_data_schema():
     dataset_name: string (nullable = true)
     nacc: integer (nullable = true)
     distinct_users: integer (nullable = true)
-    stream: string (nullable = true)S
+    stream: string (nullable = true)
+    timestamp: integer (nullable = true)
+    site_tier: string (nullable = true)
     """
     return StructType([
         StructField("site_name", StringType(), True),
@@ -449,4 +451,6 @@ def aggregated_data_schema():
         StructField("nacc", IntegerType(), True),
         StructField("distinct_users", IntegerType(), True),
         StructField("stream", StringType(), True),
+        StructField("timestamp", IntegerType(), True),
+        StructField("site_tier", StringType(), True),
     ])
