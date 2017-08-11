@@ -90,6 +90,20 @@ def unionAll(dfs):
     """
     return reduce(DataFrame.unionAll, dfs)
 
+
+def unionAll_cols(dfs, cols):
+    """
+    Unions snapshots in one dataframe
+
+    :param item: list of dataframes
+    :returns: union of dataframes
+    """
+
+    result = unionAll(df.select(cols) for df in dfs)
+
+    return result
+
+
 def file_list(basedir, fromdate=None, todate=None):
     """
     Finds snapshots in given directory by interval dates
@@ -398,6 +412,29 @@ def aaa_tables(sqlContext,
 
     # create new spark DataFrame
     aaa_df = sqlContext.createDataFrame(aaa_rdd)
+    aaa_df.registerTempTable('aaa_df')
+    tables = {'aaa_df':aaa_df}
+    return tables
+
+def aaa_tables_enr(sqlContext,
+        hdir='hdfs:///project/monitoring/archive/xrootd/enr/gled',
+        date=None, verbose=False):
+    """
+    Parse AAA HDFS records.
+
+    Example of AAA (xrootd) JSON record on HDFS
+    {"data":{"activity":"r","app_info":"","client_domain":"cern.ch","client_host":"b608a4fe55","end_time":1491789715000,"file_lfn":"/eos/cms/store/hidata/PARun2016C/PAEGJet1/AOD/PromptReco-v1/000/286/471/00000/7483FE13-28BD-E611-A2BD-02163E01420E.root","file_size":189272229,"is_transfer":true,"operation_time":690,"read_average":0.0,"read_bytes":0,"read_bytes_at_close":189272229,"read_max":0,"read_min":0,"read_operations":0,"read_sigma":0.0,"read_single_average":0.0,"read_single_bytes":0,"read_single_max":0,"read_single_min":0,"read_single_operations":0,"read_single_sigma":0.0,"read_vector_average":0.0,"read_vector_bytes":0,"read_vector_count_average":0.0,"read_vector_count_max":0,"read_vector_count_min":0,"read_vector_count_sigma":0.0,"read_vector_max":0,"read_vector_min":0,"read_vector_operations":0,"read_vector_sigma":0.0,"remote_access":false,"server_domain":"cern.ch","server_host":"p05799459u51457","server_username":"","start_time":1491789025000,"throughput":274307.57826086954,"unique_id":"03404bbc-1d90-11e7-9717-47f48e80beef-2e48","user":"","user_dn":"","user_fqan":"","user_role":"","vo":"","write_average":0.0,"write_bytes":0,"write_bytes_at_close":0,"write_max":0,"write_min":0,"write_operations":0,"write_sigma":0.0},"metadata":{"event_timestamp":1491789715000,"hostname":"monit-amqsource-fafa51de8d.cern.ch","kafka_timestamp":1491789741627,"original-destination":"/topic/xrootd.cms.eos","partition":"10","producer":"xrootd","timestamp":1491789740015,"topic":"xrootd_raw_gled","type":"gled","type_prefix":"raw","version":"003"}}
+
+    :returns: a dictionary with AAA Spark DataFrame
+    """
+    if  not date:
+        # by default we read yesterdate data
+        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+
+    hpath = '%s/%s' % (hdir, date)
+    cols = ['data.src_experiment_site', 'data.user_dn', 'data.file_lfn']
+    aaa_df = unionAll_cols([sqlContext.jsonFile(path) for path in files(hpath, verbose)], cols)
+
     aaa_df.registerTempTable('aaa_df')
     tables = {'aaa_df':aaa_df}
     return tables

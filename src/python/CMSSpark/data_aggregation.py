@@ -14,7 +14,7 @@ from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
 
 # CMSSpark modules
-from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables, jm_tables, phedex_tables
+from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables_enr, eos_tables, jm_tables, phedex_tables
 from CMSSpark.spark_utils import spark_context, print_rows, split_dataset
 from CMSSpark.utils import elapsed_time
 from CMSSpark.data_collection import  yesterday, short_date_string, long_date_string, output_dataframe, run_query, short_date_to_unix
@@ -165,7 +165,7 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
     date = short_date_string(date)
 
     # Create AAA tables in sql_context
-    aaa_df = aaa_tables(sql_context, hdir=hdir, date=date, verbose=verbose)
+    aaa_df = aaa_tables_enr(sql_context, hdir=hdir, date=date, verbose=verbose)
 
     if verbose:
         print('Found %s records in AAA stream' % aaa_df['aaa_df'].count())
