@@ -462,7 +462,7 @@ def eos_tables(sqlContext,
     def parse_log(r):
         "Local helper function to parse EOS record and extract intersting fields"
         rdict = {}
-        for item in r['data'].split('&'):
+        for item in str(r['data']).split('&'):
             if  item.startswith('path='):
                 rdict['file_lfn'] = item.split('path=')[-1]
             if  item.startswith('sec.info='):
