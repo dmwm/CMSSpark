@@ -454,3 +454,26 @@ def aggregated_data_schema():
         StructField("timestamp", IntegerType(), True),
         StructField("site_tier", StringType(), True),
     ])
+
+def schema_empty_aaa():
+    """
+    src_experiment_site: string (nullable = true)
+    user_dn: string (nullable = true)
+    file_lfn: string (nullable = true)
+    """
+    return StructType([
+        StructField("src_experiment_site", StringType(), True),
+        StructField("user_dn", StringType(), True),
+        StructField("file_lfn", StringType(), True),
+    ])
+
+def schema_empty_eos():
+    """
+    src_experiment_site: string (nullable = true)
+    """
+    return StructType([
+        StructField("file_lfn", StringType(), True),
+        StructField("user_dn", StringType(), True),
+        StructField("host", StringType(), True),
+    ])
+

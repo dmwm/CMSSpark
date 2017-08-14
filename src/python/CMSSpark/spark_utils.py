@@ -21,7 +21,7 @@ from CMSSpark.schemas import schema_processing_eras, schema_dataset_access_types
 from CMSSpark.schemas import schema_acquisition_eras,  schema_datasets, schema_blocks
 from CMSSpark.schemas import schema_files, schema_mod_configs, schema_out_configs
 from CMSSpark.schemas import schema_rel_versions, schema_file_lumis, schema_phedex
-from CMSSpark.schemas import schema_jm, schema_cmssw, schema_asodb
+from CMSSpark.schemas import schema_jm, schema_cmssw, schema_asodb, schema_empty_aaa, schema_empty_eos
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import Row
@@ -81,17 +81,7 @@ def avro_files(path, verbose=0):
     fnames = [f for f in pipe.stdout.read().split('\n') if f.endswith('avro')]
     return fnames
 
-def unionAll(dfs):
-    """
-    Unions snapshots in one dataframe
-
-    :param item: list of dataframes
-    :returns: union of dataframes
-    """
-    return reduce(DataFrame.unionAll, dfs)
-
-
-def unionAll_cols(dfs, cols):
+def unionAll(dfs, cols=None):
     """
     Unions snapshots in one dataframe
 
@@ -99,9 +89,12 @@ def unionAll_cols(dfs, cols):
     :returns: union of dataframes
     """
 
-    result = unionAll(df.select(cols) for df in dfs)
+    print ('unionAll_cols ' + str(dfs) + " " + str(cols))
 
-    return result
+    if cols == None:
+        return reduce(DataFrame.unionAll, dfs)
+    else:
+        return unionAll(df.select(cols) for df in dfs)
 
 
 def file_list(basedir, fromdate=None, todate=None):
@@ -433,7 +426,15 @@ def aaa_tables_enr(sqlContext,
 
     hpath = '%s/%s' % (hdir, date)
     cols = ['data.src_experiment_site', 'data.user_dn', 'data.file_lfn']
-    aaa_df = unionAll_cols([sqlContext.jsonFile(path) for path in files(hpath, verbose)], cols)
+
+    files_in_hpath = files(hpath, verbose)
+
+    aaa_df = []
+
+    if len(files_in_hpath) == 0:
+        aaa_df = sqlContext.createDataFrame([], schema=schema_empty_aaa())
+    else:
+        aaa_df = unionAll([sqlContext.jsonFile(path) for path in files_in_hpath], cols)
 
     aaa_df.registerTempTable('aaa_df')
     tables = {'aaa_df':aaa_df}
@@ -458,7 +459,17 @@ def eos_tables(sqlContext,
         date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
 
     hpath = '%s/%s' % (hdir, date)
-    rdd = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
+
+    files_in_hpath = files(hpath, verbose)
+
+    if len(files_in_hpath) == 0:
+        eos_df = sqlContext.createDataFrame([], schema=schema_empty_eos())
+        eos_df.registerTempTable('eos_df')
+        tables = {'eos_df':eos_df}
+        return tables
+    
+    rdd = unionAll([sqlContext.jsonFile(path) for path in files_in_hpath])
+
     def parse_log(r):
         "Local helper function to parse EOS record and extract intersting fields"
         rdict = {}
