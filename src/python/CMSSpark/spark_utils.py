@@ -89,8 +89,6 @@ def unionAll(dfs, cols=None):
     :returns: union of dataframes
     """
 
-    print ('unionAll_cols ' + str(dfs) + " " + str(cols))
-
     if cols == None:
         return reduce(DataFrame.unionAll, dfs)
     else:
