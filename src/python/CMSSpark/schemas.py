@@ -441,7 +441,9 @@ def aggregated_data_schema():
     dataset_name: string (nullable = true)
     nacc: integer (nullable = true)
     distinct_users: integer (nullable = true)
-    stream: string (nullable = true)S
+    stream: string (nullable = true)
+    timestamp: integer (nullable = true)
+    site_tier: string (nullable = true)
     """
     return StructType([
         StructField("site_name", StringType(), True),
@@ -449,4 +451,29 @@ def aggregated_data_schema():
         StructField("nacc", IntegerType(), True),
         StructField("distinct_users", IntegerType(), True),
         StructField("stream", StringType(), True),
+        StructField("timestamp", IntegerType(), True),
+        StructField("site_tier", StringType(), True),
     ])
+
+def schema_empty_aaa():
+    """
+    src_experiment_site: string (nullable = true)
+    user_dn: string (nullable = true)
+    file_lfn: string (nullable = true)
+    """
+    return StructType([
+        StructField("src_experiment_site", StringType(), True),
+        StructField("user_dn", StringType(), True),
+        StructField("file_lfn", StringType(), True),
+    ])
+
+def schema_empty_eos():
+    """
+    src_experiment_site: string (nullable = true)
+    """
+    return StructType([
+        StructField("file_lfn", StringType(), True),
+        StructField("user_dn", StringType(), True),
+        StructField("host", StringType(), True),
+    ])
+

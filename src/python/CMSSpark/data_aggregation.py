@@ -14,10 +14,10 @@ from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
 
 # CMSSpark modules
-from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables, jm_tables, phedex_tables
+from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables_enr, eos_tables, jm_tables, phedex_tables
 from CMSSpark.spark_utils import spark_context, print_rows, split_dataset
 from CMSSpark.utils import elapsed_time
-from CMSSpark.data_collection import  yesterday, short_date_string, long_date_string, output_dataframe, run_query
+from CMSSpark.data_collection import  yesterday, short_date_string, long_date_string, output_dataframe, run_query, short_date_to_unix
 from pyspark.sql.functions import desc
 
 class OptionParser():
@@ -41,7 +41,7 @@ class OptionParser():
             dest="aaa_hdir", default="", help='AAA input directory path')
 
 
-def run_agg_jm(date, fout, ctx, sql_context, verbose=False):
+def run_agg_jm(date, ctx, sql_context, verbose=False):
     """
     Runs aggregation for JobMonitoring stream for a certain date.
     Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
@@ -49,6 +49,9 @@ def run_agg_jm(date, fout, ctx, sql_context, verbose=False):
     """
     if verbose:
         print('Starting JobMonitoring part')
+
+    # Make a UNIX timestamp from date
+    unix_date = short_date_to_unix(short_date_string(date))
 
     # Convert date
     date = long_date_string(date)
@@ -64,12 +67,16 @@ def run_agg_jm(date, fout, ctx, sql_context, verbose=False):
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: crab             +
+    # - timestamp                +
+    # - site tier                +
 
     cols = ['SiteName AS site_name',
             'dataset_name',
             'count(dataset_name) AS nacc',
             'count(distinct(UserId)) AS distinct_users',
-            '\"crab\" as stream']
+            '\"crab\" AS stream',
+            '%s AS timestamp' % unix_date,
+            'first(tier_from_site_name(SiteName)) AS site_tier']
 
     # Build a query with "cols" columns
     query = ("SELECT %s FROM jm_df "\
@@ -86,7 +93,7 @@ def run_agg_jm(date, fout, ctx, sql_context, verbose=False):
     return result
 
 
-def run_agg_eos(date, fout, ctx, sql_context, verbose=False):
+def run_agg_eos(date, ctx, sql_context, verbose=False):
     """
     Runs aggregation for EOS stream for a certain date.
     Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
@@ -96,6 +103,10 @@ def run_agg_eos(date, fout, ctx, sql_context, verbose=False):
     if verbose:
         print('Starting EOS part')
 
+    # Make a UNIX timestamp from date
+    unix_date = short_date_to_unix(short_date_string(date))
+
+    # Convert date
     date = short_date_string(date)
 
     # Create EOS tables in sql_context
@@ -109,12 +120,16 @@ def run_agg_eos(date, fout, ctx, sql_context, verbose=False):
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: eos              +
+    # - timestamp                +
+    # - site tier                +
 
     cols = ['site_name',
             'dataset_name',
             'count(dataset_name) AS nacc',
             'count(distinct(eos_df.user_dn)) AS distinct_users',
-            '\"eos\" as stream']
+            '\"eos\" as stream',
+            '%s AS timestamp' % unix_date,
+            'first(tier_from_site_name(site_name)) AS site_tier']
 
 
     # Build a query with "cols" columns
@@ -132,7 +147,7 @@ def run_agg_eos(date, fout, ctx, sql_context, verbose=False):
     return result
 
 
-def run_agg_aaa(date, fout, ctx, sql_context, hdir='hdfs:///project/monitoring/archive/xrootd/enr/gled', verbose=False):
+def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive/xrootd/enr/gled', verbose=False):
     """
     Runs aggregation for JobMonitoring stream for a certain date.
     Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
@@ -143,11 +158,14 @@ def run_agg_aaa(date, fout, ctx, sql_context, hdir='hdfs:///project/monitoring/a
     if verbose:
         print('Starting AAA part')
 
+    # Make a UNIX timestamp from date
+    unix_date = short_date_to_unix(short_date_string(date))
+
     # Convert date
     date = short_date_string(date)
 
     # Create AAA tables in sql_context
-    aaa_df = aaa_tables(sql_context, hdir=hdir, date=date, verbose=verbose)
+    aaa_df = aaa_tables_enr(sql_context, hdir=hdir, date=date, verbose=verbose)
 
     if verbose:
         print('Found %s records in AAA stream' % aaa_df['aaa_df'].count())
@@ -157,12 +175,16 @@ def run_agg_aaa(date, fout, ctx, sql_context, hdir='hdfs:///project/monitoring/a
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: aaa              +
+    # - timestamp                +
+    # - site tier                +
 
     cols = ['src_experiment_site AS site_name',
             'dataset_name',
             'count(dataset_name) AS nacc',
             'count(distinct(aaa_df.user_dn)) AS distinct_users',
-            '\"aaa\" as stream']
+            '\"aaa\" as stream',
+            '%s AS timestamp' % unix_date,
+            'first(tier_from_site_name(src_experiment_site)) AS site_tier']
 
 
     # Build a query with "cols" columns
@@ -180,7 +202,7 @@ def run_agg_aaa(date, fout, ctx, sql_context, hdir='hdfs:///project/monitoring/a
     return result
 
 
-def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
+def run_agg_cmssw(date, ctx, sql_context, verbose=False):
     """
     Runs aggregation for CMSSW stream for a certain date.
     Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
@@ -188,6 +210,9 @@ def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
     """
     if verbose:
         print('Starting CMSSW part')
+
+    # Make a UNIX timestamp from date
+    unix_date = short_date_to_unix(short_date_string(date))
 
     # Convert date
     date = long_date_string(date)
@@ -203,12 +228,16 @@ def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: cmssw            +
+    # - timestamp                +
+    # - site tier                +
 
     cols = ['cmssw_df.SITE_NAME AS site_name',
             'dataset_name',
             'count(dataset_name) AS nacc',
             'count(distinct(USER_DN)) AS distinct_users',
-            '\"cmssw\" as stream']
+            '\"cmssw\" as stream',
+            '%s AS timestamp' % unix_date,
+            'first(tier_from_site_name(cmssw_df.SITE_NAME)) AS site_tier']
 
     # Build a query with "cols" columns
     query = ("SELECT %s FROM cmssw_df "\
@@ -225,7 +254,7 @@ def run_agg_cmssw(date, fout, ctx, sql_context, verbose=False):
     return result
 
 
-def quiet_logs( sc ):
+def quiet_logs(sc):
     """
     Sets logger's level to ERROR so INFO logs would not show up.
     """
@@ -290,6 +319,16 @@ def clean_site_name(s):
     return join
 
 
+def tier_from_site_name(s):
+    """
+    Splits site name by _ (underscore), and takes only the first part that represents tier.
+    """
+    split = s.split('_')
+    tier = str(split[0])
+
+    return tier
+
+
 def main():
     "Main function"
     optmgr = OptionParser()
@@ -327,27 +366,32 @@ def main():
     # Register clean_site_name to be used with SQL queries
     sql_context.udf.register("clean_site_name", clean_site_name)
 
+    # Register tier_from_site_name to be used with SQL queries
+    sql_context.udf.register("tier_from_site_name", tier_from_site_name)
+
+    f_b_s_start_time = time.time()
     # Create temp table with file name, block name, site name and site from PhEDEx
     create_file_block_site_table(ctx, sql_context, verbose)
+    f_b_s_elapsed_time = elapsed_time(f_b_s_start_time)
 
     cmssw_start_time = time.time()
-    aggregated_cmssw_df = run_agg_cmssw(date, fout, ctx, sql_context, verbose)
+    aggregated_cmssw_df = run_agg_cmssw(date, ctx, sql_context, verbose)
     cmssw_elapsed_time = elapsed_time(cmssw_start_time)
 
     aaa_start_time = time.time()
     if len(aaa_hdir) > 0:
-        aggregated_aaa_df = run_agg_aaa(date, fout, ctx, sql_context, aaa_hdir, verbose)
+        aggregated_aaa_df = run_agg_aaa(date, ctx, sql_context, aaa_hdir, verbose)
     else:
-        aggregated_aaa_df = run_agg_aaa(date, fout, ctx, sql_context, verbose=verbose)
+        aggregated_aaa_df = run_agg_aaa(date, ctx, sql_context, verbose=verbose)
 
     aaa_elapsed_time = elapsed_time(aaa_start_time)
 
     eos_start_time = time.time()
-    aggregated_eos_df = run_agg_eos(date, fout, ctx, sql_context, verbose)
+    aggregated_eos_df = run_agg_eos(date, ctx, sql_context, verbose)
     eos_elapsed_time = elapsed_time(eos_start_time)
 
     jm_start_time = time.time()
-    aggregated_jm_df = run_agg_jm(date, fout, ctx, sql_context, verbose)
+    aggregated_jm_df = run_agg_jm(date, ctx, sql_context, verbose)
     jm_elapsed_time = elapsed_time(jm_start_time)
 
     if verbose:
@@ -411,6 +455,7 @@ def main():
     print('End time           : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Total elapsed time : %s' % elapsed_time(start_time))
 
+    print('FileBlockSite elapsed time : %s' % f_b_s_elapsed_time)
     print('AAA elapsed time           : %s' % aaa_elapsed_time)
     print('CMSSW elapsed time         : %s' % cmssw_elapsed_time)
     print('EOS elapsed time           : %s' % eos_elapsed_time)
