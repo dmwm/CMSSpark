@@ -46,7 +46,7 @@ def yesterday():
 def short_date_to_unix(date):
 
     #Convert short date string into UNIX timestamp
-    return int(time.mktime(time.strptime(date, '%Y/%m/%d')))
+    return int(time.mktime(time.strptime(date, '%Y/%m/%d'))) * 1000
 
 
 def short_date_string(date):

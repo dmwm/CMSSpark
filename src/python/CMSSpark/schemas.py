@@ -451,7 +451,7 @@ def aggregated_data_schema():
         StructField("nacc", IntegerType(), True),
         StructField("distinct_users", IntegerType(), True),
         StructField("stream", StringType(), True),
-        StructField("timestamp", IntegerType(), True),
+        StructField("timestamp", LongType(), True),
         StructField("site_tier", StringType(), True),
     ])
 
