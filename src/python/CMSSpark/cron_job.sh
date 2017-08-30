@@ -38,7 +38,11 @@ aaa_dir="/project/monitoring/archive/xrootd/enr/gled"
 cmssw_dir="/project/awg/cms/cmssw-popularity/avro-snappy"
 eos_dir="/project/monitoring/archive/eos/logs/reports/cms"
 jm_dir="/project/awg/cms/jm-data-popularity/avro-snappy"
-output_dir="hdfs:///cms/users/jrumsevi/agg/Aggregated"
+output_dir="hdfs:///cms/users/jrumsevi/agg"
+python_path="$PYTHONPATH:/afs/cern.ch/user/j/jrumsevi/CMSSpark/src/python"
+path="/afs/cern.ch/user/j/jrumsevi/CMSSpark/bin:$PATH"
+stomp_path="/afs/cern.ch/user/j/jrumsevi/CMSSpark/static/stomp.py-4.1.15-py2.7.egg"
+credentials_json_path="/afs/cern.ch/user/j/jrumsevi/amq_broker.json"
 
 aaa_date=$(last_non_temp_short_date $aaa_dir)
 eos_date=$(last_non_temp_short_date $eos_dir)
@@ -53,17 +57,22 @@ log "JM date $jm_date"
 if [ $aaa_date != "" ] && [ $aaa_date == $cmssw_date ] && [ $cmssw_date == $eos_date ] && [ $eos_date == $jm_date ]; then
     log "All streams are ready for $aaa_date"
 
-    output_dir_with_date=$output_dir"/"${aaa_date:0:4}"/"${aaa_date:4:2}"/"${aaa_date:6:2}
-    log "Output directory" $output_dir_with_date
+    output_dir_with_date=$output_dir"/Aggregated/"${aaa_date:0:4}"/"${aaa_date:4:2}"/"${aaa_date:6:2}
+    log "Output directory $output_dir_with_date"
     output_dir_ls=$(hadoop fs -ls $output_dir_with_date | tail -n1)
     if [ "$output_dir_ls" != "" ]; then
         log "Output at $output_dir_with_date exist, will cancel"
     else
         log "Output at $output_dir_with_date does not exist, will run"
+
+        export PYTHONPATH="$python_path"
+        export PATH="$path"
+        run_spark data_aggregation.py --yarn --date "$aaa_date" --fout "$output_dir" --verbose
+        run_spark cern_monit.py --hdir "$output_dir_with_date" --stomp="$stomp_path" --amq "$credentials_json_path" --verbose
     fi
 
 else
     log "Not running script because not all streams are ready"
 fi
-
+ 
 log "Finishing script"
