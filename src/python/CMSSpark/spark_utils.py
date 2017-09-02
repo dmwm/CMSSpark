@@ -368,8 +368,12 @@ def avro_rdd(ctx, sqlContext, hdir, date=None, verbose=None):
     awrite="org.apache.hadoop.io.NullWritable"
     aconv="org.apache.spark.examples.pythonconverters.AvroWrapperToJavaConverter"
 
+    rdd = []
     # load data from HDFS
-    rdd = ctx.union([ctx.newAPIHadoopFile(f, aformat, akey, awrite, aconv) for f in afiles])
+    if len(afiles) == 0:
+        rdd = ctx.emptyRDD()
+    else:
+        rdd = ctx.union([ctx.newAPIHadoopFile(f, aformat, akey, awrite, aconv) for f in afiles])
 
     # the records are stored as [(dict, None), (dict, None)], therefore we take first element
     # and assign them to new rdd
@@ -457,6 +461,7 @@ def eos_tables(sqlContext,
         date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
 
     hpath = '%s/%s' % (hdir, date)
+    cols = ['data', 'metadata.timestamp']
 
     files_in_hpath = files(hpath, verbose)
 
@@ -466,7 +471,7 @@ def eos_tables(sqlContext,
         tables = {'eos_df':eos_df}
         return tables
     
-    rdd = unionAll([sqlContext.jsonFile(path) for path in files_in_hpath])
+    rdd = unionAll([sqlContext.jsonFile(path) for path in files_in_hpath], cols)
 
     def parse_log(r):
         "Local helper function to parse EOS record and extract intersting fields"
@@ -479,7 +484,7 @@ def eos_tables(sqlContext,
             if  item.startswith('sec.host='):
                 rdict['host'] = item.split('sec.host=')[-1]
 
-        rdict['timestamp'] = r['metadata']['timestamp']
+        rdict['timestamp'] = r['timestamp']
 
         return rdict
 
