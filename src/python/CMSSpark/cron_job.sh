@@ -44,6 +44,11 @@ path="/afs/cern.ch/user/j/jrumsevi/CMSSpark/bin:$PATH"
 stomp_path="/afs/cern.ch/user/j/jrumsevi/CMSSpark/static/stomp.py-4.1.15-py2.7.egg"
 credentials_json_path="/afs/cern.ch/user/j/jrumsevi/amq_broker.json"
 
+# Kerberos
+export AGGKEYTAB=/afs/cern.ch/user/j/jrumsevi/agg.keytab
+principal=`klist -k $AGGKEYTAB | tail -1 | awk '{print $2}'`
+kinit $principal -k -t $AGGKEYTAB
+
 aaa_date=$(last_non_temp_short_date $aaa_dir)
 eos_date=$(last_non_temp_short_date $eos_dir)
 cmssw_date=$(last_non_temp_long_date $cmssw_dir)
