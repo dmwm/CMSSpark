@@ -49,10 +49,22 @@ keytab_dir="/afs/cern.ch/user/j/jrumsevi/agg.keytab"
 principal=`klist -k "$keytab_dir" | tail -1 | awk '{print $2}'`
 kinit $principal -k -t "$keytab_dir"
 
-aaa_date=$(last_non_temp_short_date $aaa_dir)
-eos_date=$(last_non_temp_short_date $eos_dir)
-cmssw_date=$(last_non_temp_long_date $cmssw_dir)
-jm_date=$(last_non_temp_long_date $jm_dir)
+aaa_date=""
+eos_date=""
+cmssw_date=""
+jm_date=""
+
+if [ "$1" != "" ]; then
+    aaa_date="$1"
+    eos_date="$aaa_date"
+    cmssw_date="$aaa_date"
+    jm_date="$aaa_date"
+else
+    aaa_date=$(last_non_temp_short_date $aaa_dir)
+    eos_date=$(last_non_temp_short_date $eos_dir)
+    cmssw_date=$(last_non_temp_long_date $cmssw_dir)
+    jm_date=$(last_non_temp_long_date $jm_dir)
+fi
 
 log "AAA date $aaa_date"
 log "CMSSW date $cmssw_date"
@@ -72,7 +84,8 @@ if [ $aaa_date != "" ] && [ $aaa_date == $cmssw_date ] && [ $cmssw_date == $eos_
 
         export PYTHONPATH="$python_path"
         export PATH="$path"
-        run_spark data_aggregation.py --yarn --date "$aaa_date" --fout "$output_dir" --verbose
+        # Add --verbose for verbose output
+        run_spark data_aggregation.py --yarn --date "$aaa_date" --fout "$output_dir"
         run_spark cern_monit.py --hdir "$output_dir_with_date" --stomp="$stomp_path" --amq "$credentials_json_path" --verbose
     fi
 
