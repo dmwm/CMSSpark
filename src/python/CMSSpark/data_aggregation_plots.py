@@ -3,7 +3,7 @@ import csv
 import time
 
 
-input_file_name = '../../../etc/example.csv'
+input_file_name = '/home/justinas/Desktop/Projects/MatPlotLibPlot/all3.csv'
 
 # Open a file and read everything into dictionaries according to first line (header) of file
 # For example if header is A,B and file contains entries 1,2 and 3,4 then the output will be
@@ -216,13 +216,27 @@ def make_table(bucket, title1, title2, limit_results=None, filename=None):
         print (csv)
 
 
+# If record's value of 'column' is not in 'valid_values', change it to 'other_value'
+def filter_values(records, column, valid_values, other_value):
+    new_records = list(records)
+
+    for record in records:
+        if record[column] not in valid_values:
+            record[column] = other_value
+
+    return new_records
+
+
+# Include only T0, T1, T2, T3 site tiers. Set others to 'Other'
+rows = filter_values(rows, 'site_tier', ['T0', 'T1', 'T2', 'T2', 'T3'], 'Other')
+
 number_of_access('NumberOfAccess.png')
 grouped_by_tier = make_buckets(["data_tier"], rows, "nacc")
-grouped_by_siteTier = make_buckets(["site_tier"], rows, "nacc")
-grouped_by_dateAndTier = make_buckets(["data_tier", "date"], rows, "nacc")
-grouped_by_dateAndSiteTier = make_buckets(["site_tier", "date"], rows, "nacc")
+grouped_by_site_tier = make_buckets(["site_tier"], rows, "nacc")
+grouped_by_date_and_tier = make_buckets(["data_tier", "date"], rows, "nacc")
+grouped_by_date_and_site_tier = make_buckets(["site_tier", "date"], rows, "nacc")
 
-draw_buckets(grouped_by_dateAndTier, 10, "GroupedByDateAndTier.png")
-draw_buckets(grouped_by_dateAndSiteTier, 10, "GroupedByDateAndSiteTier.png")
+draw_buckets(grouped_by_date_and_tier, 10, "GroupedByDateAndTier.png")
+draw_buckets(grouped_by_date_and_site_tier, 10, "GroupedByDateAndSiteTier.png")
 make_table(grouped_by_tier, "Tier", "Number of accesses", 20, 'GroupedByTier.csv')
-make_table(grouped_by_siteTier, "Site tier", "Number of accesses", 20, 'GroupedBySiteTier.csv')
+make_table(grouped_by_site_tier, "Site tier", "Number of accesses", 20, 'GroupedBySiteTier.csv')
