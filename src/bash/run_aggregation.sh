@@ -74,7 +74,7 @@ log "JM date $jm_date"
 if [ $aaa_date != "" ] && [ $aaa_date == $cmssw_date ] && [ $cmssw_date == $eos_date ] && [ $eos_date == $jm_date ]; then
     log "All streams are ready for $aaa_date"
 
-    output_dir_with_date=$output_dir"/Aggregated/"${aaa_date:0:4}"/"${aaa_date:4:2}"/"${aaa_date:6:2}
+    output_dir_with_date=$output_dir"/"${aaa_date:0:4}"/"${aaa_date:4:2}"/"${aaa_date:6:2}
     log "Output directory $output_dir_with_date"
     output_dir_ls=$(hadoop fs -ls $output_dir_with_date | tail -n1)
     if [ "$output_dir_ls" != "" ]; then

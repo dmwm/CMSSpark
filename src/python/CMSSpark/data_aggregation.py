@@ -442,7 +442,7 @@ def main():
     if verbose:
         print('Done joining all outputs to a single dataframe')
 
-    fout = fout + "/Aggregated/" + short_date_string(date)
+    fout = fout + "/" + short_date_string(date)
 
     # output_dataframe(fout + "/Aggregated/CMSSW/" + short_date_string(date), aggregated_cmssw_df, verbose)
     # output_dataframe(fout + "/Aggregated/AAA/" + short_date_string(date), aggregated_aaa_df, verbose)
