@@ -33,14 +33,16 @@ last_non_temp_long_date() {
 log "----------------------------------------------"
 log "Starting script"
 
+this_dirname=$(dirname "$0")
+python_path="$PYTHONPATH:"$this_dirname"/../python"
+path=$this_dirname"/../../bin:$PATH"
+
 # Paths of input files in hadoop file system
 aaa_dir="/project/monitoring/archive/xrootd/enr/gled"
 cmssw_dir="/project/awg/cms/cmssw-popularity/avro-snappy"
 eos_dir="/project/monitoring/archive/eos/logs/reports/cms"
 jm_dir="/project/awg/cms/jm-data-popularity/avro-snappy"
 output_dir="hdfs:///cms/users/jrumsevi/agg"
-python_path="$PYTHONPATH:/afs/cern.ch/user/j/jrumsevi/CMSSpark/src/python"
-path="/afs/cern.ch/user/j/jrumsevi/CMSSpark/bin:$PATH"
 stomp_path="/afs/cern.ch/user/j/jrumsevi/CMSSpark/static/stomp.py-4.1.15-py2.7.egg"
 credentials_json_path="/afs/cern.ch/user/j/jrumsevi/amq_broker.json"
 keytab_dir="/afs/cern.ch/user/j/jrumsevi/agg.keytab"
