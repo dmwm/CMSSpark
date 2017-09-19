@@ -444,7 +444,12 @@ def aggregated_data_schema():
     stream: string (nullable = true)
     timestamp: integer (nullable = true)
     site_tier: string (nullable = true)
+    cpu_time double (nullable = true)
+    primary_name: string (nullable = true)
+    processing_name: string (nullable = true)
+    data_tier: string (nullable = true)
     """
+
     return StructType([
         StructField("site_name", StringType(), True),
         StructField("dataset_name", StringType(), True),
@@ -453,6 +458,10 @@ def aggregated_data_schema():
         StructField("stream", StringType(), True),
         StructField("timestamp", LongType(), True),
         StructField("site_tier", StringType(), True),
+        StructField("cpu_time", DoubleType(), True),
+        StructField("primary_name", StringType(), True),
+        StructField("processing_name", StringType(), True),
+        StructField("data_tier", StringType(), True),
     ])
 
 def schema_empty_aaa():

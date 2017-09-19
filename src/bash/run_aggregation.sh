@@ -88,7 +88,7 @@ if [ $aaa_date != "" ] && [ $aaa_date == $cmssw_date ] && [ $cmssw_date == $eos_
         export PATH="$path"
         # Add --verbose for verbose output
         run_spark data_aggregation.py --yarn --date "$aaa_date" --fout "$output_dir"
-        run_spark cern_monit.py --hdir "$output_dir_with_date" --stomp="$stomp_path" --amq "$credentials_json_path" --verbose
+        run_spark cern_monit.py --hdir "$output_dir_with_date" --stomp="$stomp_path" --amq "$credentials_json_path" --verbose --aggregation_schema
     fi
 
 else
