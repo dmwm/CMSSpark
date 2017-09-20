@@ -19,6 +19,7 @@ from CMSSpark.spark_utils import spark_context, print_rows, split_dataset
 from CMSSpark.utils import elapsed_time
 from CMSSpark.data_collection import  yesterday, short_date_string, long_date_string, output_dataframe, run_query, short_date_to_unix
 from pyspark.sql.functions import desc
+from pyspark.sql.functions import split, col
 
 class OptionParser():
     def __init__(self):
@@ -47,8 +48,7 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
     Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
     Result dataframe is sorted by nacc.
     """
-    if verbose:
-        print('Starting JobMonitoring part')
+    print('Starting JobMonitoring part')
 
     # Make a UNIX timestamp from date
     unix_date = short_date_to_unix(short_date_string(date))
@@ -69,6 +69,7 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
     # - stream: crab             +
     # - timestamp                +
     # - site tier                +
+    # - cpu time                 +
 
     cols = ['SiteName AS site_name',
             'dataset_name',
@@ -76,7 +77,8 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
             'count(distinct(UserId)) AS distinct_users',
             '\"crab\" AS stream',
             '%s AS timestamp' % unix_date,
-            'first(tier_from_site_name(SiteName)) AS site_tier']
+            'first(tier_from_site_name(SiteName)) AS site_tier',
+            'SUM(ExeCPU) AS cpu_time']
 
     # Build a query with "cols" columns
     query = ("SELECT %s FROM jm_df "\
@@ -85,10 +87,15 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
 
     result = run_query(query, sql_context, verbose)
 
-    result = result.sort(desc("nacc"))
+    # result = result.sort(desc("nacc"))
+
+    # Split "dataset" column into "primds", "procds" and "tier"
+    result = split_dataset_col(result, 'dataset_name')
 
     if verbose:
         print('Finished JobMonitoring part (output is %s records)' % result.count())
+    else:
+        print('Finished JobMonitoring part')
 
     return result
 
@@ -100,8 +107,7 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
     Site name is taken from f_b_s_df table which is joined by file name.
     Result dataframe is sorted by nacc.
     """
-    if verbose:
-        print('Starting EOS part')
+    print('Starting EOS part')
 
     # Make a UNIX timestamp from date
     unix_date = short_date_to_unix(short_date_string(date))
@@ -122,6 +128,7 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
     # - stream: eos              +
     # - timestamp                +
     # - site tier                +
+    # - cpu time                -1
 
     cols = ['site_name',
             'dataset_name',
@@ -129,7 +136,8 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
             'count(distinct(eos_df.user_dn)) AS distinct_users',
             '\"eos\" as stream',
             '%s AS timestamp' % unix_date,
-            'first(tier_from_site_name(site_name)) AS site_tier']
+            'first(tier_from_site_name(site_name)) AS site_tier',
+            '-1 AS cpu_time']
 
 
     # Build a query with "cols" columns
@@ -139,10 +147,15 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
 
     result = run_query(query, sql_context, verbose)
 
-    result = result.sort(desc("nacc"))
+    # result = result.sort(desc("nacc"))
+
+    # Split "dataset" column into "primds", "procds" and "tier"
+    result = split_dataset_col(result, 'dataset_name')
 
     if verbose:
         print('Finished EOS part (output is %s records)' % result.count())
+    else:
+        print('Finished EOS part')
 
     return result
 
@@ -155,8 +168,7 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
     because enr records have src_experiment_site. src_experiment_site is used as site_name.
     Result dataframe is sorted by nacc.
     """
-    if verbose:
-        print('Starting AAA part')
+    print('Starting AAA part')
 
     # Make a UNIX timestamp from date
     unix_date = short_date_to_unix(short_date_string(date))
@@ -177,6 +189,7 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
     # - stream: aaa              +
     # - timestamp                +
     # - site tier                +
+    # - cpu time                -1
 
     cols = ['src_experiment_site AS site_name',
             'dataset_name',
@@ -184,7 +197,8 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
             'count(distinct(aaa_df.user_dn)) AS distinct_users',
             '\"aaa\" as stream',
             '%s AS timestamp' % unix_date,
-            'first(tier_from_site_name(src_experiment_site)) AS site_tier']
+            'first(tier_from_site_name(src_experiment_site)) AS site_tier',
+            '-1 AS cpu_time']
 
 
     # Build a query with "cols" columns
@@ -194,10 +208,15 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
 
     result = run_query(query, sql_context, verbose)
 
-    result = result.sort(desc("nacc"))
+    # result = result.sort(desc("nacc"))
+
+    # Split "dataset" column into "primds", "procds" and "tier"
+    result = split_dataset_col(result, 'dataset_name')
 
     if verbose:
         print('Finished AAA part (output is %s records)' % result.count())
+    else:
+        print('Finished AAA part')
 
     return result
 
@@ -208,8 +227,7 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
     Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
     Result dataframe is sorted by nacc.
     """
-    if verbose:
-        print('Starting CMSSW part')
+    print('Starting CMSSW part')
 
     # Make a UNIX timestamp from date
     unix_date = short_date_to_unix(short_date_string(date))
@@ -230,6 +248,7 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
     # - stream: cmssw            +
     # - timestamp                +
     # - site tier                +
+    # - cpu time                -1
 
     cols = ['cmssw_df.SITE_NAME AS site_name',
             'dataset_name',
@@ -237,7 +256,8 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
             'count(distinct(USER_DN)) AS distinct_users',
             '\"cmssw\" as stream',
             '%s AS timestamp' % unix_date,
-            'first(tier_from_site_name(cmssw_df.SITE_NAME)) AS site_tier']
+            'first(tier_from_site_name(cmssw_df.SITE_NAME)) AS site_tier',
+            '-1 AS cpu_time']
 
     # Build a query with "cols" columns
     query = ("SELECT %s FROM cmssw_df "\
@@ -246,10 +266,15 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
 
     result = run_query(query, sql_context, verbose)
 
-    result = result.sort(desc("nacc"))
+    # result = result.sort(desc("nacc"))
+
+    # Split "dataset" column into "primds", "procds" and "tier"
+    result = split_dataset_col(result, 'dataset_name')
 
     if verbose:
         print('Finished CMSSW part (output is %s records)' % result.count())
+    else:
+        print('Finished CMSSW part')
 
     return result
 
@@ -270,8 +295,7 @@ def create_file_block_site_table(ctx, sql_context, verbose=False):
     Site name is obtained from PhEDEx. Before site name is used, it is cleaned with clean_site_name function.
     After join is complete, only unique records are left in the table by using DISTINCT function.
     """
-    if verbose:
-        print('Starting file_block_site generation')
+    print('Starting file_block_site generation')
 
     cols = ['f_logical_file_name AS file_name',
             'b_block_name AS block_name',
@@ -300,7 +324,8 @@ def create_file_block_site_table(ctx, sql_context, verbose=False):
         result_distinct.show(20)
         print_rows(result_distinct, query_distinct, verbose, 5)
         result_distinct.printSchema()
-        print('Finished file_block_site generation')
+
+    print('Finished file_block_site generation')
 
 
 def clean_site_name(s):
@@ -327,6 +352,17 @@ def tier_from_site_name(s):
     tier = str(split[0])
 
     return tier
+
+
+def split_dataset_col(df, dcol):
+    """
+    Split dataset name in DataFrame into primary_name, processing_name , data_tier components.
+    Keep original column
+    """
+    ndf = df.withColumn("primary_name", split(col(dcol), "/").alias('primary_name').getItem(1))\
+            .withColumn("processing_name", split(col(dcol), "/").alias('processing_name').getItem(2))\
+            .withColumn("data_tier", split(col(dcol), "/").alias('data_tier').getItem(3))
+    return ndf
 
 
 def main():
@@ -406,7 +442,7 @@ def main():
     if verbose:
         print('Done joining all outputs to a single dataframe')
 
-    fout = fout + "/Aggregated/" + short_date_string(date)
+    fout = fout + "/" + short_date_string(date)
 
     # output_dataframe(fout + "/Aggregated/CMSSW/" + short_date_string(date), aggregated_cmssw_df, verbose)
     # output_dataframe(fout + "/Aggregated/AAA/" + short_date_string(date), aggregated_aaa_df, verbose)
