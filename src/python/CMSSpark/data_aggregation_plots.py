@@ -1,38 +1,49 @@
 import matplotlib.pyplot as plt
 import csv
 import time
+import argparse
 
+class OptionParser():
+    def __init__(self):
+        "User based option parser"
 
-input_file_name = '/home/justinas/Desktop/Projects/MatPlotLibPlot/all3.csv'
+        self.parser = argparse.ArgumentParser(prog='PROG', description='')
+
+        self.parser.add_argument("--input_filename", action="store",
+            dest='input_filename', default='', help='Input filename or path including filename')
+
 
 # Open a file and read everything into dictionaries according to first line (header) of file
 # For example if header is A,B and file contains entries 1,2 and 3,4 then the output will be
 # Array with such entries: [{"A":1, "B":2"}, {"A":3, "B":"4"}]
 # This piece of code also finds "timestamp" attribute (UNIX time milliseconds),
 # converts it into YYYYMMDD date and saves as date attribute.
-rows = []
-with open(input_file_name, 'r') as csvfile:
-    plots = csv.reader(csvfile, delimiter=',')
-    header = next(csvfile, None).strip().split(',')
-    # site_name, dataset_name, nacc, distinct_users, stream, timestamp, site_tier, cpu_time, primary_name, processing_name, data_tier
+def read_file(input_filename=''):
+    rows = []
+    with open(input_filename, 'r') as csvfile:
+        plots = csv.reader(csvfile, delimiter=',')
+        header = next(csvfile, None).strip().split(',')
+        # site_name, dataset_name, nacc, distinct_users, stream, timestamp, site_tier, cpu_time, primary_name, processing_name, data_tier
 
-    print("CSV header " + str(header))
+        print("CSV header " + str(header))
 
-    header_length = len(header)
+        header_length = len(header)
 
-    for row in plots:
-        row_values = {}
-        for i in range(0, header_length):
-            row_values[header[i]] = row[i]
+        for row in plots:
+            row_values = {}
+            for i in range(0, header_length):
+                row_values[header[i]] = row[i]
 
-        if 'timestamp' in row_values:
-            row_values['date'] = time.strftime("%Y-%m-%d", time.gmtime(int(row_values ['timestamp']) / 1000))
-        rows.append(row_values)
-    print("Found " + str(len(rows)) + " records")
+            if 'timestamp' in row_values:
+                row_values['date'] = time.strftime("%Y-%m-%d", time.gmtime(int(row_values ['timestamp']) / 1000))
+            rows.append(row_values)
+        print("Found " + str(len(rows)) + " records in file " + str(input_filename))
+    return rows
 
 
 # Plot number of access (sum of 'nacc') for every date ('date')
-def number_of_access(filename=None):
+# If no output_filename is specified, output is shown on screen. Otherwise it is plotted into file.
+def number_of_access(rows, output_filename=None):
     values = {}
 
     for row in rows:
@@ -62,13 +73,13 @@ def number_of_access(filename=None):
     ax = plt.gca()
     ax.get_yaxis().get_major_formatter().set_scientific(False)
     plt.xticks(rotation=45)
-    if filename == None:
+    if output_filename == None:
         plt.show()
     else:
         figure = plt.gcf()
         # Set figure size in inches
         figure.set_size_inches(8, 6)
-        plt.savefig(filename, dpi=100)
+        plt.savefig(output_filename, dpi=100)
     plt.close()
 
 
@@ -125,7 +136,7 @@ def sum_array(buckets, column):
 
 # Expects a following structure:
 # {"A":{"a":1, "b":2}, B:{"b":5, "c"6}}
-# Uses outer key ("A", "B") to separate lines. Uses inner key ("a", "b", "c") as x axis (preferably date)
+# Uses outer key ("A", "B") to draw separate lines. Uses inner key ("a", "b", "c") as x axis (preferably date)
 # Outputs
 def draw_buckets(buckets, top_results=5, filename=None):
     x = []
@@ -188,6 +199,8 @@ def draw_buckets(buckets, top_results=5, filename=None):
     plt.close()
 
 
+# Output entries as a csv table.
+# title1 and title 2 - column titles
 def make_table(bucket, title1, title2, limit_results=None, filename=None):
     sorted_bucket_keys = sorted(bucket, key=bucket.get, reverse=True)
     sum = 0
@@ -227,16 +240,39 @@ def filter_values(records, column, valid_values, other_value):
     return new_records
 
 
-# Include only T0, T1, T2, T3 site tiers. Set others to 'Other'
-rows = filter_values(rows, 'site_tier', ['T0', 'T1', 'T2', 'T2', 'T3'], 'Other')
+def run(input_file_name):
+    rows = read_file(input_file_name)
+    # Include only T0, T1, T2, T3 site tiers. Set others to 'Other'
+    rows = filter_values(rows, 'site_tier', ['T0', 'T1', 'T2', 'T2', 'T3'], 'Other')
 
-number_of_access('NumberOfAccess.png')
-grouped_by_tier = make_buckets(["data_tier"], rows, "nacc")
-grouped_by_site_tier = make_buckets(["site_tier"], rows, "nacc")
-grouped_by_date_and_tier = make_buckets(["data_tier", "date"], rows, "nacc")
-grouped_by_date_and_site_tier = make_buckets(["site_tier", "date"], rows, "nacc")
+    number_of_access(rows, 'NumberOfAccess.png')
 
-draw_buckets(grouped_by_date_and_tier, 10, "GroupedByDateAndTier.png")
-draw_buckets(grouped_by_date_and_site_tier, 10, "GroupedByDateAndSiteTier.png")
-make_table(grouped_by_tier, "Tier", "Number of accesses", 20, 'GroupedByTier.csv')
-make_table(grouped_by_site_tier, "Site tier", "Number of accesses", 20, 'GroupedBySiteTier.csv')
+    grouped_by_tier = make_buckets(["data_tier"], rows, "nacc")
+    grouped_by_site_tier = make_buckets(["site_tier"], rows, "nacc")
+    grouped_by_date_and_tier = make_buckets(["data_tier", "date"], rows, "nacc")
+    grouped_by_date_and_site_tier = make_buckets(["site_tier", "date"], rows, "nacc")
+
+    draw_buckets(grouped_by_date_and_tier, 10, "GroupedByDateAndTier.png")
+    draw_buckets(grouped_by_date_and_site_tier, 10, "GroupedByDateAndSiteTier.png")
+    make_table(grouped_by_tier, "Tier", "Number of accesses", 20, 'GroupedByTier.csv')
+    make_table(grouped_by_site_tier, "Site tier", "Number of accesses", 20, 'GroupedBySiteTier.csv')
+
+
+# Main function
+def main():
+    start_time = time.time()
+
+    option_parser = OptionParser()
+    options = option_parser.parser.parse_args()
+
+    print("Input arguments: %s" % options)
+    run(options.input_filename)
+
+    end_time = time.time()
+    print('Start time         : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))
+    print('End time           : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(end_time)))
+    print('Total elapsed time : %s' % (end_time - start_time))
+
+
+if __name__ == '__main__':
+    main()

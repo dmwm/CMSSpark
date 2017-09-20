@@ -46,7 +46,8 @@ def yesterday():
 
 def short_date_to_unix(date):
 
-    #Convert short date string into UNIX timestamp (GMT)
+    # Convert short date string into UNIX timestamp (GMT)
+    # Time (seconds) is multiplied by 1000 because Kibana uses milliseconds for timestamps.
     return int(calendar.timegm(time.strptime(date, '%Y/%m/%d'))) * 1000
 
 
