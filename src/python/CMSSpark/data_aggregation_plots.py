@@ -31,6 +31,7 @@ def read_file(input_filename=''):
 
         for row in plots:
             row_values = {}
+            # print(str(row))
             for i in range(0, header_length):
                 row_values[header[i]] = row[i]
 
@@ -240,10 +241,26 @@ def filter_values(records, column, valid_values, other_value):
     return new_records
 
 
+# If record's value of 'column' is not in 'valid_values', omit it from results
+def omit_values(records, column, valid_values):
+    new_records = []
+
+    for record in records:
+        if record[column] in valid_values:
+            new_records.append(record)
+
+    return new_records
+
+
 def run(input_file_name):
     rows = read_file(input_file_name)
     # Include only T0, T1, T2, T3 site tiers. Set others to 'Other'
     rows = filter_values(rows, 'site_tier', ['T0', 'T1', 'T2', 'T2', 'T3'], 'Other')
+
+    rows_aaa = omit_values(rows, 'stream', ['aaa'])
+    rows_cmssw = omit_values(rows, 'stream', ['cmssw'])
+    rows_eos = omit_values(rows, 'stream', ['eos'])
+    rows_jm = omit_values(rows, 'stream', ['jm'])
 
     number_of_access(rows, 'NumberOfAccess.png')
 
@@ -252,10 +269,14 @@ def run(input_file_name):
     grouped_by_date_and_tier = make_buckets(["data_tier", "date"], rows, "nacc")
     grouped_by_date_and_site_tier = make_buckets(["site_tier", "date"], rows, "nacc")
 
+    grouped_by_dataset_eos = make_buckets(["dataset_name"], rows_eos, "nacc")
+
     draw_buckets(grouped_by_date_and_tier, 10, "GroupedByDateAndTier.png")
     draw_buckets(grouped_by_date_and_site_tier, 10, "GroupedByDateAndSiteTier.png")
     make_table(grouped_by_tier, "Tier", "Number of accesses", 20, 'GroupedByTier.csv')
     make_table(grouped_by_site_tier, "Site tier", "Number of accesses", 20, 'GroupedBySiteTier.csv')
+
+    make_table(grouped_by_dataset_eos, "Dataset", "Number of accesses", 5, "GroupedByDatasetEOS.csv")
 
 
 # Main function
