@@ -36,7 +36,7 @@ do
         cd ..
         rm -r $clean_date
 
-        if [ $first_file_date == "" ]; then
+        if [ "$first_file_date" == "" ]; then
             first_file_date=$clean_date
         fi
         last_file_date=$clean_date
