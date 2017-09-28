@@ -9,7 +9,7 @@ class OptionParser():
 
         self.parser = argparse.ArgumentParser(prog='PROG', description='')
 
-        self.parser.add_argument("--input_filename", action="store",
+        self.parser.add_argument('--input_filename', action='store',
             dest='input_filename', default='', help='Input filename or path including filename')
 
 
@@ -25,7 +25,7 @@ def read_file(input_filename=''):
         header = next(csvfile, None).strip().split(',')
         # site_name, dataset_name, nacc, distinct_users, stream, timestamp, site_tier, cpu_time, primary_name, processing_name, data_tier
 
-        print("CSV header " + str(header))
+        print('CSV header ' + str(header))
 
         header_length = len(header)
 
@@ -36,9 +36,9 @@ def read_file(input_filename=''):
                 row_values[header[i]] = row[i]
 
             if 'timestamp' in row_values:
-                row_values['date'] = time.strftime("%Y-%m-%d", time.gmtime(int(row_values ['timestamp']) / 1000))
+                row_values['date'] = time.strftime('%Y-%m-%d', time.gmtime(int(row_values ['timestamp']) / 1000))
             rows.append(row_values)
-        print("Found " + str(len(rows)) + " records in file " + str(input_filename))
+        print('Found ' + str(len(rows)) + ' records in file ' + str(input_filename))
     return rows
 
 
@@ -63,9 +63,9 @@ def number_of_access(rows, output_filename=None):
         x.append(t)
         y.append(values[t])
         sum=sum+values[t]
-        # print(t + " -> " + str(values[t]))
+        # print(t + ' -> ' + str(values[t]))
 
-    print("Total number of accesses is " + str(sum))
+    print('Total number of accesses is ' + str(sum))
 
     plt.bar(range(len(x)),y, label='')
     plt.xticks(range(len(x)), [label[5:] for label in x])
@@ -221,7 +221,11 @@ def make_table(bucket, title1, title2, limit_results=None, filename=None):
         csv += '"' + "{0:.4f}".format(100.0 * bucket[key] / sum) + '"'
         csv += '\n'
 
-    csv += '"Sum","' + str(sum_of_table) + '","' + "{0:.4f}".format(100.0 * sum_of_table / sum) + '"'
+    if sum == 0:
+        csv += '"Sum","' + str(sum_of_table) + '","-"'
+    else:
+        csv += '"Sum","' + str(sum_of_table) + '","' + "{0:.4f}".format(100.0 * sum_of_table / sum) + '"'
+
     if filename != None:
         csv_file = open(filename, 'w')
         csv_file.write(csv)
@@ -252,31 +256,81 @@ def omit_values(records, column, valid_values):
     return new_records
 
 
+# Creates a directory. Equivalent to using mkdir -p on the command line
+# https://stackoverflow.com/a/31809973
+def mkdir(mypath):
+    from errno import EEXIST
+    from os import makedirs,path
+
+    try:
+        makedirs(mypath)
+    except OSError as exc: # Python >2.5
+        if exc.errno == EEXIST and path.isdir(mypath):
+            pass
+        else: raise
+
+
 def run(input_file_name):
     rows = read_file(input_file_name)
     # Include only T0, T1, T2, T3 site tiers. Set others to 'Other'
     rows = filter_values(rows, 'site_tier', ['T0', 'T1', 'T2', 'T2', 'T3'], 'Other')
 
+    output_directory = 'output/'
+    mkdir(output_directory)
+
+    # All streams
+
+    number_of_access(rows, output_directory + 'NumberOfAccess.png')
+
+    grouped_by_tier = make_buckets(['data_tier'], rows, 'nacc')
+    grouped_by_site_tier = make_buckets(['site_tier'], rows, 'nacc')
+    grouped_by_date_and_tier = make_buckets(['data_tier', 'date'], rows, 'nacc')
+    grouped_by_date_and_site_tier = make_buckets(['site_tier', 'date'], rows, 'nacc')
+
+    draw_buckets(grouped_by_date_and_tier, 10, output_directory + 'GroupedByDateAndTier.png')
+    draw_buckets(grouped_by_date_and_site_tier, 10, output_directory + 'GroupedByDateAndSiteTier.png')
+    make_table(grouped_by_tier, 'Tier', 'Number of accesses', 20, output_directory + 'GroupedByTier.csv')
+    make_table(grouped_by_site_tier, 'Site tier', 'Number of accesses', 20, output_directory + 'GroupedBySiteTier.csv')
+
+    # Separated streams
+
     rows_aaa = omit_values(rows, 'stream', ['aaa'])
     rows_cmssw = omit_values(rows, 'stream', ['cmssw'])
     rows_eos = omit_values(rows, 'stream', ['eos'])
-    rows_jm = omit_values(rows, 'stream', ['jm'])
+    rows_jm = omit_values(rows, 'stream', ['crab'])
 
-    number_of_access(rows, 'NumberOfAccess.png')
+    print('AAA Records: ' + str(len(rows_aaa)))
+    print('CMSSW Records: ' + str(len(rows_cmssw)))
+    print('EOS Records: ' + str(len(rows_eos)))
+    print('JM Records: ' + str(len(rows_jm)))
 
-    grouped_by_tier = make_buckets(["data_tier"], rows, "nacc")
-    grouped_by_site_tier = make_buckets(["site_tier"], rows, "nacc")
-    grouped_by_date_and_tier = make_buckets(["data_tier", "date"], rows, "nacc")
-    grouped_by_date_and_site_tier = make_buckets(["site_tier", "date"], rows, "nacc")
+    grouped_by_dataset_aaa = make_buckets(['dataset_name'], rows_aaa, 'nacc')
+    grouped_by_dataset_cmssw = make_buckets(['dataset_name'], rows_cmssw, 'nacc')
+    grouped_by_dataset_eos = make_buckets(['dataset_name'], rows_eos, 'nacc')
+    grouped_by_dataset_jm = make_buckets(['dataset_name'], rows_jm, 'nacc')
 
-    grouped_by_dataset_eos = make_buckets(["dataset_name"], rows_eos, "nacc")
+    make_table(grouped_by_dataset_aaa, 'Dataset', 'Number of accesses', 10, output_directory + 'GroupedByDatasetAAA.csv')
+    make_table(grouped_by_dataset_cmssw, 'Dataset', 'Number of accesses', 10, output_directory + 'GroupedByDatasetCMSSW.csv')
+    make_table(grouped_by_dataset_eos, 'Dataset', 'Number of accesses', 10, output_directory + 'GroupedByDatasetEOS.csv')
+    make_table(grouped_by_dataset_jm, 'Dataset', 'Number of accesses', 10, output_directory + 'GroupedByDatasetJM.csv')
 
-    draw_buckets(grouped_by_date_and_tier, 10, "GroupedByDateAndTier.png")
-    draw_buckets(grouped_by_date_and_site_tier, 10, "GroupedByDateAndSiteTier.png")
-    make_table(grouped_by_tier, "Tier", "Number of accesses", 20, 'GroupedByTier.csv')
-    make_table(grouped_by_site_tier, "Site tier", "Number of accesses", 20, 'GroupedBySiteTier.csv')
+    grouped_by_date_and_tier_aaa = make_buckets(['data_tier', 'date'], rows_aaa, 'nacc')
+    grouped_by_date_and_site_tier_aaa = make_buckets(['site_tier', 'date'], rows_aaa, 'nacc')
+    grouped_by_date_and_tier_cmssw = make_buckets(['data_tier', 'date'], rows_cmssw, 'nacc')
+    grouped_by_date_and_site_tier_cmssw = make_buckets(['site_tier', 'date'], rows_cmssw, 'nacc')
+    grouped_by_date_and_tier_eos = make_buckets(['data_tier', 'date'], rows_eos, 'nacc')
+    grouped_by_date_and_site_tier_eos = make_buckets(['site_tier', 'date'], rows_eos, 'nacc')
+    grouped_by_date_and_tier_jm = make_buckets(['data_tier', 'date'], rows_jm, 'nacc')
+    grouped_by_date_and_site_tier_jm = make_buckets(['site_tier', 'date'], rows_jm, 'nacc')
 
-    make_table(grouped_by_dataset_eos, "Dataset", "Number of accesses", 5, "GroupedByDatasetEOS.csv")
+    draw_buckets(grouped_by_date_and_tier_aaa, 10, output_directory + 'GroupedByDateAndTierAAA.png')
+    draw_buckets(grouped_by_date_and_site_tier_aaa, 10, output_directory + 'GroupedByDateAndSiteTierAAA.png')
+    draw_buckets(grouped_by_date_and_tier_cmssw, 10, output_directory + 'GroupedByDateAndTierCMSSW.png')
+    draw_buckets(grouped_by_date_and_site_tier_cmssw, 10, output_directory + 'GroupedByDateAndSiteTierCMSSW.png')
+    draw_buckets(grouped_by_date_and_tier_eos, 10, output_directory + 'GroupedByDateAndTierEOS.png')
+    draw_buckets(grouped_by_date_and_site_tier_eos, 10, output_directory + 'GroupedByDateAndSiteTierEOS.png')
+    draw_buckets(grouped_by_date_and_tier_jm, 10, output_directory + 'GroupedByDateAndTierJM.png')
+    draw_buckets(grouped_by_date_and_site_tier_jm, 10, output_directory + 'GroupedByDateAndSiteTierJM.png')
 
 
 # Main function
@@ -286,7 +340,7 @@ def main():
     option_parser = OptionParser()
     options = option_parser.parser.parse_args()
 
-    print("Input arguments: %s" % options)
+    print('Input arguments: %s' % options)
     run(options.input_filename)
 
     end_time = time.time()
