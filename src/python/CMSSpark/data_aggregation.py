@@ -78,7 +78,7 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
             '\"crab\" AS stream',
             '%s AS timestamp' % unix_date,
             'first(tier_from_site_name(SiteName)) AS site_tier',
-            'SUM(ExeCPU) AS cpu_time']
+            'SUM(WrapCPU) AS cpu_time']
 
     # Build a query with "cols" columns
     query = ("SELECT %s FROM jm_df "\
