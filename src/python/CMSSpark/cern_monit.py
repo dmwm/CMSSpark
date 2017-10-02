@@ -207,8 +207,8 @@ def send2monit(data):
             creds['producer'], creds['topic'], [(host, port)])
         arr = []
         for idx, row in enumerate(data):
-            if  not idx:
-                print("### row", row, type(row))
+#            if  not idx:
+#                print("### row", row, type(row))
             doc = json.loads(row)
             hid = doc.get("hash", 1)
             arr.append(amq.make_notification(doc, hid))
