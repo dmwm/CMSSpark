@@ -1,0 +1,10 @@
+{
+    "output_dir" : "hdfs:///cms/users/vk/agg",
+    "stomp_path" : "/data/users/vk/CMSSpark/static/stomp.py-4.1.15-py2.7.egg",
+    "credentials" : "/data/users/vk/CMSSpark/acronjob/amq_broker.json",
+    "keytab" : "/data/users/vk/CMSSpark/acronjob/agg.keytab",
+    "aaa_dir" : "/project/monitoring/archive/xrootd/enr/gled",
+    "cmssw_dir" : "/project/awg/cms/cmssw-popularity/avro-snappy",
+    "eos_dir" : "/project/monitoring/archive/eos/logs/reports/cms",
+    "jm_dir" : "/project/awg/cms/jm-data-popularity/avro-snappy"
+}
