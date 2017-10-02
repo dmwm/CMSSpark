@@ -30,34 +30,35 @@ last_non_temp_long_date() {
     return 0
 }
 
-log "----------------------------------------------"
-log "Starting script"
+if [ $# -le 1 ] || [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ]; then
+    echo "Usage: run_aggregation.sh <configuration> <date>"
+    echo "Example: PYTHONPATH=/path/CMSSpark/src/python ./run_aggregation.sh conf.json 20170925"
+    exit 0
+fi
+conf=$1
 
-this_dirname=$(dirname "$0")
-python_path="$PYTHONPATH:"$this_dirname"/../python"
-path=$this_dirname"/../../bin:$PATH"
+# find out where CMSSpark is installed on a system
+mroot=`python -c "import CMSSpark; print '/'.join(CMSSpark.__file__.split('/')[:-1])" 2>&1`
+err=`echo $mroot | grep ImportError`
+if [ -n "$err" ]; then
+    echo "Unable to find CMSSpark"
+    echo $mroot
+    exit 1
+fi
 
-# Paths of input files in hadoop file system
-aaa_dir="/project/monitoring/archive/xrootd/enr/gled"
-cmssw_dir="/project/awg/cms/cmssw-popularity/avro-snappy"
-eos_dir="/project/monitoring/archive/eos/logs/reports/cms"
-jm_dir="/project/awg/cms/jm-data-popularity/avro-snappy"
-output_dir="hdfs:///cms/users/jrumsevi/agg"
-stomp_path="/afs/cern.ch/user/j/jrumsevi/CMSSpark/static/stomp.py-4.1.15-py2.7.egg"
-credentials_json_path="/afs/cern.ch/user/j/jrumsevi/amq_broker.json"
-keytab_dir="/afs/cern.ch/user/j/jrumsevi/agg.keytab"
-
-# Kerberos
-principal=`klist -k "$keytab_dir" | tail -1 | awk '{print $2}'`
-kinit $principal -k -t "$keytab_dir"
+cmsspark=`echo $mroot | sed -e "s,/src/python/CMSSpark,,g"`
+echo "CMSSpark is located at $cmsspark"
+echo "Read configuration: $conf"
+export PATH=$cmsspark/bin:$PATH
+export PYTHONPATH=$mroot:$PYTHONPATH
 
 aaa_date=""
 eos_date=""
 cmssw_date=""
 jm_date=""
 
-if [ "$1" != "" ]; then
-    aaa_date="$1"
+if [ "$2" != "" ]; then
+    aaa_date="$2"
     eos_date="$aaa_date"
     cmssw_date="$aaa_date"
     jm_date="$aaa_date"
@@ -68,10 +69,34 @@ else
     jm_date=$(last_non_temp_long_date $jm_dir)
 fi
 
+log "----------------------------------------------"
+log "Starting script"
+
 log "AAA date $aaa_date"
 log "CMSSW date $cmssw_date"
 log "EOS date $eos_date"
 log "JM date $jm_date"
+
+# parse configuration
+
+output_dir=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['output_dir']"`
+stomp_path=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['stomp_path']"`
+credentials=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['credentials']"`
+keytab=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['keytab']"`
+
+aaa_dir=`cat conf.json | python -c "import sys, json; print json.load(sys.stdin)['aaa_dir']"`
+cmssw_dir=`cat conf.json | python -c "import sys, json; print json.load(sys.stdin)['cmssw_dir']"`
+eos_dir=`cat conf.json | python -c "import sys, json; print json.load(sys.stdin)['eos_dir']"`
+jm_dir=`cat conf.json | python -c "import sys, json; print json.load(sys.stdin)['jm_dir']"`
+
+log "AAA $aaa_dir"
+log "CMSSW $cmssw_dir"
+log "EOS $eos_dir"
+log "CRAB $jm_dir"
+
+# Kerberos
+principal=`klist -k "$keytab" | tail -1 | awk '{print $2}'`
+kinit $principal -k -t "$keytab"
 
 if [ $aaa_date != "" ] && [ $aaa_date == $cmssw_date ] && [ $cmssw_date == $eos_date ] && [ $eos_date == $jm_date ]; then
     log "All streams are ready for $aaa_date"
@@ -84,11 +109,9 @@ if [ $aaa_date != "" ] && [ $aaa_date == $cmssw_date ] && [ $cmssw_date == $eos_
     else
         log "Output at $output_dir_with_date does not exist, will run"
 
-        export PYTHONPATH="$python_path"
-        export PATH="$path"
         # Add --verbose for verbose output
         run_spark data_aggregation.py --yarn --date "$aaa_date" --fout "$output_dir"
-        run_spark cern_monit.py --hdir "$output_dir_with_date" --stomp="$stomp_path" --amq "$credentials_json_path" --verbose --aggregation_schema
+        run_spark cern_monit.py --hdir "$output_dir_with_date" --stomp="$stomp_path" --amq "$credentials" --verbose --aggregation_schema
     fi
 
 else
