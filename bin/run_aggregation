@@ -60,6 +60,28 @@ echo "Read configuration: $conf"
 export PATH=$cmsspark/bin:$PATH
 export PYTHONPATH=$mroot:$PYTHONPATH
 
+# parse configuration
+
+output_dir=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['output_dir']"`
+stomp_path=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['stomp_path']"`
+credentials=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['credentials']"`
+keytab=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['keytab']"`
+
+aaa_dir=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['aaa_dir']"`
+cmssw_dir=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['cmssw_dir']"`
+eos_dir=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['eos_dir']"`
+jm_dir=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['jm_dir']"`
+
+if [ -z "$aaa_dir" ] || [ -z "$cmssw_dir" ] || [ -z "$eos_dir" ] || [ -z "$jm_dir" ]; then
+    echo "Empty data-stream input"
+    exit 1
+fi
+
+log "AAA $aaa_dir"
+log "CMSSW $cmssw_dir"
+log "EOS $eos_dir"
+log "CRAB $jm_dir"
+
 aaa_date=""
 eos_date=""
 cmssw_date=""
@@ -91,28 +113,6 @@ if [ -z "$aaa_date" ] || [ -z "$cmssw_date" ] || [ -z "$eos_date" ] || [ -z "$jm
     echo "Unable to find dates"
     exit 1
 fi
-
-# parse configuration
-
-output_dir=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['output_dir']"`
-stomp_path=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['stomp_path']"`
-credentials=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['credentials']"`
-keytab=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['keytab']"`
-
-aaa_dir=`cat conf.json | python -c "import sys, json; print json.load(sys.stdin)['aaa_dir']"`
-cmssw_dir=`cat conf.json | python -c "import sys, json; print json.load(sys.stdin)['cmssw_dir']"`
-eos_dir=`cat conf.json | python -c "import sys, json; print json.load(sys.stdin)['eos_dir']"`
-jm_dir=`cat conf.json | python -c "import sys, json; print json.load(sys.stdin)['jm_dir']"`
-
-if [ -z "$aaa_dir" ] || [ -z "$cmssw_dir" ] || [ -z "$eos_dir" ] || [ -z "$jm_dir" ]; then
-    echo "Empty data-stream input"
-    exit 1
-fi
-
-log "AAA $aaa_dir"
-log "CMSSW $cmssw_dir"
-log "EOS $eos_dir"
-log "CRAB $jm_dir"
 
 # Kerberos
 principal=`klist -k "$keytab" | tail -1 | awk '{print $2}'`
