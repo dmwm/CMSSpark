@@ -1,7 +1,8 @@
-#!/bin/sh
+#!/bin/bash
+
+trap "echo \"abnormal exit\"" ERR
 
 log() {
-    echo "$(date +'%Y-%m-%d %H:%M:%S') $1" >> cron_log.txt
     echo "$(date +'%Y-%m-%d %H:%M:%S') $1"
 }
 
@@ -30,12 +31,19 @@ last_non_temp_long_date() {
     return 0
 }
 
-if [ $# -le 1 ] || [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ]; then
-    echo "Usage: run_aggregation.sh <configuration> <date>"
-    echo "Example: PYTHONPATH=/path/CMSSpark/src/python ./run_aggregation.sh conf.json 20170925"
+if [ $# -eq 0 ] || [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ]; then
+    echo "Usage: run_aggregation <configuration> <date>"
+    echo "Example: PYTHONPATH=/path/CMSSpark/src/python run_aggregation conf.json 20170925"
     exit 0
 fi
 conf=$1
+
+# check that hadoop command exists
+command -v hadoop
+if [ $? == 1 ]; then
+    echo "Unable to find hadoop command"
+    exit 1
+fi
 
 # find out where CMSSpark is installed on a system
 mroot=`python -c "import CMSSpark; print '/'.join(CMSSpark.__file__.split('/')[:-1])" 2>&1`
@@ -57,12 +65,14 @@ eos_date=""
 cmssw_date=""
 jm_date=""
 
-if [ "$2" != "" ]; then
+if [ $# -eq 2 ]; then
+    echo "use date $2"
     aaa_date="$2"
     eos_date="$aaa_date"
     cmssw_date="$aaa_date"
     jm_date="$aaa_date"
 else
+    echo "construct date"
     aaa_date=$(last_non_temp_short_date $aaa_dir)
     eos_date=$(last_non_temp_short_date $eos_dir)
     cmssw_date=$(last_non_temp_long_date $cmssw_dir)
@@ -77,6 +87,11 @@ log "CMSSW date $cmssw_date"
 log "EOS date $eos_date"
 log "JM date $jm_date"
 
+if [ -z "$aaa_date" ] || [ -z "$cmssw_date" ] || [ -z "$eos_date" ] || [ -z "$jm_date" ]; then
+    echo "Unable to find dates"
+    exit 1
+fi
+
 # parse configuration
 
 output_dir=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['output_dir']"`
@@ -89,6 +104,11 @@ cmssw_dir=`cat conf.json | python -c "import sys, json; print json.load(sys.stdi
 eos_dir=`cat conf.json | python -c "import sys, json; print json.load(sys.stdin)['eos_dir']"`
 jm_dir=`cat conf.json | python -c "import sys, json; print json.load(sys.stdin)['jm_dir']"`
 
+if [ -z "$aaa_dir" ] || [ -z "$cmssw_dir" ] || [ -z "$eos_dir" ] || [ -z "$jm_dir" ]; then
+    echo "Empty data-stream input"
+    exit 1
+fi
+
 log "AAA $aaa_dir"
 log "CMSSW $cmssw_dir"
 log "EOS $eos_dir"
@@ -97,6 +117,10 @@ log "CRAB $jm_dir"
 # Kerberos
 principal=`klist -k "$keytab" | tail -1 | awk '{print $2}'`
 kinit $principal -k -t "$keytab"
+if [ $? == 1 ]; then
+    echo "Unable to perform kinit"
+    exit 1
+fi
 
 if [ $aaa_date != "" ] && [ $aaa_date == $cmssw_date ] && [ $cmssw_date == $eos_date ] && [ $eos_date == $jm_date ]; then
     log "All streams are ready for $aaa_date"
@@ -111,7 +135,15 @@ if [ $aaa_date != "" ] && [ $aaa_date == $cmssw_date ] && [ $cmssw_date == $eos_
 
         # Add --verbose for verbose output
         run_spark data_aggregation.py --yarn --date "$aaa_date" --fout "$output_dir"
+        if [ $? == 1 ]; then
+            echo "Abnormal exit of run_spark data_aggregation.py"
+            exit 1
+        fi
         run_spark cern_monit.py --hdir "$output_dir_with_date" --stomp="$stomp_path" --amq "$credentials" --verbose --aggregation_schema
+        if [ $? == 1 ]; then
+            echo "Abnormal exit of run_spark cern_monit.py"
+            exit 1
+        fi
     fi
 
 else
