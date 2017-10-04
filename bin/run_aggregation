@@ -116,11 +116,13 @@ fi
 
 # Kerberos
 principal=`klist -k "$keytab" | tail -1 | awk '{print $2}'`
+echo "principal=$principal"
 kinit $principal -k -t "$keytab"
 if [ $? == 1 ]; then
     echo "Unable to perform kinit"
     exit 1
 fi
+klist -k "$keytab"
 
 if [ $aaa_date != "" ] && [ $aaa_date == $cmssw_date ] && [ $cmssw_date == $eos_date ] && [ $eos_date == $jm_date ]; then
     log "All streams are ready for $aaa_date"
