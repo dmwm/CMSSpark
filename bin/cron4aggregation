@@ -9,7 +9,7 @@ addr=vkuznet@gmail.com
 
 me=$(dirname "$0")
 wdir=`echo $me | sed -e "s,/bin,,g"`
-log=$wdir/agg.log
+log=$wdir/agg-`date +%Y%m%d`.log
 export PYTHONPATH=$wdir/src/python:$PYTHONPATH
 export PATH=$wdir/bin:$PATH
 cmd="$wdir/bin/run_aggregation $wdir/etc/conf.json"
@@ -17,5 +17,4 @@ msg="Error while executing $cmd on $USER@`hostname` log at $log"
 set -e
 trap "echo \"$msg\" | mail -s \"Cron alert CMS Popularity\" \"$addr\"" ERR
 
-echo "$cmd"
-$cmd 2>&1 1>& $log
+$cmd >> $log 2>&1
