@@ -441,7 +441,10 @@ def parse_dn(dn):
     "Parse user DN and extract only user name and real name"
     dn = dn.split('&')[0]
     cns = [x for x in dn.split('/') if x.startswith('CN=')]
-    return '/'.join([x for x in cns if LET_PAT.match(x)])
+    if len(cns):
+        return cns[-1].split('=')[-1] # /CN=user/CN=First Last Name we return First Last Name
+    return dn # when we're unable to split DN with / we return it as is
+#    return '/'.join([x for x in cns if LET_PAT.match(x)])
 
 def stream4app(app):
     "Parse CMSSW APP_INFO attribute and assign appropriate stream"
