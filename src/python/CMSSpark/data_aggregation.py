@@ -7,8 +7,10 @@ Spark script to collect data from DBS and AAA, CMSSW, EOS, JM streams on HDFS an
 records that would be fed into MONIT system.
 """
 
+import re
 import time
 import argparse
+import hashlib
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
@@ -20,6 +22,8 @@ from CMSSpark.utils import elapsed_time
 from CMSSpark.data_collection import  yesterday, short_date_string, long_date_string, output_dataframe, run_query, short_date_to_unix
 from pyspark.sql.functions import desc
 from pyspark.sql.functions import split, col
+
+LET_PAT = re.compile(r'^CN=[a-zA-Z]')
 
 class OptionParser():
     def __init__(self):
@@ -64,6 +68,9 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
 
     # - site name                +
     # - dataset name             +
+    # - app                      +
+    # - uid                      +
+    # - dn                       +
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: crab             +
@@ -81,9 +88,28 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
             'SUM(WrapCPU) AS cpu_time']
 
     # Build a query with "cols" columns
-    query = ("SELECT %s FROM jm_df "\
-             "JOIN f_b_s_df ON f_b_s_df.file_name = jm_df.FileName "\
-             "GROUP BY jm_df.SiteName, dataset_name") % ','.join(cols)
+#    query = ("SELECT %s FROM jm_df "\
+#             "JOIN f_b_s_df ON f_b_s_df.file_name = jm_df.FileName "\
+#             "GROUP BY jm_df.SiteName, dataset_name") \
+    cols = ['SiteName AS site_name',
+            'dataset_name',
+            'stream4app(jm_df.SubmissionTool) AS app',
+            'dn2uuid(GridName) AS uid',
+            'parse_dn(GridName) AS dn',
+            '\"crab\" AS stream',
+            '%s AS timestamp' % unix_date,
+            'WrapCPU AS cpu']
+    query = "SELECT %s FROM jm_df "\
+             "JOIN f_b_s_df ON f_b_s_df.file_name = jm_df.FileName " \
+             % ','.join(cols)
+    cols = ['dn', 'dataset_name', 'site_name', 'app',
+            'first(uid) as uid', 'first(stream) as stream', 'first(timestamp) as timestamp',
+            'count(dataset_name) AS nacc',
+            'count(dn) AS distinct_users',
+            'first(tier_from_site_name(site_name)) AS site_tier',
+            'SUM(cpu) AS cpu_time']
+    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
+            % (','.join(cols), query)
 
     result = run_query(query, sql_context, verbose)
 
@@ -123,6 +149,9 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
 
     # - site name                +
     # - dataset name             +
+    # - app                      +
+    # - uid                      +
+    # - dn                       +
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: eos              +
@@ -139,11 +168,30 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
             'first(tier_from_site_name(site_name)) AS site_tier',
             '-1 AS cpu_time']
 
-
     # Build a query with "cols" columns
-    query = ("SELECT %s FROM eos_df " \
+#    query = ("SELECT %s FROM eos_df " \
+#             "JOIN f_b_s_df ON f_b_s_df.file_name = eos_df.file_lfn " \
+#             "GROUP BY site_name, dataset_name") \
+#             % ','.join(cols)
+    cols = ['site_name',
+            'dataset_name',
+            'parse_app(eos_df.application) AS app',
+            'dn2uuid(eos_df.user_dn) AS uid',
+            'parse_dn(eos_df.user_dn) AS dn',
+            '\"eos\" as stream',
+            '%s AS timestamp' % unix_date,
+            '-1 AS cpu']
+    query = "SELECT %s FROM eos_df " \
              "JOIN f_b_s_df ON f_b_s_df.file_name = eos_df.file_lfn " \
-             "GROUP BY site_name, dataset_name") % ','.join(cols)
+             % ','.join(cols)
+    cols = ['dn', 'dataset_name', 'site_name', 'app',
+            'first(uid) as uid', 'first(stream) as stream', 'first(timestamp) as timestamp',
+            'count(dataset_name) AS nacc',
+            'count(dn) AS distinct_users',
+            'first(tier_from_site_name(site_name)) AS site_tier',
+            '-1 AS cpu_time']
+    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
+            % (','.join(cols), query)
 
     result = run_query(query, sql_context, verbose)
 
@@ -184,6 +232,9 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
 
     # - site name                +
     # - dataset name             +
+    # - app                      +
+    # - uid                      +
+    # - dn                       +
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: aaa              +
@@ -200,11 +251,30 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
             'first(tier_from_site_name(src_experiment_site)) AS site_tier',
             '-1 AS cpu_time']
 
-
     # Build a query with "cols" columns
-    query = ("SELECT %s FROM aaa_df " \
+#    query = ("SELECT %s FROM aaa_df " \
+#             "JOIN f_b_s_df ON f_b_s_df.file_name = aaa_df.file_lfn " \
+#             "GROUP BY src_experiment_site, dataset_name") \
+#             % ','.join(cols)
+    cols = ['src_experiment_site AS site_name',
+            'dataset_name',
+            '\"xrootd\" AS app',
+            'dn2uuid(aaa_df.user_dn) AS uid',
+            'parse_dn(aaa_df.user_dn) AS dn',
+            '\"aaa\" as stream',
+            '%s AS timestamp' % unix_date,
+            '-1 AS cpu']
+    query = "SELECT %s FROM aaa_df " \
              "JOIN f_b_s_df ON f_b_s_df.file_name = aaa_df.file_lfn " \
-             "GROUP BY src_experiment_site, dataset_name") % ','.join(cols)
+             % ','.join(cols)
+    cols = ['dn', 'dataset_name', 'site_name', 'app',
+            'first(uid) as uid', 'first(stream) as stream', 'first(timestamp) as timestamp',
+            'count(dataset_name) AS nacc',
+            'count(dn) AS distinct_users',
+            'first(tier_from_site_name(site_name)) AS site_tier',
+            '-1 AS cpu_time']
+    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
+            % (','.join(cols), query)
 
     result = run_query(query, sql_context, verbose)
 
@@ -243,12 +313,16 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
 
     # - site name                +
     # - dataset name             +
+    # - app                      +
+    # - uid                      +
+    # - dn                       +
     # - number of access (nacc)  +
     # - distinct users           +
     # - stream: cmssw            +
     # - timestamp                +
     # - site tier                +
     # - cpu time                -1
+    
 
     cols = ['cmssw_df.SITE_NAME AS site_name',
             'dataset_name',
@@ -260,9 +334,29 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
             '-1 AS cpu_time']
 
     # Build a query with "cols" columns
-    query = ("SELECT %s FROM cmssw_df "\
-             "JOIN f_b_s_df ON f_b_s_df.file_name = cmssw_df.FILE_LFN "\
-             "GROUP BY cmssw_df.SITE_NAME, dataset_name") % ','.join(cols)
+#    query = ("SELECT %s FROM cmssw_df "\
+#             "JOIN f_b_s_df ON f_b_s_df.file_name = cmssw_df.FILE_LFN "\
+#             "GROUP BY cmssw_df.SITE_NAME, dataset_name") \
+#             % ','.join(cols)
+    cols = ['cmssw_df.SITE_NAME AS site_name',
+            'dataset_name',
+            'parse_app(cmssw_df.APP_INFO) AS app',
+            'dn2uuid(cmssw_df.USER_DN) AS uid',
+            'parse_dn(cmssw_df.USER_DN) AS dn',
+            'stream4app(cmssw_df.APP_INFO) as stream',
+            '%s AS timestamp' % unix_date,
+            '-1 AS cpu']
+    query = "SELECT %s FROM cmssw_df "\
+             "JOIN f_b_s_df ON f_b_s_df.file_name = cmssw_df.FILE_LFN " \
+             % ','.join(cols)
+    cols = ['dn', 'dataset_name', 'site_name', 'app',
+            'first(uid) as uid', 'first(stream) as stream', 'first(timestamp) as timestamp',
+            'count(dataset_name) AS nacc',
+            'count(dn) AS distinct_users',
+            'first(tier_from_site_name(site_name)) AS site_tier',
+            '-1 AS cpu_time']
+    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
+            % (','.join(cols), query)
 
     result = run_query(query, sql_context, verbose)
 
@@ -343,6 +437,32 @@ def clean_site_name(s):
     join = '_'.join(split)
     return join
 
+def parse_dn(dn):
+    "Parse user DN and extract only user name and real name"
+    dn = dn.split('&')[0]
+    cns = [x for x in dn.split('/') if x.startswith('CN=')]
+    return '/'.join([x for x in cns if LET_PAT.match(x)])
+
+def stream4app(app):
+    "Parse CMSSW APP_INFO attribute and assign appropriate stream"
+    if not app:
+        return 'cmssw'
+    if app and 'crab' in app:
+        return 'crab'
+    return app
+
+def parse_app(app):
+    "Parse CMSSW APP_INFO attribute"
+    if not app or app == "')":
+        return "unknown"
+    if 'crab' in app:
+        return 'crab'
+    return app
+
+def dn2uuid(dn):
+    "Convert useri DN to UID, we take first 16 digits of the int base 16 of the dn hash"
+    return int(hashlib.sha1(parse_dn(dn)).hexdigest(), 16)
+#    return int(hashlib.sha1(parse_dn(dn)).hexdigest(), 16) % (10**16)
 
 def tier_from_site_name(s):
     """
@@ -350,9 +470,7 @@ def tier_from_site_name(s):
     """
     split = s.split('_')
     tier = str(split[0])
-
     return tier
-
 
 def split_dataset_col(df, dcol):
     """
@@ -404,6 +522,18 @@ def main():
 
     # Register tier_from_site_name to be used with SQL queries
     sql_context.udf.register("tier_from_site_name", tier_from_site_name)
+
+    # Register dn2uuid to be used with SQL queries
+    sql_context.udf.register("dn2uuid", dn2uuid)
+
+    # Register parse_app to be used with SQL queries
+    sql_context.udf.register("parse_app", parse_app)
+
+    # Register stream4app to be used with SQL queries
+    sql_context.udf.register("stream4app", stream4app)
+
+    # Register parse_dn to be used with SQL queries
+    sql_context.udf.register("parse_dn", parse_dn)
 
     f_b_s_start_time = time.time()
     # Create temp table with file name, block name, site name and site from PhEDEx
