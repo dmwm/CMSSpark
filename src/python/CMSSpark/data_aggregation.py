@@ -464,8 +464,7 @@ def parse_app(app):
 
 def dn2uuid(dn):
     "Convert useri DN to UID, we take first 16 digits of the int base 16 of the dn hash"
-    return int(hashlib.sha1(parse_dn(dn)).hexdigest(), 16)
-#    return int(hashlib.sha1(parse_dn(dn)).hexdigest(), 16) % (10**16)
+    return int(hashlib.sha1(parse_dn(dn)).hexdigest(), 16) % (10**16)
 
 def tier_from_site_name(s):
     """
