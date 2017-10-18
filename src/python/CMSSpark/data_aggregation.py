@@ -24,6 +24,7 @@ from pyspark.sql.functions import desc
 from pyspark.sql.functions import split, col
 
 LET_PAT = re.compile(r'^CN=[a-zA-Z]')
+NUM_PAT = re.compile(r'^CN=[0-9]')
 
 class OptionParser():
     def __init__(self):
@@ -440,7 +441,7 @@ def clean_site_name(s):
 def parse_dn(dn):
     "Parse user DN and extract only user name and real name"
     dn = dn.split('&')[0]
-    cns = [x for x in dn.split('/') if x.startswith('CN=')]
+    cns = [x for x in dn.split('/') if x.startswith('CN=') and not NUM_PAT.match(x)]
     if len(cns):
         name = cns[-1].split('=')[-1] # /CN=user/CN=First Last Name we return First Last Name
     else:
