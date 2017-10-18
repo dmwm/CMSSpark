@@ -445,7 +445,7 @@ def parse_dn(dn):
     if len(cns):
         name = cns[-1].split('=')[-1] # /CN=user/CN=First Last Name we return First Last Name
     else:
-        name = dn # when we're unable to split DN with / we return it as is
+        name = str(dn) # when we're unable to split DN with / we return it as is
     return name.replace('CN=', '')
 
 def stream4app(app):
