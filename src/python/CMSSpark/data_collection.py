@@ -125,7 +125,7 @@ def run_query(query, sql_context, verbose=False):
         print('Will execute SQL Query: %s' % query)
 
     # Execute query
-    query_result = sql_context.sql(query)
+    query_result = sql_context.sql(query).distinct()
 
     query_result.persist(StorageLevel.MEMORY_AND_DISK)
 

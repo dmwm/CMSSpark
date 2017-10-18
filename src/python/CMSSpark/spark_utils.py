@@ -481,6 +481,8 @@ def eos_tables(sqlContext,
                 rdict['file_lfn'] = item.split('path=')[-1]
             if  item.startswith('sec.info='):
                 rdict['user_dn'] = item.split('sec.info=')[-1]
+            if  item.startswith('sec.app='):
+                rdict['application'] = item.split('sec.app=')[-1]
             if  item.startswith('sec.host='):
                 rdict['host'] = item.split('sec.host=')[-1]
 
