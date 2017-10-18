@@ -24,6 +24,11 @@ from CMSSpark.spark_utils import spark_context, print_rows, unionAll
 from CMSSpark.utils import elapsed_time
 from CMSSpark.schemas import aggregated_data_schema
 
+def print_data(data):
+    "Helper function for testing purposes"
+    for row in data:
+        print(row)
+
 def send2monit(data):
     """
     Helper function which wraps StompAMQ and incoming dataframe into
@@ -283,6 +288,8 @@ def run(path, amq, stomp, yarn=None, aggregation_schema=False, verbose=False):
     print('Schema:')
     df.printSchema()
 
+    # for testing uncomment line below
+    # df.toJSON().foreachPartition(print_data)
     # send data to CERN MONIT via stomp AMQ, see send2monit function
     df.toJSON().foreachPartition(send2monit)
 
