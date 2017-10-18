@@ -437,12 +437,15 @@ def schema_asodb():
 
 def aggregated_data_schema():
     """
-    site_name: string (nullable = true)
+    dn: string (nullable = true)
     dataset_name: string (nullable = true)
-    nacc: integer (nullable = true)
-    distinct_users: integer (nullable = true)
+    site_name: string (nullable = true)
+    app: string (nullable = true)
+    uid: integer (nullable = true)
     stream: string (nullable = true)
     timestamp: integer (nullable = true)
+    nacc: integer (nullable = true)
+    distinct_users: integer (nullable = true)
     site_tier: string (nullable = true)
     cpu_time double (nullable = true)
     primary_name: string (nullable = true)
@@ -451,12 +454,15 @@ def aggregated_data_schema():
     """
 
     return StructType([
-        StructField("site_name", StringType(), True),
+        StructField("dn", StringType(), True),
         StructField("dataset_name", StringType(), True),
-        StructField("nacc", IntegerType(), True),
-        StructField("distinct_users", IntegerType(), True),
+        StructField("site_name", StringType(), True),
+        StructField("app", StringType(), True),
+        StructField("uid", LongType(), True),
         StructField("stream", StringType(), True),
         StructField("timestamp", LongType(), True),
+        StructField("nacc", IntegerType(), True),
+        StructField("distinct_users", IntegerType(), True),
         StructField("site_tier", StringType(), True),
         StructField("cpu_time", DoubleType(), True),
         StructField("primary_name", StringType(), True),
