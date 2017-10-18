@@ -440,7 +440,7 @@ def clean_site_name(s):
 
 def parse_dn(dn):
     "Parse user DN and extract only user name and real name"
-    dn = dn.split('&')[0]
+    dn = str(dn).split('&')[0]
     cns = [x for x in dn.split('/') if x.startswith('CN=') and not NUM_PAT.match(x)]
     if len(cns):
         name = cns[-1].split('=')[-1] # /CN=user/CN=First Last Name we return First Last Name
