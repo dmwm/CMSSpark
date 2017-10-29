@@ -129,13 +129,37 @@ def run(fout, hdir, date, yarn=None, verbose=None):
         Helper function to extract useful data from WMArchive records.
         You may adjust it to your needs. Given row is a dict object.
         """
-        task = row.get('task', '')
-        cpu = 0
+        meta = row.get('meta_data', {})
         sites = []
-        for step in row.get('steps', []):
-            sites.append(step.get('site', ''))
-            perf = step.get('performance', {})
-        return {"task":task, "performance": perf, 'sites':sites}
+        out = {'host': meta.get('host', ''), 'task': row.get('task', '')}
+        for step in row['steps']:
+            if step['name'].lower().startswith('cmsrun'):
+                site = step.get('site', '')
+                output = step.get('output', [])
+                perf = step.get('performance', {})
+                cpu = perf.get('cpu', {})
+                mem = perf.get('memory', {})
+                storage = perf.get('storage', {})
+                out['ncores'] = cpu['NumberOfStreams']
+                out['nthreads'] = cpu['NumberOfThreads']
+                out['site'] = site
+                out['jobCPU'] = cpu['TotalJobCPU']
+                out['jobTime'] = cpu['TotalJobTime']
+                out['evtCPU'] = cpu['TotalEventCPU']
+                out['evtThroughput'] = cpu['EventThroughput']
+                if output:
+                    output = output[0]
+                    out['appName'] = output.get('applicationName', '')
+                    out['appVer'] = output.get('applicationName', '')
+                    out['globalTag'] = output.get('globalTag', '')
+                    out['era'] = output.get('acquisitionEra', '')
+                else:
+                    out['appName'] = ''
+                    out['appVer'] = ''
+                    out['globalTag'] = ''
+                    out['era'] = ''
+                break
+        return out
 
     out = rdd.map(lambda r: getdata(r))
     if  verbose:
