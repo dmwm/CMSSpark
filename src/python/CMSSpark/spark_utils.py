@@ -272,7 +272,8 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', inst='GLOBAL', verbos
 def cmssw_tables(ctx, sqlContext,
         hdir='hdfs:///project/awg/cms/cmssw-popularity/avro-snappy', date=None, verbose=None):
     """
-    Parse CMSSW HDFS records.
+    Parse CMSSW HDFS records, comes from
+    https://gitlab.cern.ch/awg/awg-ETL-crons/blob/master/sqoop/cmssw-popularity.sh
 
     Example of CMSSW record on HDFS
     {"UNIQUE_ID":"08F8DD3A-0FFE-E611-B710-BC305B3909F1-1","FILE_LFN":"/s.root",
@@ -313,7 +314,8 @@ def cmssw_tables(ctx, sqlContext,
 def jm_tables(ctx, sqlContext,
         hdir='hdfs:///project/awg/cms/jm-data-popularity/avro-snappy', date=None, verbose=None):
     """
-    Parse JobMonitoring popularity HDFS records.
+    Parse JobMonitoring popularity HDFS records comes from
+    https://gitlab.cern.ch/awg/awg-ETL-crons/blob/master/sqoop/jm-cms-data-pop.sh
 
     Example of jm-data-popularity record on HDFS
     {"JobId":"1672451388","FileName":"//store/file.root","IsParentFile":"0","ProtocolUsed":"Remote",
@@ -387,7 +389,11 @@ def aaa_tables(sqlContext,
         hdir='hdfs:///project/monitoring/archive/xrootd/raw/gled',
         date=None, verbose=False):
     """
-    Parse AAA HDFS records.
+    Parse AAA HDFS records. This data set comes from XRootD servers around the
+    world. Data is send by XRootD servers across CERN and US to dedicated
+    clients, called GLED. These GLED clients collect the XRootD data and send
+    it a messaging broker at CERN. From the messaging broker, data is consumer
+    by us and integrated in the MONIT infrastructure.
 
     Example of AAA (xrootd) JSON record on HDFS
     {"data":{"activity":"r","app_info":"","client_domain":"cern.ch","client_host":"b608a4fe55","end_time":1491789715000,"file_lfn":"/eos/cms/store/hidata/PARun2016C/PAEGJet1/AOD/PromptReco-v1/000/286/471/00000/7483FE13-28BD-E611-A2BD-02163E01420E.root","file_size":189272229,"is_transfer":true,"operation_time":690,"read_average":0.0,"read_bytes":0,"read_bytes_at_close":189272229,"read_max":0,"read_min":0,"read_operations":0,"read_sigma":0.0,"read_single_average":0.0,"read_single_bytes":0,"read_single_max":0,"read_single_min":0,"read_single_operations":0,"read_single_sigma":0.0,"read_vector_average":0.0,"read_vector_bytes":0,"read_vector_count_average":0.0,"read_vector_count_max":0,"read_vector_count_min":0,"read_vector_count_sigma":0.0,"read_vector_max":0,"read_vector_min":0,"read_vector_operations":0,"read_vector_sigma":0.0,"remote_access":false,"server_domain":"cern.ch","server_host":"p05799459u51457","server_username":"","start_time":1491789025000,"throughput":274307.57826086954,"unique_id":"03404bbc-1d90-11e7-9717-47f48e80beef-2e48","user":"","user_dn":"","user_fqan":"","user_role":"","vo":"","write_average":0.0,"write_bytes":0,"write_bytes_at_close":0,"write_max":0,"write_min":0,"write_operations":0,"write_sigma":0.0},"metadata":{"event_timestamp":1491789715000,"hostname":"monit-amqsource-fafa51de8d.cern.ch","kafka_timestamp":1491789741627,"original-destination":"/topic/xrootd.cms.eos","partition":"10","producer":"xrootd","timestamp":1491789740015,"topic":"xrootd_raw_gled","type":"gled","type_prefix":"raw","version":"003"}}
@@ -446,7 +452,9 @@ def eos_tables(sqlContext,
         hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms',
         date=None, verbose=False):
     """
-    Parse EOS HDFS records
+    Parse EOS HDFS records. This data set comes from EOS servers at CERN. Data
+    is send directly by the EOS team, reading the EOS logs and sending them
+    into the MONIT infrastructure.
 
     Example of EOS JSON record on HDFS
     {"data":"\"log=9e7436fe-1d8e-11e7-ba07-a0369f1fbf0c&path=/store/mc/PhaseISpring17GS/MinBias_TuneCUETP8M1_13TeV-pythia8/GEN-SIM/90X_upgrade2017_realistic_v20-v1/50000/72C78841-2110-E711-867F-F832E4CC4D39.root&ruid=8959&rgid=1399&td=nobody.693038:472@fu-c2e05-24-03-daq2fus1v0--cms&host=p05798818q44165.cern.ch&lid=1048850&fid=553521212&fsid=18722&ots=1491788403&otms=918&cts=1491789688&ctms=225&rb=19186114&rb_min=104&rb_max=524288&rb_sigma=239596.05&wb=0&wb_min=0&wb_max=0&wb_sigma=0.00&sfwdb=7576183815&sbwdb=6313410471&sxlfwdb=7575971197&sxlbwdb=6313300667&nrc=72&nwc=0&nfwds=24&nbwds=10&nxlfwds=12&nxlbwds=4&rt=9130.44&wt=0.00&osize=3850577700&csize=3850577700&sec.prot=gsi&sec.name=cmsprd&sec.host=cms-ucsrv-c2f46-32-07.cern.ch&sec.vorg=&sec.grps=&sec.role=&sec.info=/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=amaltaro/CN=718748/CN=Alan Malta Rodrigues&sec.app=\"","metadata":{"host":"eoscms-srv-m1.cern.ch","kafka_timestamp":1491789692305,"partition":"14","path":"cms","producer":"eos","timestamp":1491789689562,"topic":"eos_logs","type":"reports","type_prefix":"logs"}}
@@ -547,7 +555,9 @@ def unpack_struct(colname, df):
 
 def aso_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     """
-    Parse ASO records on HDFS via mapping ASO tables to Spark SQLContext.
+    Parse ASO records on HDFS via mapping ASO tables to Spark SQLContext, data comes from
+    https://gitlab.cern.ch/awg/awg-ETL-crons/blob/master/sqoop/cms-aso.sh
+
     :returns: a dictionary with ASO Spark DataFrame.
     """
     adir = hdir+'/CMS_ASO/filetransfersdb/merged'
