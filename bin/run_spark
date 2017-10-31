@@ -26,6 +26,7 @@ fi
 
 # set avro jars
 csvjar=/afs/cern.ch/user/l/lmeniche/public/spark-csv-assembly-1.4.0.jar
+csvjar=/afs/cern.ch/user/v/valya/public/spark/spark-csv-assembly-1.4.0.jar
 avrojar=/usr/lib/avro/avro-mapred.jar
 sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
 
