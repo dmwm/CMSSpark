@@ -99,7 +99,8 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
             'parse_dn(GridName) AS dn',
             '\"crab\" AS stream',
             '%s AS timestamp' % unix_date,
-            'WrapCPU AS cpu']
+            'WrapCPU AS cpu',
+            'WrapWC as wc']
     query = "SELECT %s FROM jm_df "\
              "JOIN f_b_s_df ON f_b_s_df.file_name = jm_df.FileName " \
              % ','.join(cols)
@@ -108,7 +109,8 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
             'count(dataset_name) AS nacc',
             'count(dn) AS distinct_users',
             'first(tier_from_site_name(site_name)) AS site_tier',
-            'SUM(cpu) AS cpu_time']
+            'SUM(cpu) AS cpu_time',
+            'SUM(wc) AS wc_time']
     query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
             % (','.join(cols), query)
 
@@ -190,7 +192,7 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
             'count(dataset_name) AS nacc',
             'count(dn) AS distinct_users',
             'first(tier_from_site_name(site_name)) AS site_tier',
-            '-1 AS cpu_time']
+            '-1 AS cpu_time', '-1 AS wc_time']
     query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
             % (','.join(cols), query)
 
@@ -273,7 +275,7 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
             'count(dataset_name) AS nacc',
             'count(dn) AS distinct_users',
             'first(tier_from_site_name(site_name)) AS site_tier',
-            '-1 AS cpu_time']
+            '-1 AS cpu_time', '-1 AS wc_time']
     query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
             % (','.join(cols), query)
 
@@ -355,7 +357,7 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
             'count(dataset_name) AS nacc',
             'count(dn) AS distinct_users',
             'first(tier_from_site_name(site_name)) AS site_tier',
-            '-1 AS cpu_time']
+            '-1 AS cpu_time', '-1 AS wc_time']
     query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
             % (','.join(cols), query)
 

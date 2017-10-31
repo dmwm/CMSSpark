@@ -337,7 +337,10 @@ def jm_tables(ctx, sqlContext,
     jdf = sqlContext.createDataFrame(rdd, schema=schema_jm())
     df = jdf.withColumn("WrapWC", jdf["WrapWC"].cast(DoubleType()))\
             .withColumn("WrapCPU", jdf["WrapCPU"].cast(DoubleType()))\
-            .withColumn("ExeCPU", jdf["ExeCPU"].cast(DoubleType()))
+            .withColumn("ExeCPU", jdf["ExeCPU"].cast(DoubleType()))\
+            .withColumn("NCores", jdf["NCores"].cast(IntegerType()))\
+            .withColumn("NEvProc", jdf["NEvProc"].cast(IntegerType()))\
+            .withColumn("NEvReq", jdf["NEvReq"].cast(IntegerType()))
     df.registerTempTable('jm_df')
     tables = {'jm_df': df}
     return tables
