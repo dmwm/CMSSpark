@@ -513,6 +513,29 @@ def eos_tables(sqlContext,
     tables = {'eos_df':eos_df}
     return tables
 
+def condor_tables(sqlContext,
+        hdir='hdfs:///project/monitoring/archive/condor/raw/metric',
+        date=None, verbose=False):
+    """
+    Parse HTCondor records
+
+    Example of HTCondor recornd on HDFS
+    {"data":{"AccountingGroup":"analysis.wverbeke","Badput":0.0,"CMSGroups":"[\"/cms\"]","CMSPrimaryDataTier":"MINIAODSIM","CMSPrimaryPrimaryDataset":"TTWJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-madspin-pythia8","CMSPrimaryProcessedDataset":"RunIISummer16MiniAODv2-PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext2-v1","CRAB_AsyncDest":"T2_BE_IIHE","CRAB_DataBlock":"/TTWJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-madspin-pythia8/RunIISummer16MiniAODv2-PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext2-v1/MINIAODSIM#291c85fa-aab1-11e6-846b-02163e0184a6","CRAB_ISB":"https://cmsweb.cern.ch/crabcache","CRAB_Id":30,"CRAB_JobArch":"slc6_amd64_gcc530","CRAB_JobSW":"CMSSW_9_2_4","CRAB_JobType":"analysis","CRAB_OutLFNDir":"/store/user/wverbeke/heavyNeutrino/TTWJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-madspin-pythia8/crab_Moriond2017_ext2-v1_ewkinoMCList-v7p1/171111_214448","CRAB_PrimaryDataset":"TTWJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-madspin-pythia8","CRAB_Publish":false,"CRAB_PublishName":"crab_Moriond2017_ext2-v1_ewkinoMCList-v7p1-00000000000000000000000000000000","CRAB_Retry":0,"CRAB_SaveLogsFlag":true,"CRAB_SiteBlacklist":"[]","CRAB_SiteWhitelist":"[]","CRAB_SubmitterIpAddr":"193.58.172.33","CRAB_TaskEndTime":1513028688,"CRAB_TaskLifetimeDays":30,"CRAB_TaskWorker":"vocms052","CRAB_TransferOutputs":true,"CRAB_UserHN":"wverbeke","CRAB_Workflow":"171111_214448:wverbeke_crab_Moriond2017_ext2-v1_ewkinoMCList-v7p1","Campaign":"crab_wverbeke","ClusterId":20752288,"Cmd":"/data/srv/glidecondor/condor_local/spool/2259/0/cluster20752259.proc0.subproc0/gWMS-CMSRunAnalysis.sh","CommittedCoreHr":0.0,"CommittedSlotTime":0,"CommittedSuspensionTime":0,"CommittedTime":0,"CommittedWallClockHr":0.0,"CoreHr":0.0,"CoreSize":-1,"Country":"Unknown","CpuBadput":0.0,"CpuEff":0.0,"CpuTimeHr":0.0,"CumulativeRemoteSysCpu":0.0,"CumulativeRemoteUserCpu":0.0,"CumulativeSlotTime":0,"CumulativeSuspensionTime":0,"CurrentHosts":0,"DAGNodeName":"Job30","DAGParentNodeNames":"","DESIRED_Archs":"X86_64","DESIRED_CMSDataLocations":"T2_FR_IPHC,T2_CH_CERN_HLT,T1_ES_PIC,T2_DE_DESY,T2_BE_IIHE,T2_CH_CERN,T2_ES_IFCA","DESIRED_CMSDataset":"/TTWJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-madspin-pythia8/RunIISummer16MiniAODv2-PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext2-v1/MINIAODSIM","DESIRED_Overflow_Region":"none,none,none","DESIRED_Sites":["T2_FR_IPHC","T2_CH_CERN_HLT","T1_ES_PIC","T2_DE_DESY","T2_BE_IIHE","T2_CH_CERN","T2_ES_IFCA"],"DataCollection":1510475761000,"DataCollectionDate":1510475761000,"DataLocations":["T2_FR_IPHC","T2_CH_CERN_HLT","T1_ES_PIC","T2_DE_DESY","T2_BE_IIHE","T2_CH_CERN","T2_ES_IFCA"],"DataLocationsCount":7,"DesiredSiteCount":7,"DiskUsage":5032,"DiskUsageGB":0.005032,"EncryptExecuteDirectory":false,"EnteredCurrentStatus":1510436775000,"EstimatedWallTimeMins":1250,"ExecutableSize":9,"ExitBySignal":false,"ExitStatus":0,"GLIDEIN_CMSSite":"Unknown","GlobalJobId":"crab3@vocms0122.cern.ch#20752288.0#1510436775","HasSingularity":false,"ImageSize":9,"JOB_CMSSite":"$$(GLIDEIN_CMSSite:Unknown)","JOB_Gatekeeper":"Unknown","JobBatchName":"RunJobs.dag+20752259","JobPrio":10,"JobStatus":1,"JobUniverse":5,"MaxHosts":1,"MaxWallTimeMins":1250,"MemoryMB":0.0,"MinHosts":1,"NumJobCompletions":0,"NumJobStarts":0,"NumRestarts":0,"NumSystemHolds":0,"OVERFLOW_CHECK":false,"Original_DESIRED_Sites":["UNKNOWN"],"OutputFiles":2,"Owner":"cms1315","PostJobPrio1":-1510436758,"PostJobPrio2":0,"PreJobPrio1":1,"ProcId":0,"QDate":1510436775000,"QueueHrs":10.951667712198363,"REQUIRED_OS":"rhel6","Rank":0,"RecordTime":1510475761000,"RemoteSysCpu":0,"RemoteUserCpu":0,"RemoteWallClockTime":0,"RequestCpus":1,"RequestDisk":1,"RequestMemory":2000,"ScheddName":"crab3@vocms0122.cern.ch","ShouldTransferFiles":"YES","Site":"Unknown","SpoolOnEvict":false,"Status":"Idle","TaskType":"Analysis","Tier":"Unknown","TotalSubmitProcs":1,"TotalSuspensions":0,"TransferInputSizeMB":4,"Type":"analysis","Universe":"Vanilla","User":"cms1315@cms","VO":"cms","WMAgent_TaskType":"UNKNOWN","WallClockHr":0.0,"WhenToTransferOutput":"ON_EXIT_OR_EVICT","Workflow":"wverbeke_crab_Moriond2017_ext2-v1_ewkinoMCList-v7p1","metadata":{"id":"crab3@vocms0122.cern.ch#20752288.0#1510436775","timestamp":1510476202,"uuid":"8aa4b4fe-c785-11e7-ad57-fa163e15539a"},"x509UserProxyEmail":"Willem.Verbeke@UGent.be","x509UserProxyFQAN":["/DC=org/DC=terena/DC=tcs/C=BE/O=Universiteit Gent/CN=Willem Verbeke wlverbek@UGent.be","/cms/Role=NULL/Capability=NULL"],"x509UserProxyFirstFQAN":"/cms/Role=NULL/Capability=NULL","x509UserProxyVOName":"cms","x509userproxysubject":"/DC=org/DC=terena/DC=tcs/C=BE/O=Universiteit Gent/CN=Willem Verbeke wlverbek@UGent.be"},"metadata":{"_id":"380721bc-a12c-9b43-b545-740c10d2d0f0","hostname":"monit-amqsource-fafa51de8d.cern.ch","kafka_timestamp":1510476204057,"partition":"1","producer":"condor","timestamp":1510476204022,"topic":"condor_raw_metric","type":"metric","type_prefix":"raw","version":"001"}}
+    """
+    if  not date:
+        # by default we read yesterdate data
+        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+
+    hpath = '%s/%s' % (hdir, date)
+
+    # create new spark DataFrame
+    condor_df = sqlContext.read.json(hpath)
+    condor_df.registerTempTable('condor_df')
+#    condor_df = condor_df.select(unpack_struct("data", condor_df)) # extract data part of JSON records
+    condor_df.printSchema()
+    tables = {'condor_df':condor_df}
+    return tables
+
 def fts_tables(sqlContext,
         hdir='hdfs:///project/monitoring/archive/fts/raw/complete',
         date=None, verbose=False):
