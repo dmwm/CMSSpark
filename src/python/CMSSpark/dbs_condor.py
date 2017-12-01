@@ -18,7 +18,7 @@ from types import NoneType
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
-from pyspark.sql.functions import lit
+from pyspark.sql.functions import lit, sum, count, col, split
 
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
@@ -78,8 +78,8 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
     # read DBS and Phedex tables
     tables = {}
     tables.update(dbs_tables(sqlContext, inst=inst, verbose=verbose))
-    tables.update(phedex_tables(sqlContext, verbose=verbose))
-    phedex_df = tables['phedex_df']
+#    tables.update(phedex_tables(sqlContext, verbose=verbose))
+#    phedex_df = tables['phedex_df']
     daf = tables['daf'] # dataset access table
     ddf = tables['ddf'] # dataset table
     bdf = tables['bdf'] # block table
@@ -91,17 +91,17 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
     rvf = tables['rvf'] # release version table
 
     # read Condor rdd
-    date = condor_date(date)
-    tables.update(condor_tables(sqlContext, date=date, verbose=verbose))
+#    tables.update(condor_tables(sqlContext, hdir='hdfs:///cms/users/vk/condor', date=condor_date(date), verbose=verbose))
+    tables.update(condor_tables(sqlContext, date=condor_date(date), verbose=verbose))
     condor_df = tables['condor_df'] # aaa table
 
     # aggregate phedex info into dataframe
-    phedex_cols = ['node_name', 'dataset_name', 'dataset_is_open', 'block_bytes', 'replica_time_create']
-    newpdf = phedex_df.select(phedex_cols).groupBy(['node_name', 'dataset_name', 'dataset_is_open'])\
-            .agg({'block_bytes':'sum', 'replica_time_create':'max'})\
-            .withColumnRenamed('sum(block_bytes)', 'pbr_size')\
-            .withColumnRenamed('max(replica_time_create)', 'max_replica_time')
-    newpdf.registerTempTable('newpdf')
+#    phedex_cols = ['node_name', 'dataset_name', 'dataset_is_open', 'block_bytes', 'replica_time_create']
+#    newpdf = phedex_df.select(phedex_cols).groupBy(['node_name', 'dataset_name', 'dataset_is_open'])\
+#            .agg({'block_bytes':'sum', 'replica_time_create':'max'})\
+#            .withColumnRenamed('sum(block_bytes)', 'pbr_size')\
+#            .withColumnRenamed('max(replica_time_create)', 'max_replica_time')
+#    newpdf.registerTempTable('newpdf')
 
     # aggregate dbs info into dataframe
     cols = ['d_dataset_id', 'd_dataset','d_creation_date','d_is_dataset_valid','f_event_count','f_file_size','dataset_access_type','acquisition_era_name','processing_version']
@@ -131,28 +131,96 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
     agg_dbs_df.registerTempTable('agg_dbs_df')
 
     # join dbs and phedex tables
-    cols = ['d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','r_release_version','node_name','pbr_size','dataset_is_open','max_replica_time']
-    stmt = 'SELECT %s FROM agg_dbs_df JOIN newpdf ON agg_dbs_df.d_dataset = newpdf.dataset_name' % ','.join(cols)
-    dbs_phedex_df = sqlContext.sql(stmt)
-    dbs_phedex_df.registerTempTable('dbs_phedex_df')
+#     cols = ['d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','r_release_version','node_name','pbr_size','dataset_is_open','max_replica_time']
+#     stmt = 'SELECT %s FROM agg_dbs_df JOIN newpdf ON agg_dbs_df.d_dataset = newpdf.dataset_name' % ','.join(cols)
+#     dbs_phedex_df = sqlContext.sql(stmt)
+#     dbs_phedex_df.registerTempTable('dbs_phedex_df')
 
     # merge dbs+phedex and Condor data
+    cols = ['d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','r_release_version']
 #    cols = ['data.DESIRED_CMSDataset', 'data.KEvents', 'data.CMSSWWallHrs']
 #    stmt = 'SELECT %s FROM condor_df WHERE condor_df.data.ExitCode=0 AND condor_df.data.KEvents > 0' % ','.join(cols)
-    cols = cols + ['data.KEvents', 'data.CMSSWKLumis', 'data.CMSSWWallHrs', 'data.Campaign', 'data.Workflow', 'data.CpuEff', 'data.CoreHr', 'data.QueueHrs', 'data.CRAB_UserHN', 'data.Type']
-    stmt = 'SELECT %s FROM condor_df JOIN dbs_phedex_df ON dbs_phedex_df.d_dataset = condor_df.data.DESIRED_CMSDataset WHERE condor_df.data.ExitCode=0 AND condor_df.data.KEvents > 0' % ','.join(cols)
-    finel_df = sqlContext.sql(stmt)
-    print_rows(finel_df, stmt, verbose)
+    cols = cols + ['data.KEvents', 'data.CMSSWKLumis', 'data.CMSSWWallHrs', 'data.Campaign', 'data.Workflow', 'data.CpuEff', 'data.CoreHr', 'data.QueueHrs', 'data.CRAB_UserHN', 'data.Type', 'data.ExitCode']
+    stmt = 'SELECT %s FROM condor_df JOIN agg_dbs_df ON agg_dbs_df.d_dataset = condor_df.data.DESIRED_CMSDataset WHERE condor_df.data.KEvents > 0' % ','.join(cols)
+#     stmt = 'SELECT %s FROM condor_df JOIN dbs_phedex_df ON dbs_phedex_df.d_dataset = condor_df.data.DESIRED_CMSDataset WHERE condor_df.data.KEvents > 0' % ','.join(cols)
+
+    final_df = sqlContext.sql(stmt)
+    print_rows(final_df, stmt, verbose)
 
     # keep table around
-    finel_df.persist(StorageLevel.MEMORY_AND_DISK)
+    final_df.persist(StorageLevel.MEMORY_AND_DISK)
+
+    # conditions
+    refdf = final_df.where('ExitCode>0')
+    refdf.persist(StorageLevel.MEMORY_AND_DISK)
+    condf = condor_df.where('data.ExitCode>0')
+    condf.persist(StorageLevel.MEMORY_AND_DISK)
+
+    store = {}
+
+    # aggregate across datasets
+    from pyspark.sql.functions import lit, sum, count, col, split
+    xdf = condf.groupBy(['data.DESIRED_CMSDataset', 'data.CRAB_UserHN'])\
+            .agg(sum('data.KEvents').alias('sum_evts'),sum('data.CoreHr').alias('sum_chr'))\
+            .withColumn("tier", split(col('DESIRED_CMSDataset'), "/").alias('tier').getItem(3))
+    xdf.persist(StorageLevel.MEMORY_AND_DISK)
+    store['dataset'] = xdf.groupBy(['tier'])\
+            .agg(
+                sum('sum_evts').alias('sum_evts'),
+                sum('sum_chr').alias('sum_chr'),
+                (sum('sum_evts')/sum('sum_chr')).alias('rate'),
+                count('CRAB_UserHN').alias('nusers'))\
+            .withColumn('date', lit(date))\
+
+    # aggregate across campaign
+    ydf = condf.groupBy(['data.Campaign', 'data.CRAB_UserHN'])\
+            .agg(sum('data.KEvents').alias('sum_evts'),sum('data.CoreHr').alias('sum_chr'))
+    ydf.persist(StorageLevel.MEMORY_AND_DISK)
+    store['campaign'] = ydf.groupBy(['Campaign'])\
+            .agg(
+                sum('sum_evts').alias('sum_evts'),
+                sum('sum_chr').alias('sum_chr'),
+                (sum('sum_evts')/sum('sum_chr')).alias('rate'),
+                count('CRAB_UserHN').alias('nusers'))\
+            .withColumn('date', lit(date))\
+            .withColumnRenamed('Campaign', 'campaign')
+
+    # aggregate across DBS releases
+    zdf = refdf.groupBy(['r_release_version', 'CRAB_UserHN'])\
+            .agg(sum('KEvents').alias('sum_evts'),sum('CoreHr').alias('sum_chr'))
+    zdf.persist(StorageLevel.MEMORY_AND_DISK)
+    store['release'] = zdf.groupBy(['r_release_version'])\
+            .agg(
+                sum('sum_evts').alias('sum_evts'),
+                sum('sum_chr').alias('sum_chr'),
+                (sum('sum_evts')/sum('sum_chr')).alias('rate'),
+                count('CRAB_UserHN').alias('nusers'))\
+            .withColumn('date', lit(date))\
+            .withColumnRenamed('r_release_version', 'release')
+
+    # aggregate across DBS eras
+    edf = refdf.groupBy(['acquisition_era_name', 'CRAB_UserHN'])\
+            .agg(sum('KEvents').alias('sum_evts'),sum('CoreHr').alias('sum_chr'))
+    edf.persist(StorageLevel.MEMORY_AND_DISK)
+    store['era'] = edf.groupBy(['acquisition_era_name'])\
+            .agg(
+                sum('sum_evts').alias('sum_evts'),
+                sum('sum_chr').alias('sum_chr'),
+                (sum('sum_evts')/sum('sum_chr')).alias('rate'),
+                count('CRAB_UserHN').alias('nusers'))\
+            .withColumn('date', lit(date))\
+            .withColumnRenamed('acquisition_era_name', 'era')
 
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
     if  fout:
-        ndf = split_dataset(finel_df, 'd_dataset')
-        ndf.write.format("com.databricks.spark.csv")\
-                .option("header", "true").save(fout)
+        for col in store.keys():
+            out = fout.replace(date, '%s/%s' % (col, date))
+            print("%s rows: %s" % (col, store[col].count()))
+            print_rows(store[col], col, verbose=1)
+            print("output: %s" % out)
+            store[col].write.format("com.databricks.spark.csv")\
+                    .option("header", "true").save(out)
 
     ctx.stop()
 
