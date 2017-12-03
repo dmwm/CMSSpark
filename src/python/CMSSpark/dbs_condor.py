@@ -16,12 +16,15 @@ import json
 import argparse
 from types import NoneType
 
+# pyspark modules
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
 from pyspark.sql.functions import lit, sum, count, col, split
+from pyspark.sql.functions import udf
+from pyspark.sql.types import DoubleType
 
 # CMSSpark modules
-from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
+from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows, unionAll
 from CMSSpark.spark_utils import spark_context, condor_tables, split_dataset
 from CMSSpark.utils import elapsed_time
 
@@ -150,76 +153,72 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
     # keep table around
     final_df.persist(StorageLevel.MEMORY_AND_DISK)
 
-    # conditions
-    refdf = final_df.where('ExitCode>0')
-    refdf.persist(StorageLevel.MEMORY_AND_DISK)
-    condf = condor_df.where('data.ExitCode>0')
-    condf.persist(StorageLevel.MEMORY_AND_DISK)
+    # aggregate across datasets
+    def rate(evts, cores):
+        "Calculate the rate of events vs cores, if they're not defineed return -1"
+        if evts and cores:
+            return float(evts)/float(cores)
+        return -1.
+    func_rate = udf(rate, DoubleType())
 
     store = {}
+    # conditions
+    for ecode in [0,1]:
+        if ecode > 0:
+            refdf = final_df.where('ExitCode>0')
+            condf = condor_df.where('data.ExitCode>0')
+        else:
+            refdf = final_df.where('ExitCode<1')
+            condf = condor_df.where('data.ExitCode<1')
+        refdf.persist(StorageLevel.MEMORY_AND_DISK)
+        condf.persist(StorageLevel.MEMORY_AND_DISK)
 
-    # aggregate across datasets
-    from pyspark.sql.functions import lit, sum, count, col, split
-    xdf = condf.groupBy(['data.DESIRED_CMSDataset', 'data.CRAB_UserHN'])\
-            .agg(sum('data.KEvents').alias('sum_evts'),sum('data.CoreHr').alias('sum_chr'))\
-            .withColumn("tier", split(col('DESIRED_CMSDataset'), "/").alias('tier').getItem(3))
-    xdf.persist(StorageLevel.MEMORY_AND_DISK)
-    store['dataset'] = xdf.groupBy(['tier'])\
-            .agg(
-                sum('sum_evts').alias('sum_evts'),
-                sum('sum_chr').alias('sum_chr'),
-                (sum('sum_evts')/sum('sum_chr')).alias('rate'),
-                count('CRAB_UserHN').alias('nusers'))\
-            .withColumn('date', lit(date))\
+        xdf = condf.groupBy(['data.DESIRED_CMSDataset', 'data.CRAB_UserHN', 'data.ExitCode'])\
+                .agg(sum('data.KEvents').alias('sum_evts'),sum('data.CoreHr').alias('sum_chr'))\
+                .withColumn('date', lit(date))\
+                .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
+                .withColumn("tier", split(col('DESIRED_CMSDataset'), "/").alias('tier').getItem(3))\
+                .withColumnRenamed('CRAB_UserHN', 'user')\
+                .withColumnRenamed('DESIRED_CMSDataset', 'dataset')
+        store.setdefault('dataset', []).append(xdf)
 
-    # aggregate across campaign
-    ydf = condf.groupBy(['data.Campaign', 'data.CRAB_UserHN'])\
-            .agg(sum('data.KEvents').alias('sum_evts'),sum('data.CoreHr').alias('sum_chr'))
-    ydf.persist(StorageLevel.MEMORY_AND_DISK)
-    store['campaign'] = ydf.groupBy(['Campaign'])\
-            .agg(
-                sum('sum_evts').alias('sum_evts'),
-                sum('sum_chr').alias('sum_chr'),
-                (sum('sum_evts')/sum('sum_chr')).alias('rate'),
-                count('CRAB_UserHN').alias('nusers'))\
-            .withColumn('date', lit(date))\
-            .withColumnRenamed('Campaign', 'campaign')
+        # aggregate across campaign
+        xdf = condf.groupBy(['data.Campaign', 'data.CRAB_UserHN', 'data.ExitCode'])\
+                .agg(sum('data.KEvents').alias('sum_evts'),sum('data.CoreHr').alias('sum_chr'))\
+                .withColumn('date', lit(date))\
+                .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
+                .withColumnRenamed('CRAB_UserHN', 'user')\
+                .withColumnRenamed('Campaign', 'campaign')
+        store.setdefault('campaign', []).append(xdf)
 
-    # aggregate across DBS releases
-    zdf = refdf.groupBy(['r_release_version', 'CRAB_UserHN'])\
-            .agg(sum('KEvents').alias('sum_evts'),sum('CoreHr').alias('sum_chr'))
-    zdf.persist(StorageLevel.MEMORY_AND_DISK)
-    store['release'] = zdf.groupBy(['r_release_version'])\
-            .agg(
-                sum('sum_evts').alias('sum_evts'),
-                sum('sum_chr').alias('sum_chr'),
-                (sum('sum_evts')/sum('sum_chr')).alias('rate'),
-                count('CRAB_UserHN').alias('nusers'))\
-            .withColumn('date', lit(date))\
-            .withColumnRenamed('r_release_version', 'release')
+        # aggregate across DBS releases
+        xdf = refdf.groupBy(['r_release_version', 'CRAB_UserHN', 'ExitCode'])\
+                .agg(sum('KEvents').alias('sum_evts'),sum('CoreHr').alias('sum_chr'))\
+                .withColumn('date', lit(date))\
+                .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
+                .withColumnRenamed('CRAB_UserHN', 'user')\
+                .withColumnRenamed('r_release_version', 'release')
+        store.setdefault('release', []).append(xdf)
 
-    # aggregate across DBS eras
-    edf = refdf.groupBy(['acquisition_era_name', 'CRAB_UserHN'])\
-            .agg(sum('KEvents').alias('sum_evts'),sum('CoreHr').alias('sum_chr'))
-    edf.persist(StorageLevel.MEMORY_AND_DISK)
-    store['era'] = edf.groupBy(['acquisition_era_name'])\
-            .agg(
-                sum('sum_evts').alias('sum_evts'),
-                sum('sum_chr').alias('sum_chr'),
-                (sum('sum_evts')/sum('sum_chr')).alias('rate'),
-                count('CRAB_UserHN').alias('nusers'))\
-            .withColumn('date', lit(date))\
-            .withColumnRenamed('acquisition_era_name', 'era')
+        # aggregate across DBS eras
+        xdf = refdf.groupBy(['acquisition_era_name', 'CRAB_UserHN', 'ExitCode'])\
+                .agg(sum('KEvents').alias('sum_evts'),sum('CoreHr').alias('sum_chr'))\
+                .withColumn('date', lit(date))\
+                .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
+                .withColumnRenamed('CRAB_UserHN', 'user')\
+                .withColumnRenamed('acquisition_era_name', 'era')
+        store.setdefault('era', []).append(xdf)
 
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
     if  fout:
         for col in store.keys():
             out = fout.replace(date, '%s/%s' % (col, date))
-            print("%s rows: %s" % (col, store[col].count()))
-            print_rows(store[col], col, verbose=1)
             print("output: %s" % out)
-            store[col].write.format("com.databricks.spark.csv")\
+            odf = unionAll(store[col])
+            print("%s rows: %s" % (col, odf.count()))
+            print_rows(odf, col, verbose=1)
+            odf.write.format("com.databricks.spark.csv")\
                     .option("header", "true").save(out)
 
     ctx.stop()
