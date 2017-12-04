@@ -98,14 +98,6 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
     tables.update(condor_tables(sqlContext, date=condor_date(date), verbose=verbose))
     condor_df = tables['condor_df'] # aaa table
 
-    # aggregate phedex info into dataframe
-#    phedex_cols = ['node_name', 'dataset_name', 'dataset_is_open', 'block_bytes', 'replica_time_create']
-#    newpdf = phedex_df.select(phedex_cols).groupBy(['node_name', 'dataset_name', 'dataset_is_open'])\
-#            .agg({'block_bytes':'sum', 'replica_time_create':'max'})\
-#            .withColumnRenamed('sum(block_bytes)', 'pbr_size')\
-#            .withColumnRenamed('max(replica_time_create)', 'max_replica_time')
-#    newpdf.registerTempTable('newpdf')
-
     # aggregate dbs info into dataframe
     cols = ['d_dataset_id', 'd_dataset','d_creation_date','d_is_dataset_valid','f_event_count','f_file_size','dataset_access_type','acquisition_era_name','processing_version']
     stmt = 'SELECT %s FROM ddf JOIN fdf on ddf.d_dataset_id = fdf.f_dataset_id JOIN daf ON ddf.d_dataset_access_type_id = daf.dataset_access_type_id JOIN aef ON ddf.d_acquisition_era_id = aef.acquisition_era_id JOIN pef ON ddf.d_processing_era_id = pef.processing_era_id' % ','.join(cols)
@@ -133,17 +125,9 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
     agg_dbs_df = sqlContext.sql(stmt)
     agg_dbs_df.registerTempTable('agg_dbs_df')
 
-    # join dbs and phedex tables
-#     cols = ['d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','r_release_version','node_name','pbr_size','dataset_is_open','max_replica_time']
-#     stmt = 'SELECT %s FROM agg_dbs_df JOIN newpdf ON agg_dbs_df.d_dataset = newpdf.dataset_name' % ','.join(cols)
-#     dbs_phedex_df = sqlContext.sql(stmt)
-#     dbs_phedex_df.registerTempTable('dbs_phedex_df')
-
     # merge dbs+phedex and Condor data
     cols = ['d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','r_release_version']
-#    cols = ['data.DESIRED_CMSDataset', 'data.KEvents', 'data.CMSSWWallHrs']
-#    stmt = 'SELECT %s FROM condor_df WHERE condor_df.data.ExitCode=0 AND condor_df.data.KEvents > 0' % ','.join(cols)
-    cols = cols + ['data.KEvents', 'data.CMSSWKLumis', 'data.CMSSWWallHrs', 'data.Campaign', 'data.Workflow', 'data.CpuEff', 'data.CoreHr', 'data.QueueHrs', 'data.CRAB_UserHN', 'data.Type', 'data.ExitCode']
+    cols = cols + ['data.KEvents', 'data.CMSSWKLumis', 'data.CMSSWWallHrs', 'data.Campaign', 'data.Workflow', 'data.CpuEff', 'data.CoreHr', 'data.QueueHrs', 'data.CRAB_UserHN', 'data.Type', 'data.ExitCode', 'data.TaskType']
     stmt = 'SELECT %s FROM condor_df JOIN agg_dbs_df ON agg_dbs_df.d_dataset = condor_df.data.DESIRED_CMSDataset WHERE condor_df.data.KEvents > 0' % ','.join(cols)
 #     stmt = 'SELECT %s FROM condor_df JOIN dbs_phedex_df ON dbs_phedex_df.d_dataset = condor_df.data.DESIRED_CMSDataset WHERE condor_df.data.KEvents > 0' % ','.join(cols)
 
@@ -153,7 +137,7 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
     # keep table around
     final_df.persist(StorageLevel.MEMORY_AND_DISK)
 
-    # aggregate across datasets
+    # user defined function
     def rate(evts, cores):
         "Calculate the rate of events vs cores, if they're not defineed return -1"
         if evts and cores:
@@ -161,19 +145,30 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
         return -1.
     func_rate = udf(rate, DoubleType())
 
+    # our output
     store = {}
+
     # conditions
+
+    # load pyspark functions to be used here to redefine any previous usage of those names
+    from pyspark.sql.functions import lit, sum, count, col, split
+
+    # here we split dataframe based on exitcode conditions to reduce dimentionality
+    # of the input, otherwise job crashes with Integer.MAX_VALUE exception which
+    # basically tells that input dataframe exceed number of available partitions
     for ecode in [0,1]:
-        if ecode > 0:
-            refdf = final_df.where('ExitCode>0')
-            condf = condor_df.where('data.ExitCode>0')
+        if ecode == 0:
+            refdf = final_df.where(col('ExitCode') == 0)
+            condf = condor_df.where(col('data.ExitCode') == 0)
         else:
-            refdf = final_df.where('ExitCode<1')
-            condf = condor_df.where('data.ExitCode<1')
+            refdf = final_df.where(col('ExitCode') != 0)
+            condf = condor_df.where(col('data.ExitCode') != 0)
         refdf.persist(StorageLevel.MEMORY_AND_DISK)
         condf.persist(StorageLevel.MEMORY_AND_DISK)
 
-        xdf = condf.groupBy(['data.DESIRED_CMSDataset', 'data.CRAB_UserHN', 'data.ExitCode'])\
+        # aggregate CMS datasets
+        cols = ['data.DESIRED_CMSDataset', 'data.CRAB_UserHN', 'data.ExitCode', 'data.Type', 'data.TaskType']
+        xdf = condf.groupBy(cols)\
                 .agg(sum('data.KEvents').alias('sum_evts'),sum('data.CoreHr').alias('sum_chr'))\
                 .withColumn('date', lit(date))\
                 .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
@@ -183,7 +178,8 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
         store.setdefault('dataset', []).append(xdf)
 
         # aggregate across campaign
-        xdf = condf.groupBy(['data.Campaign', 'data.CRAB_UserHN', 'data.ExitCode'])\
+        cols = ['data.Campaign', 'data.CRAB_UserHN', 'data.ExitCode', 'data.Type', 'data.TaskType']
+        xdf = condf.groupBy(cols)\
                 .agg(sum('data.KEvents').alias('sum_evts'),sum('data.CoreHr').alias('sum_chr'))\
                 .withColumn('date', lit(date))\
                 .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
@@ -192,7 +188,8 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
         store.setdefault('campaign', []).append(xdf)
 
         # aggregate across DBS releases
-        xdf = refdf.groupBy(['r_release_version', 'CRAB_UserHN', 'ExitCode'])\
+        cols = ['r_release_version', 'CRAB_UserHN', 'ExitCode', 'Type', 'TaskType']
+        xdf = refdf.groupBy(cols)\
                 .agg(sum('KEvents').alias('sum_evts'),sum('CoreHr').alias('sum_chr'))\
                 .withColumn('date', lit(date))\
                 .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
@@ -201,7 +198,8 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
         store.setdefault('release', []).append(xdf)
 
         # aggregate across DBS eras
-        xdf = refdf.groupBy(['acquisition_era_name', 'CRAB_UserHN', 'ExitCode'])\
+        cols = ['acquisition_era_name', 'CRAB_UserHN', 'ExitCode', 'Type', 'TaskType']
+        xdf = refdf.groupBy(cols)\
                 .agg(sum('KEvents').alias('sum_evts'),sum('CoreHr').alias('sum_chr'))\
                 .withColumn('date', lit(date))\
                 .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
@@ -213,7 +211,7 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
     # it is either absolute path or area under /user/USERNAME
     if  fout:
         for col in store.keys():
-            out = fout.replace(date, '%s/%s' % (col, date))
+            out = '%s/%s/%s' % (fout, col, date)
             print("output: %s" % out)
             odf = unionAll(store[col])
             print("%s rows: %s" % (col, odf.count()))
