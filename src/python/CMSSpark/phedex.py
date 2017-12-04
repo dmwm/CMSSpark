@@ -20,7 +20,7 @@ from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
 from pyspark.sql.functions import lit, sum, count, col, split
 from pyspark.sql.functions import udf
-from pyspark.sql.types import StringType
+from pyspark.sql.types import StringType, IntegerType
 
 # CMSSpark modules
 from CMSSpark.spark_utils import phedex_tables, print_rows
@@ -58,6 +58,12 @@ def unix2human(tstamp):
     "Convert unix time stamp into human readable format"
     return time.strftime('%Y%m%d', time.gmtime(tstamp))
 
+def site_filter(site):
+    "Filter site names without _MSS or _Buffer or _Export"
+    if site.endswith('_MSS') or site.endswith('_Buffer') or site.endswith('_Export'):
+        return 0
+    return 1
+
 def run(date, fout, yarn=None, verbose=None):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
@@ -74,11 +80,12 @@ def run(date, fout, yarn=None, verbose=None):
 
     # register user defined function
     unix2date = udf(unix2human, StringType())
+    siteFilter = udf(site_filter, IntegerType())
     one_day = 60*60*24
 
     # aggregate phedex info into dataframe
     cols = ['node_name', 'dataset_name', 'block_bytes', 'replica_time_create']
-    pdf = phedex_df.select(cols)\
+    pdf = phedex_df.select(cols).where(siteFilter(col('node_name')) == 1)\
             .groupBy(['node_name', 'dataset_name', 'replica_time_create'])\
             .agg({'block_bytes':'sum'})\
             .withColumn('date', lit(date))\
