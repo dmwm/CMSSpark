@@ -79,12 +79,10 @@ def run(date, fout, yarn=None, verbose=None):
     # aggregate phedex info into dataframe
     cols = ['node_name', 'dataset_name', 'block_bytes', 'replica_time_create']
     pdf = phedex_df.select(cols)\
-            .where((col('replica_time_create') > dateStamp(date)-one_day-1) \
-                 & (col('replica_time_create') < dateStamp(date)+one_day))\
-            .groupBy(['node_name', 'dataset_name'])\
-            .agg({'block_bytes':'sum', 'replica_time_create':'max'})\
-            .withColumnRenamed('max(replica_time_create)', 'max_replica_time')\
-            .withColumn('date', unix2date(col('max_replica_time')))\
+            .groupBy(['node_name', 'dataset_name', 'replica_time_create'])\
+            .agg({'block_bytes':'sum'})\
+            .withColumn('date', lit(date))\
+            .withColumn('replica_date', unix2date(col('replica_time_create')))\
             .withColumnRenamed('sum(block_bytes)', 'size')\
             .withColumnRenamed('dataset_name', 'dataset')\
             .withColumnRenamed('node_name', 'site')
@@ -95,7 +93,7 @@ def run(date, fout, yarn=None, verbose=None):
     # it is either absolute path or area under /user/USERNAME
     if  fout:
         out = '%s/phedex/%s' % (fout, date)
-        cols = ['site','dataset','size','date']
+        cols = ['site','dataset','size','date','replica_date']
         pdf.select(cols)\
             .write.format("com.databricks.spark.csv")\
             .option("header", "true").save(out)
