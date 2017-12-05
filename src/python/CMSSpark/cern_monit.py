@@ -139,6 +139,13 @@ def send2monit(data):
                 conn.disconnect()
 
             print('Sent %d docs to %s' % (len(successfully_sent), repr(self._host_and_ports)))
+            if len(successfully_sent):
+                import sys
+                sys.__stdout__.flush()
+                sys.__stderr__.flush()
+                print("single doc", successfully_sent[0])
+                sys.__stdout__.flush()
+                sys.__stderr__.flush()
             return successfully_sent
 
         def _send_single(self, conn, notification):
