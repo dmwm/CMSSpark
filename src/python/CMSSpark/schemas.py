@@ -242,6 +242,21 @@ def schema_file_lumis():
             StructField("fl_lumi_section_num", StringType(), True),
             StructField("fl_file_id", IntegerType(), True)
         ])
+
+def schema_phedex_summary():
+    """PhEDEx summary table schema
+    site,dataset,size,date,replica_date
+
+    :returns: StructType consisting StructField array
+    """
+    return StructType([
+            StructField("site", StringType(), True),
+            StructField("dataset", StringType(), True),
+            StructField("size", DoubleType(), True),
+            StructField("date", IntegerType(), True),
+            StructField("replica_date", IntegerType(), True)
+        ])
+
 def schema_phedex():
     """
     PhEDEx schema on HDFS
@@ -462,7 +477,8 @@ def aggregated_data_schema():
     nacc: integer (nullable = true)
     distinct_users: integer (nullable = true)
     site_tier: string (nullable = true)
-    cpu_time double (nullable = true)
+    cpu_time: double (nullable = true)
+    wc_time: double (nullable = true)
     primary_name: string (nullable = true)
     processing_name: string (nullable = true)
     data_tier: string (nullable = true)
@@ -480,6 +496,7 @@ def aggregated_data_schema():
         StructField("distinct_users", IntegerType(), True),
         StructField("site_tier", StringType(), True),
         StructField("cpu_time", DoubleType(), True),
+        StructField("wc_time", DoubleType(), True),
         StructField("primary_name", StringType(), True),
         StructField("processing_name", StringType(), True),
         StructField("data_tier", StringType(), True),
