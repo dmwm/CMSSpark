@@ -21,6 +21,7 @@ from CMSSpark.schemas import schema_processing_eras, schema_dataset_access_types
 from CMSSpark.schemas import schema_acquisition_eras,  schema_datasets, schema_blocks
 from CMSSpark.schemas import schema_files, schema_mod_configs, schema_out_configs
 from CMSSpark.schemas import schema_rel_versions, schema_file_lumis, schema_phedex
+from CMSSpark.schemas import schema_phedex_summary
 from CMSSpark.schemas import schema_jm, schema_cmssw, schema_asodb, schema_empty_aaa, schema_empty_eos
 
 from pyspark import SparkContext, StorageLevel
@@ -168,6 +169,35 @@ def spark_context(appname='cms', yarn=None, verbose=False, python_files=[]):
 def delete_hadoop_directory(path):
     os.popen("hadoop fs -rm -r \"" + path + "\"")
 
+def phedex_summary_tables(sqlContext, hdir='hdfs:///cms/phedex', verbose=False):
+    """
+    Parse PhEDEx records on HDFS via mapping PhEDEx tables to Spark SQLContext.
+    :returns: a dictionary with PhEDEx Spark DataFrame.
+    """
+    # look-up phedex summary area and construct a list of part-XXXXX files
+    dirs = os.popen("hadoop fs -ls %s | sed '1d;s/  */ /g' | cut -d\  -f8" % hdir).read().splitlines()
+
+    dfs = []
+    for idir in dirs:
+        pfiles = []
+        for fname in files(idir):
+            pfiles.append(fname)
+        msg = "Phedex snapshot %s: %d directories" % (idir, len(pfiles))
+        print(msg)
+        pdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
+                        .load(file_path, schema = schema_phedex_summary()) \
+                        for file_path in pfiles])
+        pdf.persist(StorageLevel.MEMORY_AND_DISK)
+        dfs.append(pdf)
+
+    # Register temporary tables to be able to use sqlContext.sql
+    phedex_summary_df = unionAll(dfs)
+    phedex_summary_df.registerTempTable('phedex_summary_df')
+    phedex_summary_df.persist(StorageLevel.MEMORY_AND_DISK)
+
+    tables = {'phedex_summary_df':phedex_summary_df}
+    return tables
 
 def phedex_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     """
