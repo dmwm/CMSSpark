@@ -19,6 +19,7 @@ from types import NoneType
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
 from pyspark.sql.functions import lit, sum, count, col, split
+from pyspark.sql import functions as F
 from pyspark.sql.functions import udf
 from pyspark.sql.types import StringType, IntegerType
 
@@ -56,11 +57,16 @@ def dateStamp(date):
 
 def days_present(min_d, max_d, min_rd, max_rd):
     "Find total number of days"
-    minv = min(min_d, min_rd)
-    maxv = max(max_d, max_rd)
-    return maxv - minv
+    print("### days: %s %s %s %s" % (min_d, max_d, min_rd, max_rd))
+    if min_d and min_rd and max_d and max_rd:
+        minv = min(int(min_d), int(min_rd))
+        maxv = max(int(max_d), int(max_rd))
+        secs = dateStamp(str(maxv)) - dateStamp(str(minv))
+        secd = 60*60*24
+        return int(round(secs/secd))
+    return -1
 
-def run(date, fout, yarn=None, verbose=None):
+def run(fout, yarn=None, verbose=None):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
@@ -71,28 +77,40 @@ def run(date, fout, yarn=None, verbose=None):
 
     # read Phedex tables
     tables = {}
-    hdir = 'hdfs:///cms/users/vk/phedex'
+    hdir = 'hdfs:///cms/users/vk/test/phedex'
     tables.update(phedex_summary_tables(sqlContext, hdir=hdir, verbose=verbose))
     phedex_summary_df = tables['phedex_summary_df']
+    phedex_summary_df.persist(StorageLevel.MEMORY_AND_DISK)
+    print("### schema", phedex_summary_df.printSchema())
+    phedex_summary_df.show(5)
 
     # register user defined function
     days = udf(days_present, IntegerType())
 
     # aggregate phedex info into dataframe
-    cols = ['site', 'dataset', 'size', 'date', 'replica_date']
-    pdf = phedex_summary_df.select(cols)\
-            .groupBy(['site', 'dataset'])\
+#    pdf = phedex_summary_df\
+#            .groupBy(['site', 'dataset'])\
+#            .agg(
+#                    F.min(col('date')).alias('min_date'),
+#                    F.max(col('date')).alias('max_date'),
+#                    F.min(col('replica_date')).alias('min_rdate'),
+#                    F.max(col('replica_date')).alias('max_rdate'),
+#                    F.max(col('size')).alias('max_size'),
+#                    F.min(col('size')).alias('min_size')
+#                )\
+#            .withColumn('days', days(col('min_date'), col('max_date'), col('min_rdate'), col('max_rdate')))
+    pdf = phedex_summary_df\
+            .groupBy(['site', 'dataset', 'size'])\
             .agg(
-                    min('date').alias('min_date'),
-                    max('date').alias('max_date'),
-                    min('replica_date').alias('min_rdate'),
-                    max('replica_date').alias('max_rdate'),
-                    max('size').alias('max_size'),
-                    min('size').alias('min_size')
+                    F.min(col('date')).alias('min_date'),
+                    F.max(col('date')).alias('max_date'),
+                    F.min(col('replica_date')).alias('min_rdate'),
+                    F.max(col('replica_date')).alias('max_rdate')
                 )\
             .withColumn('days', days(col('min_date'), col('max_date'), col('min_rdate'), col('max_rdate')))
-    pdf.registerTempTable('pdf')
     pdf.persist(StorageLevel.MEMORY_AND_DISK)
+    pdf.show(5)
+    print_rows(pdf, 'pdf', verbose=1)
 
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
