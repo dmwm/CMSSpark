@@ -181,8 +181,9 @@ def phedex_summary_tables(sqlContext, hdir='hdfs:///cms/phedex', verbose=False):
     for idir in dirs:
         pfiles = []
         for fname in files(idir):
-            pfiles.append(fname)
-        msg = "Phedex snapshot %s: %d directories" % (idir, len(pfiles))
+            if 'part-' in fname:
+                pfiles.append(fname)
+        msg = "Phedex snapshot %s: %d files" % (idir, len(pfiles))
         print(msg)
         pdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
@@ -194,7 +195,6 @@ def phedex_summary_tables(sqlContext, hdir='hdfs:///cms/phedex', verbose=False):
     # Register temporary tables to be able to use sqlContext.sql
     phedex_summary_df = unionAll(dfs)
     phedex_summary_df.registerTempTable('phedex_summary_df')
-    phedex_summary_df.persist(StorageLevel.MEMORY_AND_DISK)
 
     tables = {'phedex_summary_df':phedex_summary_df}
     return tables
