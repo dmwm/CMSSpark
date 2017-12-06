@@ -100,10 +100,13 @@ def run(date, fout, yarn=None, verbose=None):
     # it is either absolute path or area under /user/USERNAME
     if  fout:
         out = '%s/phedex/%s' % (fout, date)
-        cols = ['site','dataset','size','date','replica_date']
+        cols = ['date','site','dataset','size','replica_date']
+        # don't write header since when we'll read back the data it will
+        # mismatch the data types, i.e. headers are string and rows
+        # may be different data types
         pdf.select(cols)\
             .write.format("com.databricks.spark.csv")\
-            .option("header", "true").save(out)
+            .option("header", "false").save(out)
 
     ctx.stop()
 
