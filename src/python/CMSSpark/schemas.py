@@ -250,11 +250,11 @@ def schema_phedex_summary():
     :returns: StructType consisting StructField array
     """
     return StructType([
+            StructField("date", LongType(), True),
             StructField("site", StringType(), True),
             StructField("dataset", StringType(), True),
-            StructField("size", DoubleType(), True),
-            StructField("date", IntegerType(), True),
-            StructField("replica_date", IntegerType(), True)
+            StructField("size", LongType(), True),
+            StructField("replica_date", LongType(), True)
         ])
 
 def schema_phedex():
@@ -272,7 +272,7 @@ def schema_phedex():
                      StructField("block_name", StringType(), True), 
                      StructField("block_id", IntegerType(), True),
                      StructField("block_files", IntegerType(), True),
-                     StructField("block_bytes", DoubleType(), True),
+                     StructField("block_bytes", LongType(), True),
                      StructField("block_is_open", StringType(), True),
                      StructField("block_time_create", DoubleType(), True),
                      StructField("block_time_update", DoubleType(), True),
