@@ -4,8 +4,11 @@
 """
 File       : process.py
 Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
-Description: script to fetch data from HDFS and create local CSV file(s)
-./getCSV.py --idir=hdfs:///cms/users/vk/dbs_condor --date=20171121 --fout=dbs_condor
+Description: script to parse phedex data produce on HDFS and create a new dataframe
+with the following attributes
+site,dateset,min_date,max_date,min_rdate,max_rdate,min_size,max_size,days
+Here is an example how to produce it:
+mergePhedex.py --idir=$PWD/phedex --dates=20170101-20171206 --fout=phedex.csv
 """
 
 # system modules
