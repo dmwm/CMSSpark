@@ -77,7 +77,7 @@ def run(fout, yarn=None, verbose=None):
 
     # read Phedex tables
     tables = {}
-    hdir = 'hdfs:///cms/users/vk/test/phedex'
+    hdir = 'hdfs:///cms/users/vk/phedex'
     tables.update(phedex_summary_tables(sqlContext, hdir=hdir, verbose=verbose))
     phedex_summary_df = tables['phedex_summary_df']
     phedex_summary_df.persist(StorageLevel.MEMORY_AND_DISK)
