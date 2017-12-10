@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"runtime/trace"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,10 +27,17 @@ func main() {
 	flag.StringVar(&idir, "idir", "", "Input directory")
 	var fout string
 	flag.StringVar(&fout, "fout", "", "Output file")
+	var ftrace string
+	flag.StringVar(&ftrace, "ftrace", "", "Output trace file")
 	flag.Parse()
 	if fout == "" || idir == "" || dates == "" {
 		log.Fatal("Please check input variables")
 	}
+	file, err := os.Create(ftrace)
+	checkError("Cannot create file", err)
+	defer file.Close()
+	trace.Start(file)
+	defer trace.Stop()
 	process(idir, dates, fout)
 }
 
