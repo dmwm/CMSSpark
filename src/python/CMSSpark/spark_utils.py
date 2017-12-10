@@ -183,8 +183,12 @@ def phedex_summary_tables(sqlContext, hdir='hdfs:///cms/phedex', verbose=False):
         for fname in files(idir):
             if 'part-' in fname:
                 pfiles.append(fname)
-        msg = "Phedex snapshot %s: %d files" % (idir, len(pfiles))
+        tstmp = time.strftime("%Y%m%d %H:%S", time.gmtime())
+        msg = "Phedex snapshot %s %s: %d files" % (tstmp, idir, len(pfiles))
         print(msg)
+        if not len(pfiles):
+            print("Skip %s" % idir)
+            continue
         pdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')
                         .options(treatEmptyValuesAsNulls='true', nullValue='null')\
                         .load(file_path, schema = schema_phedex_summary()) \
