@@ -33,11 +33,13 @@ func main() {
 	if fout == "" || idir == "" || dates == "" {
 		log.Fatal("Please check input variables")
 	}
-	file, err := os.Create(ftrace)
-	checkError("Cannot create file", err)
-	defer file.Close()
-	trace.Start(file)
-	defer trace.Stop()
+	if ftrace != "" {
+		file, err := os.Create(ftrace)
+		checkError("Cannot create file", err)
+		defer file.Close()
+		trace.Start(file)
+		defer trace.Stop()
+	}
 	process(idir, dates, fout)
 }
 
@@ -179,7 +181,7 @@ func process(idir, idates, fout string) {
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	o := []string{"size", "dataset", "min_date", "max_date", "min_rdate", "max_rdate", "min_size", "max_size", "days"}
+	o := []string{"site", "dataset", "min_date", "max_date", "min_rdate", "max_rdate", "min_size", "max_size", "days"}
 	err = writer.Write(o)
 	checkError("Cannot write to file", err)
 	for k, v := range Rdict.m {
