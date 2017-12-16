@@ -279,10 +279,11 @@ func daysPresent(minDate, maxDate, minRDate, maxRDate int64) int64 {
 	return secs / (60 * 60 * 24)
 }
 
-// helper function to update global phedex map (Rdict). It parse given set of records
+// helper function to update global phedex map (Rdict). It parses given set of records
+// date site dataset size replica_date, e.g.
 // 20170101 T2_CH_CERN /AlCaLumiPixels/Run2012A-ALCARECOLumiPixels-v1/ALCARECO 4655060 20120504
-// and produce site, dataset, min_date, max_date, min_rdate, max_rdate, min_size, max_size, days
-// dataframe
+// and produces new dataframe
+// site dataset min_date max_date min_rdate max_rdate min_size max_size days
 func updateMap(records []PhedexRecord) {
 	for _, r := range records {
 		key := Key{Site: r.Site, Name: r.Name}
