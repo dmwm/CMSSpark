@@ -61,7 +61,7 @@ def makeCSV(idir, dates):
                             headers = first_line
                             ostream.write(headers)
                         while True:
-                            line = istream.readline()
+                            line = istream.readline().replace('"', '')
                             if not line:
                                 break
                             ostream.write(line)
