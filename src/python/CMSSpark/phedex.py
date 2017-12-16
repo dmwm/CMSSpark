@@ -84,15 +84,16 @@ def run(date, fout, yarn=None, verbose=None):
     one_day = 60*60*24
 
     # aggregate phedex info into dataframe
-    cols = ['node_name', 'dataset_name', 'block_bytes', 'replica_time_create']
+    cols = ['node_name', 'dataset_name', 'block_bytes', 'replica_time_create', 'br_user_group_id']
     pdf = phedex_df.select(cols).where(siteFilter(col('node_name')) == 1)\
-            .groupBy(['node_name', 'dataset_name', 'replica_time_create'])\
+            .groupBy(['node_name', 'dataset_name', 'replica_time_create', 'br_user_group_id'])\
             .agg({'block_bytes':'sum'})\
             .withColumn('date', lit(date))\
             .withColumn('replica_date', unix2date(col('replica_time_create')))\
             .withColumnRenamed('sum(block_bytes)', 'size')\
             .withColumnRenamed('dataset_name', 'dataset')\
-            .withColumnRenamed('node_name', 'site')
+            .withColumnRenamed('node_name', 'site')\
+            .withColumnRenamed('br_user_group_id', 'groupid')
     pdf.registerTempTable('pdf')
     pdf.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -100,7 +101,7 @@ def run(date, fout, yarn=None, verbose=None):
     # it is either absolute path or area under /user/USERNAME
     if  fout:
         out = '%s/phedex/%s' % (fout, date)
-        cols = ['date','site','dataset','size','replica_date']
+        cols = ['date','site','dataset','size','replica_date', 'groupid']
         # don't write header since when we'll read back the data it will
         # mismatch the data types, i.e. headers are string and rows
         # may be different data types
