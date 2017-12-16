@@ -82,9 +82,11 @@ func Unmarshal(reader *csv.Reader, v interface{}) error {
 		case "int64":
 			ival, err := strconv.ParseInt(record[i], 10, 0)
 			if err != nil {
-				return err
+				//                 return err
+				f.SetInt(-1)
+			} else {
+				f.SetInt(ival)
 			}
-			f.SetInt(ival)
 		default:
 			return &UnsupportedType{f.Type().String()}
 		}
@@ -109,12 +111,14 @@ func max(a, b int64) int64 {
 }
 
 // PhedexRecord
+// 'date','site','dataset','size','replica_date', 'groupid'
 type PhedexRecord struct {
 	Date  int64
 	Site  string
 	Name  string
 	Size  int64
 	RDate int64
+	Gid   int64
 }
 
 // Key is a key structure of Phedex map
@@ -132,6 +136,7 @@ type Value struct {
 	MinSize  int64
 	MaxSize  int64
 	Days     int64
+	Gid      int64
 }
 
 // Map is new type for phedex map
@@ -181,7 +186,7 @@ func process(idir, idates, fout string) {
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	o := []string{"site", "dataset", "min_date", "max_date", "min_rdate", "max_rdate", "min_size", "max_size", "days"}
+	o := []string{"site", "dataset", "min_date", "max_date", "min_rdate", "max_rdate", "min_size", "max_size", "days", "gid"}
 	err = writer.Write(o)
 	checkError("Cannot write to file", err)
 	for k, v := range Rdict.m {
@@ -192,7 +197,8 @@ func process(idir, idates, fout string) {
 		minSize := fmt.Sprintf("%d", v.MinSize)
 		maxSize := fmt.Sprintf("%d", v.MaxSize)
 		days := fmt.Sprintf("%d", v.Days)
-		o := []string{k.Site, k.Name, minDate, maxDate, minRDate, maxRDate, minSize, maxSize, days}
+		gid := fmt.Sprintf("%d", v.Gid)
+		o := []string{k.Site, k.Name, minDate, maxDate, minRDate, maxRDate, minSize, maxSize, days, gid}
 		err := writer.Write(o)
 		checkError("Cannot write to file", err)
 	}
@@ -292,9 +298,9 @@ func updateMap(records []PhedexRecord) {
 			minSize := min(v.MinSize, r.Size)
 			maxSize := max(v.MaxSize, r.Size)
 			days := daysPresent(minDate, maxDate, minRDate, maxRDate)
-			val = Value{MinDate: minDate, MaxDate: maxDate, MinRDate: minRDate, MaxRDate: maxRDate, MinSize: minSize, MaxSize: maxSize, Days: days}
+			val = Value{MinDate: minDate, MaxDate: maxDate, MinRDate: minRDate, MaxRDate: maxRDate, MinSize: minSize, MaxSize: maxSize, Days: days, Gid: r.Gid}
 		} else {
-			val = Value{MinDate: r.Date, MaxDate: r.Date, MinRDate: r.RDate, MaxRDate: r.RDate, MinSize: r.Size, MaxSize: r.Size, Days: -1}
+			val = Value{MinDate: r.Date, MaxDate: r.Date, MinRDate: r.RDate, MaxRDate: r.RDate, MinSize: r.Size, MaxSize: r.Size, Days: -1, Gid: r.Gid}
 		}
 		Rdict.Lock()
 		Rdict.m[key] = val
