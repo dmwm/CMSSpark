@@ -203,7 +203,7 @@ def phedex_summary_tables(sqlContext, hdir='hdfs:///cms/phedex', verbose=False):
     tables = {'phedex_summary_df':phedex_summary_df}
     return tables
 
-def phedex_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
+def phedex_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False, fromdate=None, todate=None):
     """
     Parse PhEDEx records on HDFS via mapping PhEDEx tables to Spark SQLContext.
     :returns: a dictionary with PhEDEx Spark DataFrame.
@@ -211,8 +211,9 @@ def phedex_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     phxdir = hdir+'/phedex/block-replicas-snapshots/csv/'
 
     # phedex data
-    pfiles = file_list(phxdir)
-    msg = "Phedex snapshot found %d directories" % len(pfiles)
+    pfiles = file_list(phxdir, fromdate, todate)
+    msg = "Phedex snapshot %s-%s found %d directories" \
+            % (fromdate, todate, len(pfiles))
     print(msg)
     phedex_df = unionAll([sqlContext.read.format('com.databricks.spark.csv')
                     .options(treatEmptyValuesAsNulls='true', nullValue='null')\
