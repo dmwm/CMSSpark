@@ -73,9 +73,11 @@ def run(date, fout, yarn=None, verbose=None):
     ctx = spark_context('cms', yarn, verbose)
     sqlContext = HiveContext(ctx)
 
+    fromdate = '%s-%s-%s' % (date[:4], date[4:6], date[6:])
+    todate = fromdate
     # read Phedex tables
     tables = {}
-    tables.update(phedex_tables(sqlContext, verbose=verbose))
+    tables.update(phedex_tables(sqlContext, verbose=verbose, fromdate=fromdate, todate=todate))
     phedex_df = tables['phedex_df']
 
     # register user defined function
