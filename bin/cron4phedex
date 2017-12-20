@@ -19,7 +19,6 @@ odir=hdfs:///cms
 # check that we need to run
 check=`hadoop fs -ls ${odir}/phedex | grep ${date}`
 if [ -n "${check}" ]; then
-    echo "Dir exist"
     exit
 fi
 
