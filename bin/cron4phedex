@@ -10,11 +10,18 @@ addr=vkuznet@gmail.com
 # find out which date we should use to run the script
 hdir=hdfs:///project/awg/cms/phedex/block-replicas-snapshots/csv
 lastSnapshot=`hadoop fs -ls ${hdir} | tail -1 | awk '{print $8}'`
-echo "Last PhEDEx snapshot on HDFS"
-echo "$lastSnapshot"
+#echo "Last PhEDEx snapshot on HDFS"
+#echo "$lastSnapshot"
 tstamp=`echo $lastSnapshot | sed "s,${hdir}/time=,,g"`
 date=`echo $tstamp | awk '{split($0,a,"_"); print a[1]}'  | sed "s,-,,g"`
 odir=hdfs:///cms
+
+# check that we need to run
+check=`hadoop fs -ls ${odir}/phedex | grep ${date}`
+if [ -n "${check}" ]; then
+    echo "Dir exist"
+    exit
+fi
 
 # setup to run the script
 me=$(dirname "$0")
@@ -24,8 +31,8 @@ log=$wdir/logs/phedex-`date +%Y%m%d`.log
 export PYTHONPATH=$wdir/src/python:$PYTHONPATH
 export PATH=$wdir/bin:$PATH
 cmd="$wdir/bin/run_spark phedex.py --yarn --fout=$odir --date=$date"
-echo "Will execute ..."
-echo $cmd
+#echo "Will execute ..."
+#echo $cmd
 msg="Error while executing $cmd on $USER@`hostname` log at $log"
 set -e
 trap "echo \"$msg\" | mail -s \"Cron alert run_spark phedex\" \"$addr\"" ERR
