@@ -15,10 +15,16 @@ hdir=hdfs:///project/monitoring/archive/condor/raw/metric
 tmpDirs=`hadoop fs -ls ${hdir}/$year/$month | grep tmp$ | awk '{print $8}' | sed -e "s,\.tmp,,g" -e "s,${hdir},,g"`
 pat=`echo $tmpDirs | tr ' ' '|'`
 lastSnapshot=`hadoop fs -ls ${hdir}/$year/$month | egrep -v ${pat} | tail -1 | awk '{print $8}'`
-echo "Last available snapshot"
-echo $lastSnapshot
+#echo "Last available snapshot"
+#echo $lastSnapshot
 date=`echo $lastSnapshot | sed -e "s,${hdir},,g" -e "s,/,,g"`
-odir=hdfs:///cms/condor
+odir=hdfs:///cms/dbs_condor
+
+# check that we need to run
+check=`hadoop fs -ls ${odir}/dataset | grep ${date}`
+if [ -n "${check}" ]; then
+    exit
+fi
 
 # setup to run the script
 me=$(dirname "$0")
@@ -28,8 +34,8 @@ log=$wdir/logs/dbs_condor-`date +%Y%m%d`.log
 export PYTHONPATH=$wdir/src/python:$PYTHONPATH
 export PATH=$wdir/bin:$PATH
 cmd="$wdir/bin/run_spark dbs_condor.py --yarn --fout=$odir --date=$date"
-echo "Will execute ..."
-echo $cmd
+#echo "Will execute ..."
+#echo $cmd
 msg="Error while executing $cmd on $USER@`hostname` log at $log"
 set -e
 trap "echo \"$msg\" | mail -s \"Cron alert run_spark dbs_condor\" \"$addr\"" ERR
