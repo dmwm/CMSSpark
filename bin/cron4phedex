@@ -1,0 +1,32 @@
+#!/bin/bash
+# this script is designed to be used in crontab, i.e. with full path
+# adjust script to put your desired notification address if necessary
+
+addr=cms-popdb-alarms@cern.ch
+addr=vkuznet@gmail.com
+
+# DO NOT EDIT BELOW THIS LINE
+
+# find out which date we should use to run the script
+hdir=hdfs:///project/awg/cms/phedex/block-replicas-snapshots/csv
+lastSnapshot=`hadoop fs -ls ${hdir} | tail -1 | awk '{print $8}'`
+echo "Last PhEDEx snapshot on HDFS"
+echo "$lastSnapshot"
+tstamp=`echo $lastSnapshot | sed "s,${hdir}/time=,,g"`
+date=`echo $tstamp | awk '{split($0,a,"_"); print a[1]}'  | sed "s,-,,g"`
+odir=hdfs:///cms
+
+# setup to run the script
+me=$(dirname "$0")
+wdir=`echo $me | sed -e "s,/bin,,g"`
+mkdir -p $wdir/logs
+log=$wdir/logs/phedex-`date +%Y%m%d`.log
+export PYTHONPATH=$wdir/src/python:$PYTHONPATH
+export PATH=$wdir/bin:$PATH
+cmd="$wdir/bin/run_spark phedex.py --yarn --fout=$odir --date=$date"
+echo "Will execute ..."
+echo $cmd
+msg="Error while executing $cmd on $USER@`hostname` log at $log"
+set -e
+trap "echo \"$msg\" | mail -s \"Cron alert run_spark phedex\" \"$addr\"" ERR
+$cmd >> $log 2>&1
