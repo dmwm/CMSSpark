@@ -36,42 +36,59 @@ def date_stamp(date):
     sec = time.mktime(time.strptime(date, '%Y%m%d'))
     return sec
 
-def days_present(min_d, max_d, min_rd, max_rd):
+#def days_present(min_d, max_d, min_rd, max_rd):
+#    "Find total number of days"
+#    if min_d and min_rd and max_d and max_rd:
+#        minv = min(int(min_d), int(min_rd))
+#        maxv = max(int(max_d), int(max_rd))
+#        secs = date_stamp(str(maxv)) - date_stamp(str(minv))
+#        secd = 60*60*24
+#        return int(round(secs/secd))
+#    return -1
+def days_present(max_d, rd):
     "Find total number of days"
-    if min_d and min_rd and max_d and max_rd:
-        minv = min(int(min_d), int(min_rd))
-        maxv = max(int(max_d), int(max_rd))
-        secs = date_stamp(str(maxv)) - date_stamp(str(minv))
+    if max_d and rd:
+        secs = date_stamp(str(int(max_d))) - date_stamp(str(int(rd)))
         secd = 60*60*24
         return int(round(secs/secd))
     return -1
 
 def update(rdict, line):
     # split date,site,dataset,size,replica_date
-    date, site, dataset, size, rdate = line.split(',')
+    date, site, dataset, size, rdate, gid = line.split(',')
     date = int(date)
     size = int(size)
     rdate = int(rdate)
-    key = (site, dataset)
+    key = (site, dataset, rdate, gid)
+    if gid == "null": 
+        gid=-1
     if key in rdict:
-        _min_date, _max_date, _min_rdate, _max_rdate, _min_size, _max_size, _ = rdict[key]
+        _min_date, _max_date, _ave_size, _last_size, _nom_days = rdict[key]
+        if date != _max_date:
+            if date-_max_date != 1:
+                print 'Weird',date,_max_date,dataset,site,gid
+            #this will miss the last day in the average - but its what can be done easily
+            _ave_size=int((_ave_size*_nom_days + _last_size) / float(_nom_days+1)) 
+            days = _nom_days+1#days_present(max_date, rdate)
+            _last_size=0
+        else:
+            days = _nom_days
         min_date = min(date, _min_date)
         max_date = max(date, _max_date)
-        min_rdate = min(rdate, _min_rdate)
-        max_rdate = max(rdate, _max_rdate)
-        min_size = min(size, _min_size)
-        max_size = max(size, _max_size)
-        days = days_present(min_date, max_date, min_rdate, max_rdate)
-        rdict[key] = [min_date, max_date, min_rdate, max_rdate, min_size, max_size, days]
+        last_size = _last_size+size #max(size, _max_size)
+        ave_size= _ave_size
+        rdict[key] = [min_date, max_date, ave_size, last_size, days]
     else:
-        rdict[key] = [date, date, rdate, rdate, size, size, -1]
+        days = 1#days_present(date, rdate)
+        rdict[key] = [date, date, size, size, days]
     return
 
 def process(idir, dates, fout):
     "read data from HDFS and create CSV files from it"
     rdict = {}
-    for path, dirs, files in os.walk(idir):
-        for date in range(dates[0], dates[-1]):
+    for date in range(dates[0], dates[-1]+1): #include the last date in the range
+        print "doing ",date
+        for path, dirs, files in os.walk(idir):
             if path.endswith(str(date)):
                 time0 = time.time()
                 arr = path.split('/')
@@ -89,7 +106,7 @@ def process(idir, dates, fout):
         sys.__stdout__.flush()
         sys.__stderr__.flush()
     with open(fout, 'w') as ostream:
-        ostream.write('size,dataset,min_date,max_date,min_rdate,max_rdate,min_size,max_size,days\n')
+        ostream.write('size,dataset,rdate,gid,min_date,max_date,ave_size,max_size,days\n')
         for key, val in rdict.iteritems():
             vals = [str(k) for k in list(key)+list(val)]
             ostream.write(','.join(vals) + '\n')
