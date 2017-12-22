@@ -65,8 +65,8 @@ def update(rdict, line):
     if key in rdict:
         _min_date, _max_date, _ave_size, _last_size, _nom_days = rdict[key]
         if date != _max_date:
-            if date-_max_date != 1:
-                print 'Weird',date,_max_date,dataset,site,gid
+            #if date-_max_date != 1:
+            #    print 'Weird',date,_max_date,dataset,site,gid
             #this will miss the last day in the average - but its what can be done easily
             _ave_size=int((_ave_size*_nom_days + _last_size) / float(_nom_days+1)) 
             days = _nom_days+1#days_present(max_date, rdate)
