@@ -49,7 +49,7 @@ def days_present(max_d, rd):
     return -1
 
 
-def update(rdict, line):
+def update(rdict, giddict, line):
     # split date,site,dataset,size,replica_date
     date, site, dataset, size, rdate, gid = line.split(',')
     date = int(date)
@@ -59,8 +59,26 @@ def update(rdict, line):
         gid = "-1"
     gid = int(gid)
     key = (site, dataset, rdate, gid)
+    keyGid = (site, dataset, rdate)
+
+    if keyGid in giddict:
+        # look for a convertion from valid->-1 or -1->valid
+        lastGid = giddict[keyGid]
+        if lastGid != gid:
+            if gid == -1 and lastGid != -1:
+                gid = lastGid
+                key = (site, dataset, rdate, gid)
+            if lastGid == -1 and gid != -1:
+                # fix the old dictionary first
+                keyDel = (site, dataset, rdate, lastGid)
+                if key in rdict:
+                    print 'surprising', key, keyDel
+                rdict[key] = rdict[keyDel]
+                del rdict[keyDel]
+
     if key in rdict:
         _min_date, _max_date, _ave_size, _last_size, _nom_days = rdict[key]
+
         if date != _max_date:
             # this will miss the last day in the average - but its what can be done easily
             _ave_size = int(
@@ -74,13 +92,16 @@ def update(rdict, line):
         last_size = _last_size+size
         ave_size = _ave_size
         rdict[key] = [min_date, max_date, ave_size, last_size, days]
+        giddict[keyGid] = gid
     else:
         days = 1
         rdict[key] = [date, date, size, size, days]
+        giddict[keyGid] = gid
     return
 
 
 def clean(rdict):
+    nCleaned = 0
     rdict3 = {}
     for key, val in rdict.iteritems():
         t = list(key)[0:3]  # all but gid
@@ -166,12 +187,15 @@ def clean(rdict):
                             new3.append(vals[l])
                         rdict3[k] = new3
                         foundIt = True
+                        nCleaned = nCleaned + 1
+    print nCleaned
     return
 
 
 def process(idir, dates, fout):
     "read data from HDFS and create CSV files from it"
     rdict = {}
+    giddict = {}
     for date in range(dates[0], dates[-1]+1):  # include the last date in the range
         for path, dirs, files in os.walk(idir):
             if path.endswith(str(date)):
@@ -186,7 +210,7 @@ def process(idir, dates, fout):
                             line = istream.readline().replace('\n', '')
                             if not line:
                                 break
-                            update(rdict, line)
+                            update(rdict, giddict, line)
                 print('%s %s, #keys %s' %
                       (path, time.time()-time0, len(rdict.keys())))
         sys.__stdout__.flush()
