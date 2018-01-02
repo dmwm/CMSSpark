@@ -75,12 +75,15 @@ def update(rdict, giddict, line):
                 del rdict[keyDel]
 
     if key in rdict:
-        _min_date, _max_date, _ave_size, _last_size, _nom_days = rdict[key]
+        _min_date, _max_date, _ave_size, _max_size, _nom_days, _last_size  = rdict[key]
 
         if date != _max_date:
-            # this will miss the last day in the average - but its what can be done easily
-            _ave_size = int(
-                (_ave_size*_nom_days + _last_size) / float(_nom_days+1))
+            # this will miss the last day in the average - that will be fixed in the next step
+            if _nom_days == 1:
+                _ave_size = _last_size
+            else:
+                _ave_size = int( (_ave_size*_nom_days + _last_size) / float(_nom_days+1))
+
             days = _nom_days+1
             _last_size = 0
         else:
@@ -89,14 +92,28 @@ def update(rdict, giddict, line):
         max_date = max(date, _max_date)
         last_size = _last_size+size
         ave_size = _ave_size
-        rdict[key] = [min_date, max_date, ave_size, last_size, days]
+        max_size = _max_size
+        if last_size > _max_size:
+            max_size = last_size
+
+        rdict[key] = [min_date, max_date, ave_size, max_size, days, last_size]
         giddict[keyGid] = gid
     else:
         days = 1
-        rdict[key] = [date, date, size, size, days]
+        rdict[key] = [date, date, size, size, days, size]
         giddict[keyGid] = gid
     return
 
+def updateAveSize(rdict):
+
+    for key in rdict:
+        _min_date, _max_date, _ave_size, _max_size, _nom_days, _last_size  = rdict[key]
+        if _nom_days == 1:
+            _ave_size = _last_size
+        else:
+            _ave_size = int( (_ave_size*_nom_days + _last_size) / float(_nom_days+1))
+
+        rdict[key][2] = _ave_size
 
 
 
@@ -123,13 +140,13 @@ def process(idir, dates, fout):
                       (path, time.time()-time0, len(rdict.keys())))
         sys.__stdout__.flush()
         sys.__stderr__.flush()
-
+    updateAveSize(rdict)
     with open(fout, 'w') as ostream:
         ostream.write(
             'site,dataset,rdate,gid,min_date,max_date,ave_size,max_size,days\n')
         for key, val in rdict.iteritems():
             vals = [str(k) for k in list(key)+list(val)]
-            ostream.write(','.join(vals) + '\n')
+            ostream.write(','.join(vals[:-1]) + '\n')
 
 
 def main():
