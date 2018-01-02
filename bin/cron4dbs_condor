@@ -20,19 +20,28 @@ lastSnapshot=`hadoop fs -ls ${hdir}/$year/$month | egrep -v ${pat} | tail -1 | a
 date=`echo $lastSnapshot | sed -e "s,${hdir},,g" -e "s,/,,g"`
 odir=hdfs:///cms/dbs_condor
 
-# check that we need to run
-check=`hadoop fs -ls ${odir}/dataset | grep ${date}`
-if [ -n "${check}" ]; then
-    exit
-fi
-
-# setup to run the script
+# set log area and environment
 me=$(dirname "$0")
 wdir=`echo $me | sed -e "s,/bin,,g"`
 mkdir -p $wdir/logs
 log=$wdir/logs/dbs_condor-`date +%Y%m%d`.log
 export PYTHONPATH=$wdir/src/python:$PYTHONPATH
 export PATH=$wdir/bin:$PATH
+
+# check if we got a date to run
+if [ -z "${date}" ]; then
+    echo "No date to run" > $log 2>&1
+    exit
+fi
+
+# check that we need to run
+check=`hadoop fs -ls ${odir}/dataset | grep ${date}`
+if [ -n "${check}" ]; then
+    echo "No dir to run" > $log 2>&1
+    exit
+fi
+
+# setup to run the script
 cmd="$wdir/bin/run_spark dbs_condor.py --yarn --fout=$odir --date=$date"
 #echo "Will execute ..."
 #echo $cmd
