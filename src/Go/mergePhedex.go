@@ -17,7 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 func main() {
@@ -123,26 +122,27 @@ type PhedexRecord struct {
 
 // Key is a key structure of Phedex map
 type Key struct {
-	Site string
-	Name string
+	Site  string
+	Name  string
+	RDate int64
+	Gid   int64
 }
 
 // Value is a value structure of Phedex map
 type Value struct {
 	MinDate  int64
 	MaxDate  int64
-	MinRDate int64
-	MaxRDate int64
-	MinSize  int64
+	AveSize  int64
 	MaxSize  int64
 	Days     int64
-	Gid      int64
+	LastSize int64
 }
 
 // Map is new type for phedex map
 type Map struct {
 	sync.RWMutex
 	m map[Key]Value
+	g map[Key]int64
 }
 
 // Rdict is a global dict which keep phedex map
@@ -151,10 +151,11 @@ var Rdict Map
 // helper function to process phedex directory produced on HDFS with given dates
 func process(idir, idates, fout string) {
 	Rdict.m = make(map[Key]Value)
+	Rdict.g = make(map[Key]int64)
 	dates := strings.Split(idates, "-")
 	mind, _ := strconv.Atoi(dates[0])
 	maxd, _ := strconv.Atoi(dates[len(dates)-1])
-	for d := mind; d < maxd; d++ {
+	for d := mind; d <= maxd; d++ {
 		fname := fmt.Sprintf("%s/%d", idir, d)
 		if _, err := os.Stat(fname); os.IsNotExist(err) {
 			continue
@@ -178,6 +179,9 @@ func process(idir, idates, fout string) {
 		}
 		wg.Wait()
 	}
+
+	postProcess()
+
 	fmt.Println("### final map", len(Rdict.m))
 	file, err := os.Create(fout)
 	checkError("Cannot create file", err)
@@ -186,22 +190,37 @@ func process(idir, idates, fout string) {
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	o := []string{"site", "dataset", "min_date", "max_date", "min_rdate", "max_rdate", "min_size", "max_size", "days", "gid"}
+	o := []string{"site", "dataset", "rdate", "gid", "min_date", "max_date", "ave_size", "max_size", "days"}
 	err = writer.Write(o)
 	checkError("Cannot write to file", err)
 	for k, v := range Rdict.m {
+		rDate := fmt.Sprintf("%d", k.RDate)
+		gid := fmt.Sprintf("%d", k.Gid)
 		minDate := fmt.Sprintf("%d", v.MinDate)
 		maxDate := fmt.Sprintf("%d", v.MaxDate)
-		minRDate := fmt.Sprintf("%d", v.MinRDate)
-		maxRDate := fmt.Sprintf("%d", v.MaxRDate)
-		minSize := fmt.Sprintf("%d", v.MinSize)
+		aveSize := fmt.Sprintf("%d", v.AveSize)
 		maxSize := fmt.Sprintf("%d", v.MaxSize)
 		days := fmt.Sprintf("%d", v.Days)
-		gid := fmt.Sprintf("%d", v.Gid)
-		o := []string{k.Site, k.Name, minDate, maxDate, minRDate, maxRDate, minSize, maxSize, days, gid}
+		o := []string{k.Site, k.Name, rDate, gid, minDate, maxDate, aveSize, maxSize, days}
 		err := writer.Write(o)
 		checkError("Cannot write to file", err)
 	}
+}
+
+// helper function to perform post-process action
+func postProcess() {
+	// we don't need locks here since this function is not running from go-routine
+	m := make(map[Key]Value)
+	for key, v := range Rdict.m {
+		aveSize := v.AveSize
+		if v.Days == 1 {
+			aveSize = v.LastSize
+		} else {
+			aveSize = (v.AveSize*v.Days + v.LastSize) / (v.Days + 1)
+		}
+		m[key] = Value{MinDate: v.MinDate, MaxDate: v.MaxDate, AveSize: aveSize, MaxSize: v.MaxSize, Days: v.Days, LastSize: v.LastSize}
+	}
+	Rdict.m = m
 }
 
 // helper function to report the error
@@ -235,76 +254,73 @@ func processFile(fname string, wg *sync.WaitGroup) {
 	updateMap(records)
 }
 
-// helper function to return seconds since epoch for given YYYYDDMM date
-func unix(d int64) int64 {
-	s := fmt.Sprintf("%d", d)
-	var month string
-	m := s[4:6]
-	switch m {
-	case "01":
-		month = "Jan"
-	case "02":
-		month = "Feb"
-	case "03":
-		month = "Mar"
-	case "04":
-		month = "Apr"
-	case "05":
-		month = "May"
-	case "06":
-		month = "Jun"
-	case "07":
-		month = "Jul"
-	case "08":
-		month = "Aug"
-	case "09":
-		month = "Sep"
-	case "10":
-		month = "Oct"
-	case "11":
-		month = "Nov"
-	case "12":
-		month = "Dec"
-	}
-	const longForm = "Jan 2, 2006"
-	t, _ := time.Parse(longForm, fmt.Sprintf("%s %s, %s", month, s[6:8], s[0:4]))
-	return t.Unix()
-}
-
-// helper function to calculate number of days between given dates
-func daysPresent(minDate, maxDate, minRDate, maxRDate int64) int64 {
-	mind := min(minDate, minRDate)
-	maxd := max(maxDate, maxRDate)
-	secs := unix(maxd) - unix(mind)
-	return secs / (60 * 60 * 24)
-}
-
 // helper function to update global phedex map (Rdict). It parses given set of records
 // date site dataset size replica_date, e.g.
 // 20170101 T2_CH_CERN /AlCaLumiPixels/Run2012A-ALCARECOLumiPixels-v1/ALCARECO 4655060 20120504
 // and produces new dataframe
-// site dataset min_date max_date min_rdate max_rdate min_size max_size days
+// site dataset min_date max_date ave_size last_size days
 func updateMap(records []PhedexRecord) {
 	for _, r := range records {
-		key := Key{Site: r.Site, Name: r.Name}
+		gid := r.Gid
+		if gid == 0 { // null value in CSV
+			gid = -1
+		}
+		key := Key{Site: r.Site, Name: r.Name, RDate: r.RDate, Gid: gid}
+		keyGid := Key{Site: r.Site, Name: r.Name, RDate: r.RDate}
+
+		// look-up giddict
+		Rdict.RLock()
+		g, ok := Rdict.g[keyGid]
+		Rdict.RUnlock()
+		if ok {
+			// look for a convertion from valid->-1 or -1->valid
+			lastGid := g
+			if lastGid != gid {
+				if gid == -1 && lastGid != -1 {
+					gid = lastGid
+					key = Key{Site: r.Site, Name: r.Name, RDate: r.RDate, Gid: gid}
+				}
+				if lastGid == -1 && gid != -1 {
+					keyDel := Key{Site: r.Site, Name: r.Name, RDate: r.RDate, Gid: lastGid}
+					Rdict.Lock()
+					Rdict.m[key] = Rdict.m[keyDel]
+					delete(Rdict.m, keyDel)
+					Rdict.Unlock()
+				}
+			}
+		}
+
 		var val Value
 		Rdict.RLock()
 		v, ok := Rdict.m[key]
 		Rdict.RUnlock()
 		if ok {
-			minDate := min(v.MinDate, r.Date)
-			maxDate := max(v.MaxDate, r.Date)
-			minRDate := min(v.MinRDate, r.RDate)
-			maxRDate := max(v.MaxRDate, r.RDate)
-			minSize := min(v.MinSize, r.Size)
-			maxSize := max(v.MaxSize, r.Size)
-			days := daysPresent(minDate, maxDate, minRDate, maxRDate)
-			val = Value{MinDate: minDate, MaxDate: maxDate, MinRDate: minRDate, MaxRDate: maxRDate, MinSize: minSize, MaxSize: maxSize, Days: days, Gid: r.Gid}
+			lastSize := v.LastSize
+			aveSize := v.AveSize
+			days := v.Days
+			if r.Date != v.MaxDate {
+				if v.Days == 1 {
+					aveSize = v.LastSize
+				} else {
+					aveSize = (v.AveSize*v.Days + v.LastSize) / (v.Days + 1)
+				}
+				days = v.Days + 1
+				lastSize = 0
+			}
+			minDate := min(r.Date, v.MinDate)
+			maxDate := max(r.Date, v.MaxDate)
+			lastSize += r.Size
+			maxSize := v.MaxSize
+			if lastSize > maxSize {
+				maxSize = lastSize
+			}
+			val = Value{MinDate: minDate, MaxDate: maxDate, AveSize: aveSize, MaxSize: maxSize, Days: days, LastSize: lastSize}
 		} else {
-			val = Value{MinDate: r.Date, MaxDate: r.Date, MinRDate: r.RDate, MaxRDate: r.RDate, MinSize: r.Size, MaxSize: r.Size, Days: -1, Gid: r.Gid}
+			val = Value{MinDate: r.Date, MaxDate: r.Date, AveSize: r.Size, MaxSize: r.Size, Days: 1, LastSize: r.Size}
 		}
 		Rdict.Lock()
 		Rdict.m[key] = val
+		Rdict.g[keyGid] = gid
 		Rdict.Unlock()
 	}
 }
