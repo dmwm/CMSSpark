@@ -104,7 +104,7 @@ else
     aaa_date=$min_date
     eos_date=$min_date
     cmssw_date=$min_date
-    jm_date=$jm_date
+    jm_date=$min_date
 fi
 
 log "----------------------------------------------"
