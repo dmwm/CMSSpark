@@ -100,7 +100,11 @@ else
     cmssw_date=$(last_non_temp_long_date $cmssw_dir)
     jm_date=$(last_non_temp_long_date $jm_dir)
     min_date=`echo "$aaa_date $eos_date $cmssw_date $jm_date" | tr ' ' '\n' | sort | head -1`
-    echo "minimum date across data streams: $min_date"
+    log "AAA date $aaa_date"
+    log "CMSSW date $cmssw_date"
+    log "EOS date $eos_date"
+    log "JM date $jm_date"
+    echo "minimum date across data streams: $min_date, will use it ..."
     aaa_date=$min_date
     eos_date=$min_date
     cmssw_date=$min_date
