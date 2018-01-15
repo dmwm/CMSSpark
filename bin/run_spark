@@ -15,6 +15,7 @@ cmsspark=$droot/$1
 
 # allow to disable spark output, client should setup his/her own log4j.properties
 # via WMA_LOG4J environment variable
+# conf="--conf spark.driver.extraClassPath=/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core.jar"
 conf=""
 # look if we requested to show full log output
 if [[ "$@" =~ "--no-log4j" ]]; then
