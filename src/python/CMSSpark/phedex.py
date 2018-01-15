@@ -25,7 +25,7 @@ from pyspark.sql.types import StringType, IntegerType
 # CMSSpark modules
 from CMSSpark.spark_utils import phedex_tables, print_rows
 from CMSSpark.spark_utils import spark_context, split_dataset
-from CMSSpark.utils import elapsed_time
+from CMSSpark.utils import elapsed_time, split_date
 
 class OptionParser():
     def __init__(self):
@@ -102,7 +102,8 @@ def run(date, fout, yarn=None, verbose=None):
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
     if  fout:
-        out = '%s/phedex/%s' % (fout, date)
+        year, month, day = split_date(date)
+        out = '%s/%s/%s/%s' % (fout, year, month, day)
         cols = ['date','site','dataset','size','replica_date', 'groupid']
         # don't write header since when we'll read back the data it will
         # mismatch the data types, i.e. headers are string and rows

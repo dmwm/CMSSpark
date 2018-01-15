@@ -26,7 +26,7 @@ from pyspark.sql.types import DoubleType
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows, unionAll
 from CMSSpark.spark_utils import spark_context, condor_tables, split_dataset
-from CMSSpark.utils import elapsed_time
+from CMSSpark.utils import elapsed_time, split_date
 
 class OptionParser():
     def __init__(self):
@@ -210,8 +210,9 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
     if  fout:
+        year, month, day = split_date(date)
         for col in store.keys():
-            out = '%s/%s/%s' % (fout, col, date)
+            out = '%s/%s/%s/%s/%s' % (fout, col, year, month, day)
             print("output: %s" % out)
             odf = unionAll(store[col])
             print("%s rows: %s" % (col, odf.count()))

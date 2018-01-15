@@ -14,10 +14,16 @@ lastSnapshot=`hadoop fs -ls ${hdir} | tail -1 | awk '{print $8}'`
 #echo "$lastSnapshot"
 tstamp=`echo $lastSnapshot | sed "s,${hdir}/time=,,g"`
 date=`echo $tstamp | awk '{split($0,a,"_"); print a[1]}'  | sed "s,-,,g"`
-odir=hdfs:///cms
+year=`echo $tstamp | awk '{split($0,a,"_"); split(a[1],b,"-"); print b[1]}'`
+month=`echo $tstamp | awk '{split($0,a,"_"); split(a[1],b,"-"); print b[2]}'`
+day=`echo $tstamp | awk '{split($0,a,"_"); split(a[1],b,"-"); print b[3]}'`
+odir=hdfs:///cms/phedex
+
+# create appropriate area in our output directory, do not include day dir since it will be create by a job
+hadoop fs -mkdir -p ${odir}/${year}/${month}
 
 # check that we need to run
-check=`hadoop fs -ls ${odir}/phedex | grep ${date}`
+check=`hadoop fs -ls ${odir}/${year}/${month}/${day} 2> /dev/null`
 if [ -n "${check}" ]; then
     exit
 fi
