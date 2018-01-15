@@ -35,10 +35,13 @@ if [ -z "${date}" ]; then
 fi
 
 # create appropriate area in our output directory, do not include day dir since it will be create by a job
-hadoop fs -mkdir -p ${odir}/${year}/${month}
+hadoop fs -mkdir -p ${odir}/campaign/${year}/${month}
+hadoop fs -mkdir -p ${odir}/dataset/${year}/${month}
+hadoop fs -mkdir -p ${odir}/release/${year}/${month}
+hadoop fs -mkdir -p ${odir}/era/${year}/${month}
 
 # check that we need to run
-check=`hadoop fs -ls ${odir}/dataset/${year}/${month}/${day} 2> /dev/null`
+check=`hadoop fs -ls ${odir}/dataset/${year}/${month}/${date} 2> /dev/null`
 if [ -n "${check}" ]; then
     echo "No dir to run" > $log 2>&1
     exit
