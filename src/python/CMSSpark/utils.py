@@ -70,3 +70,8 @@ def unix_tstamp(date):
         return int(date)
     else:
         raise NotImplementedError('Given date %s is not in string YYYYMMDD format' % date)
+
+def split_date(date):
+    "Split given YYYYMMDD into pieces"
+    val = str(date)
+    return val[:4], val[4:6], val[6:]
