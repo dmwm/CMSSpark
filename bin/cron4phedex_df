@@ -1,0 +1,68 @@
+#!/bin/bash
+# this script is designed to be used in crontab, i.e. with full path
+# adjust script to put your desired notification address if necessary
+#
+# it should be called with absolute path
+
+addr=cms-popdb-alarms@cern.ch
+addr=vkuznet@gmail.com
+
+# DO NOT EDIT BELOW THIS LINE
+
+me=$(dirname "$0")
+wdir=`echo $me | sed -e "s,/bin,,g"`
+mkdir -p $wdir/logs
+log=$wdir/logs/phedex_df-`date +%Y%m%d`.log
+export PYTHONPATH=$wdir/src/python:$PYTHONPATH
+export PATH=$wdir/bin:$PATH
+today=`date +%Y%m%d`
+dates=`python ${wdir}/src/python/CMSSpark/dates.py --range --format="%Y%m%d" --ndays=365 --start=$today`
+pdir=hdfs:///cms/phedex
+idir=/wma/vk/phedex
+mkdir -p $idir
+mind=0
+maxd=0
+for d in $dates; do
+    if [ $mind -eq 0 ]; then
+        mind=$d
+    fi
+    if [ $maxd -eq 0 ]; then
+        maxd=$d
+    fi
+    if [ $d -le $mind ]; then
+        mind=$d
+    fi
+    if [ $d -ge $maxd ]; then
+        maxd=$d
+    fi
+    year=`echo $d | cut -c 1-4`
+    month=`echo $d | cut -c 5-6`
+    day=`echo $d | cut -c 7-8`
+    odir=${idir}/${year}/${month}/${day}
+    hadoop fs -ls $pdir/$year/$month/$day 2>&1 1>& /dev/null
+    if [ $? -eq 0 ]; then
+        if [ -d ${idir}/${d} ]; then
+            echo "dir $idir/$d exists, skip it ..."
+        else
+            mkdir -p $idir/$d
+            cmd="hadoop fs -get ${pdir}/${year}/${month}/${day} $idir/$d"
+            echo "$cmd"
+            $cmd
+            # move things around since hadoop fs -get stages full dir into $idir/$d
+            if [ -d $idir/$d/$day ]; then
+                mv $idir/$d/$day/* $idir/$d
+                rm -rf $idir/$d/$day
+            fi
+        fi
+    else
+        echo "HDFS area $pdir/$year/$month/$day does not exist ..."
+    fi
+done
+cmd="python ${wdir}/src/python/CMSSpark/mergePhedex.py --idir=${idir} --fout=phedex_${mind}_${maxd}.csv --dates ${mind}-${maxd}"
+echo "$cmd"
+msg="Error while executing $cmd on $USER@`hostname` log at $log"
+set -e
+trap "echo \"$msg\" | mail -s \"Cron alert Phedex df\" \"$addr\"" ERR
+
+$cmd >> $log 2>&1
+gzip phedex_${mind}_${maxd}.csv
