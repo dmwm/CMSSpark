@@ -41,7 +41,8 @@ hadoop fs -mkdir -p ${odir}/release/${year}/${month}
 hadoop fs -mkdir -p ${odir}/era/${year}/${month}
 
 # check that we need to run
-check=`hadoop fs -ls ${odir}/dataset/${year}/${month}/${date} 2> /dev/null`
+oday=`echo $date | cut -c 7-8`
+check=`hadoop fs -ls ${odir}/dataset/${year}/${month}/${oday} 2> /dev/null`
 if [ -n "${check}" ]; then
     echo "No dir to run" > $log 2>&1
     exit
