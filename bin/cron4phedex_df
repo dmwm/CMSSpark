@@ -42,11 +42,11 @@ for d in $dates; do
     hadoop fs -ls $pdir/$year/$month/$day 2>&1 1>& /dev/null
     if [ $? -eq 0 ]; then
         if [ -d ${idir}/${d} ]; then
-            echo "dir $idir/$d exists, skip it ..."
+            echo "dir $idir/$d exists, skip it ..." >> $log
         else
             mkdir -p $idir/$d
             cmd="hadoop fs -get ${pdir}/${year}/${month}/${day} $idir/$d"
-            echo "$cmd"
+            echo "$cmd" >> $log
             $cmd
             # move things around since hadoop fs -get stages full dir into $idir/$d
             if [ -d $idir/$d/$day ]; then
@@ -55,11 +55,11 @@ for d in $dates; do
             fi
         fi
     else
-        echo "HDFS area $pdir/$year/$month/$day does not exist ..."
+        echo "HDFS area $pdir/$year/$month/$day does not exist ..." >> $log
     fi
 done
-cmd="python ${wdir}/src/python/CMSSpark/mergePhedex.py --idir=${idir} --fout=phedex_${mind}_${maxd}.csv --dates ${mind}-${maxd}"
-echo "$cmd"
+cmd="python ${wdir}/src/python/CMSSpark/mergePhedex.py --idir=${idir} --fout=${wdir}/phedex_${mind}_${maxd}.csv --dates ${mind}-${maxd}"
+echo "$cmd" >> $log
 msg="Error while executing $cmd on $USER@`hostname` log at $log"
 set -e
 trap "echo \"$msg\" | mail -s \"Cron alert Phedex df\" \"$addr\"" ERR
