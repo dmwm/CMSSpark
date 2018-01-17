@@ -65,4 +65,4 @@ set -e
 trap "echo \"$msg\" | mail -s \"Cron alert Phedex df\" \"$addr\"" ERR
 
 $cmd >> $log 2>&1
-gzip phedex_${mind}_${maxd}.csv
+gzip ${wdir}/phedex_${mind}_${maxd}.csv
