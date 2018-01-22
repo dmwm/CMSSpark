@@ -28,9 +28,18 @@ log=$wdir/logs/dbs_condor-`date +%Y%m%d`.log
 export PYTHONPATH=$wdir/src/python:$PYTHONPATH
 export PATH=$wdir/bin:$PATH
 
+echo "Start job for $year/$month/$day ..." >> $log 2>&1
+hadoop fs -ls ${hdir}/$year/$month >> $log 2>&1
+echo "Date to run: $date" >> $log 2>&1
+
 # check if we got a date to run
 if [ -z "${date}" ]; then
-    echo "No date to run" > $log 2>&1
+    echo "No date to run" >> $log 2>&1
+    exit
+fi
+dotmp=`echo $date | grep tmp`
+if [ -n "${dotmp}" ]; then
+    echo "Date ends with tmp" >> $log 2>&1
     exit
 fi
 
@@ -44,7 +53,7 @@ hadoop fs -mkdir -p ${odir}/era/${year}/${month}
 oday=`echo $date | cut -c 7-8`
 check=`hadoop fs -ls ${odir}/dataset/${year}/${month}/${oday} 2> /dev/null`
 if [ -n "${check}" ]; then
-    echo "No dir to run" > $log 2>&1
+    echo "No dir to run" >> $log 2>&1
     exit
 fi
 
