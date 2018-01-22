@@ -8,13 +8,25 @@ addr=cms-popdb-alarms@cern.ch
 addr=vkuznet@gmail.com
 
 # DO NOT EDIT BELOW THIS LINE
-
 me=$(dirname "$0")
 wdir=`echo $me | sed -e "s,/bin,,g"`
 mkdir -p $wdir/logs
 log=$wdir/logs/phedex_df-`date +%Y%m%d`.log
 export PYTHONPATH=$wdir/src/python:$PYTHONPATH
 export PATH=$wdir/bin:$PATH
+
+# Kerberos
+conf=$wdir/etc/conf.json
+keytab=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['keytab']"`
+principal=`klist -k "$keytab" | tail -1 | awk '{print $2}'`
+echo "principal=$principal"
+kinit $principal -k -t "$keytab"
+if [ $? == 1 ]; then
+    echo "Unable to perform kinit"
+    exit 1
+fi
+klist -k "$keytab"
+
 today=`date +%Y%m%d`
 dates=`python ${wdir}/src/python/CMSSpark/dates.py --range --format="%Y%m%d" --ndays=365 --start=$today`
 pdir=hdfs:///cms/phedex
@@ -66,3 +78,22 @@ trap "echo \"$msg\" | mail -s \"Cron alert Phedex df\" \"$addr\"" ERR
 
 $cmd >> $log 2>&1
 gzip ${wdir}/phedex_${mind}_${maxd}.csv
+
+# move file to permanent place
+ifile=phedex_${mind}_${maxd}.csv.gz
+edir=/afs/cern.ch/user/v/valya/public/analytics/ecom17
+edir=/eos/user/v/valya/analytics
+if [ ! -f $edir/$ifile ]; then
+    if [ -f $edir/phedex_current365.csv.gz ]; then
+        # remove previous file it points to
+        ofile=`ls -al $edir/phedex_current365.csv.gz | awk '{print $11}'`
+        rm $edir/phedex_current365.csv.gz
+        if [ -f $ofile ]; then
+            rm $ofile
+        fi
+    fi
+    cp $ifile $edir
+    ln -s $edir/$ifile $edir/phedex_current365.csv.gz
+    # remove file we produced
+#    rm $ifile
+fi
