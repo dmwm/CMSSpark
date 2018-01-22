@@ -59,7 +59,7 @@ def condor_date(date):
         date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
         return date
     if  len(date) != 8:
-        raise Exception("Given date %s is not in YYYYMMDD format")
+        raise Exception("Given date %s is not in YYYYMMDD format" % date)
     year = date[:4]
     month = date[4:6]
     day = date[6:]
