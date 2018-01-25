@@ -19,13 +19,13 @@ export PATH=$wdir/bin:$PATH
 conf=$wdir/etc/conf.json
 keytab=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['keytab']"`
 principal=`klist -k "$keytab" | tail -1 | awk '{print $2}'`
-echo "principal=$principal"
-kinit $principal -k -t "$keytab"
+echo "principal=$principal" >> $log 2>&1
+kinit $principal -k -t "$keytab" >> $log 2>&1
 if [ $? == 1 ]; then
-    echo "Unable to perform kinit"
+    echo "Unable to perform kinit" >> $log 2>&1
     exit 1
 fi
-klist -k "$keytab"
+klist -k "$keytab" >> $log 2>&1
 
 today=`date +%Y%m%d`
 dates=`python ${wdir}/src/python/CMSSpark/dates.py --range --format="%Y%m%d" --ndays=365 --start=$today`
@@ -87,13 +87,13 @@ if [ ! -f $edir/$ifile ]; then
     if [ -f $edir/phedex_current365.csv.gz ]; then
         # remove previous file it points to
         ofile=`ls -al $edir/phedex_current365.csv.gz | awk '{print $11}'`
-        rm $edir/phedex_current365.csv.gz
+        rm $edir/phedex_current365.csv.gz >> $log 2>&1
         if [ -f $ofile ]; then
-            rm $ofile
+            rm $ofile >> $log 2>&1
         fi
     fi
-    cp $ifile $edir
-    ln -s $edir/$ifile $edir/phedex_current365.csv.gz
+    cp ${wdir}/${ifile} $edir/${file} >> $log 2>&1
+    ln -s $edir/$ifile $edir/phedex_current365.csv.gz >> $log 2>&1
     # remove file we produced
 #    rm $ifile
 fi
