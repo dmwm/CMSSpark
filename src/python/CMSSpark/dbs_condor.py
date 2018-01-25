@@ -127,7 +127,7 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
 
     # merge dbs+phedex and Condor data
     cols = ['d_dataset','evts','size','date','dataset_access_type','acquisition_era_name','r_release_version']
-    cols = cols + ['data.KEvents', 'data.CMSSWKLumis', 'data.CMSSWWallHrs', 'data.Campaign', 'data.Workflow', 'data.CpuEff', 'data.CoreHr', 'data.QueueHrs', 'data.CRAB_UserHN', 'data.Type', 'data.ExitCode', 'data.TaskType']
+    cols = cols + ['data.KEvents', 'data.CMSSWKLumis', 'data.CMSSWWallHrs', 'data.Campaign', 'data.Workflow', 'data.CpuEff', 'data.CoreHr', 'data.QueueHrs', 'data.CRAB_UserHN', 'data.Type', 'data.ExitCode', 'data.TaskType', 'data.RecordTime']
     stmt = 'SELECT %s FROM condor_df JOIN agg_dbs_df ON agg_dbs_df.d_dataset = condor_df.data.DESIRED_CMSDataset WHERE condor_df.data.KEvents > 0' % ','.join(cols)
 #     stmt = 'SELECT %s FROM condor_df JOIN dbs_phedex_df ON dbs_phedex_df.d_dataset = condor_df.data.DESIRED_CMSDataset WHERE condor_df.data.KEvents > 0' % ','.join(cols)
 
@@ -167,43 +167,47 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
         condf.persist(StorageLevel.MEMORY_AND_DISK)
 
         # aggregate CMS datasets
-        cols = ['data.DESIRED_CMSDataset', 'data.CRAB_UserHN', 'data.ExitCode', 'data.Type', 'data.TaskType']
+        cols = ['data.DESIRED_CMSDataset', 'data.CRAB_UserHN', 'data.ExitCode', 'data.Type', 'data.TaskType', 'data.RecordTime']
         xdf = condf.groupBy(cols)\
                 .agg(sum('data.KEvents').alias('sum_evts'),sum('data.CoreHr').alias('sum_chr'))\
                 .withColumn('date', lit(date))\
                 .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
                 .withColumn("tier", split(col('DESIRED_CMSDataset'), "/").alias('tier').getItem(3))\
                 .withColumnRenamed('CRAB_UserHN', 'user')\
+                .withColumnRenamed('RecordTime', 'rec_time')\
                 .withColumnRenamed('DESIRED_CMSDataset', 'dataset')
         store.setdefault('dataset', []).append(xdf)
 
         # aggregate across campaign
-        cols = ['data.Campaign', 'data.CRAB_UserHN', 'data.ExitCode', 'data.Type', 'data.TaskType']
+        cols = ['data.Campaign', 'data.CRAB_UserHN', 'data.ExitCode', 'data.Type', 'data.TaskType', 'data.RecordTime']
         xdf = condf.groupBy(cols)\
                 .agg(sum('data.KEvents').alias('sum_evts'),sum('data.CoreHr').alias('sum_chr'))\
                 .withColumn('date', lit(date))\
                 .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
                 .withColumnRenamed('CRAB_UserHN', 'user')\
+                .withColumnRenamed('RecordTime', 'rec_time')\
                 .withColumnRenamed('Campaign', 'campaign')
         store.setdefault('campaign', []).append(xdf)
 
         # aggregate across DBS releases
-        cols = ['r_release_version', 'CRAB_UserHN', 'ExitCode', 'Type', 'TaskType']
+        cols = ['r_release_version', 'CRAB_UserHN', 'ExitCode', 'Type', 'TaskType', 'RecordTime']
         xdf = refdf.groupBy(cols)\
                 .agg(sum('KEvents').alias('sum_evts'),sum('CoreHr').alias('sum_chr'))\
                 .withColumn('date', lit(date))\
                 .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
                 .withColumnRenamed('CRAB_UserHN', 'user')\
+                .withColumnRenamed('RecordTime', 'rec_time')\
                 .withColumnRenamed('r_release_version', 'release')
         store.setdefault('release', []).append(xdf)
 
         # aggregate across DBS eras
-        cols = ['acquisition_era_name', 'CRAB_UserHN', 'ExitCode', 'Type', 'TaskType']
+        cols = ['acquisition_era_name', 'CRAB_UserHN', 'ExitCode', 'Type', 'TaskType', 'RecordTime']
         xdf = refdf.groupBy(cols)\
                 .agg(sum('KEvents').alias('sum_evts'),sum('CoreHr').alias('sum_chr'))\
                 .withColumn('date', lit(date))\
                 .withColumn('rate', func_rate(col('sum_evts'),col('sum_chr')))\
                 .withColumnRenamed('CRAB_UserHN', 'user')\
+                .withColumnRenamed('RecordTime', 'rec_time')\
                 .withColumnRenamed('acquisition_era_name', 'era')
         store.setdefault('era', []).append(xdf)
 
