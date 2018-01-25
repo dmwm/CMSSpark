@@ -92,8 +92,6 @@ if [ ! -f $edir/$ifile ]; then
             rm $ofile >> $log 2>&1
         fi
     fi
-    cp ${wdir}/${ifile} $edir/${file} >> $log 2>&1
+    mv ${wdir}/${ifile} $edir/${file} >> $log 2>&1
     ln -s $edir/$ifile $edir/phedex_current365.csv.gz >> $log 2>&1
-    # remove file we produced
-#    rm $ifile
 fi
