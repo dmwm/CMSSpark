@@ -31,7 +31,7 @@ class OptionParser():
         desc = "Spark script to process DBS+PhEDEx metadata"
         self.parser = argparse.ArgumentParser(prog='PROG', description=desc)
         year = time.strftime("%Y", time.localtime())
-        hdir = 'hdfs:///cms/wmarchive/avro'
+        hdir = 'hdfs:///cms/wmarchive/avro/fwjr'
         msg = 'Location of CMS folders on HDFS, default %s' % hdir
         self.parser.add_argument("--hdir", action="store",
             dest="hdir", default=hdir, help=msg)
