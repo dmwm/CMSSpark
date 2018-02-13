@@ -443,7 +443,10 @@ def aaa_tables(sqlContext,
         date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
 
     hpath = '%s/%s' % (hdir, date)
-    rdd = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
+    try:
+        rdd = unionAll([sqlContext.read.json(path) for path in files(hpath, verbose)])
+    except:
+        rdd = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
     aaa_rdd = rdd.map(lambda r: r['data'])
     records = aaa_rdd.take(1) # take function will return list of records
     if  verbose:
@@ -480,7 +483,10 @@ def aaa_tables_enr(sqlContext,
     if len(files_in_hpath) == 0:
         aaa_df = sqlContext.createDataFrame([], schema=schema_empty_aaa())
     else:
-        aaa_df = unionAll([sqlContext.jsonFile(path) for path in files_in_hpath], cols)
+        try:
+            aaa_df = unionAll([sqlContext.read.json(path) for path in files_in_hpath], cols)
+        except:
+            aaa_df = unionAll([sqlContext.jsonFile(path) for path in files_in_hpath], cols)
 
     aaa_df.registerTempTable('aaa_df')
     tables = {'aaa_df':aaa_df}
@@ -517,7 +523,10 @@ def eos_tables(sqlContext,
         tables = {'eos_df':eos_df}
         return tables
     
-    rdd = unionAll([sqlContext.jsonFile(path) for path in files_in_hpath], cols)
+    try:
+        rdd = unionAll([sqlContext.read.json(path) for path in files_in_hpath], cols)
+    except:
+        rdd = unionAll([sqlContext.jsonFile(path) for path in files_in_hpath], cols)
 
     def parse_log(r):
         "Local helper function to parse EOS record and extract intersting fields"
