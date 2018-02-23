@@ -30,7 +30,7 @@ klist -k "$keytab" >> $log 2>&1
 today=`date +%Y%m%d`
 dates=`python ${wdir}/src/python/CMSSpark/dates.py --range --format="%Y%m%d" --ndays=365 --start=$today`
 pdir=hdfs:///cms/phedex
-idir=/wma/vk/phedex
+idir=$1
 mkdir -p $idir
 mind=0
 maxd=0
@@ -92,6 +92,6 @@ if [ ! -f $edir/$ifile ]; then
             rm $ofile >> $log 2>&1
         fi
     fi
-    mv ${wdir}/${ifile} $edir/${file} >> $log 2>&1
-    ln -s $edir/$ifile $edir/phedex_current365.csv.gz >> $log 2>&1
+#    mv ${wdir}/${ifile} $edir/${file} >> $log 2>&1
+#    ln -s $edir/$ifile $edir/phedex_current365.csv.gz >> $log 2>&1
 fi
