@@ -4,10 +4,12 @@
 #
 # it should be called with absolute path
 
-addr=cms-popdb-alarms@cern.ch
+#addr=cms-popdb-alarms@cern.ch
 addr=vkuznet@gmail.com
 
 # DO NOT EDIT BELOW THIS LINE
+idir=$1
+mkdir -p $idir
 me=$(dirname "$0")
 wdir=`echo $me | sed -e "s,/bin,,g"`
 mkdir -p $wdir/logs
@@ -30,8 +32,6 @@ klist -k "$keytab" >> $log 2>&1
 today=`date +%Y%m%d`
 dates=`python ${wdir}/src/python/CMSSpark/dates.py --range --format="%Y%m%d" --ndays=365 --start=$today`
 pdir=hdfs:///cms/phedex
-idir=/wma/vk/phedex
-mkdir -p $idir
 mind=0
 maxd=0
 for d in $dates; do
@@ -80,18 +80,17 @@ $cmd >> $log 2>&1
 gzip ${wdir}/phedex_${mind}_${maxd}.csv
 
 # move file to permanent place
-ifile=phedex_${mind}_${maxd}.csv.gz
-edir=/afs/cern.ch/user/v/valya/public/analytics/ecom17
-edir=/eos/user/v/valya/analytics
-if [ ! -f $edir/$ifile ]; then
-    if [ -f $edir/phedex_current365.csv.gz ]; then
-        # remove previous file it points to
-        ofile=`ls -al $edir/phedex_current365.csv.gz | awk '{print $11}'`
-        rm $edir/phedex_current365.csv.gz >> $log 2>&1
-        if [ -f $ofile ]; then
-            rm $ofile >> $log 2>&1
-        fi
-    fi
-    mv ${wdir}/${ifile} $edir/${file} >> $log 2>&1
-    ln -s $edir/$ifile $edir/phedex_current365.csv.gz >> $log 2>&1
-fi
+#ifile=phedex_${mind}_${maxd}.csv.gz
+#edir=/afs/cern.ch/user/v/valya/public/analytics/ecom17
+#edir=/eos/user/v/valya/analytics
+#if [ ! -f $edir/$ifile ]; then
+#    if [ -f $edir/phedex_current365.csv.gz ]; then
+#        ofile=`ls -al $edir/phedex_current365.csv.gz | awk '{print $11}'`
+#        rm $edir/phedex_current365.csv.gz >> $log 2>&1
+#        if [ -f $ofile ]; then
+#            rm $ofile >> $log 2>&1
+#        fi
+#    fi
+#    mv ${wdir}/${ifile} $edir/${file} >> $log 2>&1
+#    ln -s $edir/$ifile $edir/phedex_current365.csv.gz >> $log 2>&1
+#fi
