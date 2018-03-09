@@ -4,10 +4,12 @@
 #
 # it should be called with absolute path
 
-addr=cms-popdb-alarms@cern.ch
+#addr=cms-popdb-alarms@cern.ch
 addr=vkuznet@gmail.com
 
 # DO NOT EDIT BELOW THIS LINE
+idir=$1
+mkdir -p $idir
 me=$(dirname "$0")
 wdir=`echo $me | sed -e "s,/bin,,g"`
 mkdir -p $wdir/logs
