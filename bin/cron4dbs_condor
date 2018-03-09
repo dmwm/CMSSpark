@@ -2,7 +2,7 @@
 # this script is designed to be used in crontab, i.e. with full path
 # adjust script to put your desired notification address if necessary
 
-addr=cms-popdb-alarms@cern.ch
+#addr=cms-popdb-alarms@cern.ch
 addr=vkuznet@gmail.com
 
 # DO NOT EDIT BELOW THIS LINE

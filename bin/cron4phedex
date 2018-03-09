@@ -2,11 +2,20 @@
 # this script is designed to be used in crontab, i.e. with full path
 # adjust script to put your desired notification address if necessary
 
-addr=cms-popdb-alarms@cern.ch
+#addr=cms-popdb-alarms@cern.ch
 addr=vkuznet@gmail.com
 
 # DO NOT EDIT BELOW THIS LINE
-
+conf=$1
+keytab=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['keytab']"`
+principal=`klist -k "$keytab" | tail -1 | awk '{print $2}'`
+kinit $principal -k -t "$keytab" 2>&1 1>& /dev/null
+if [ $? == 1 ]; then
+    echo "Unable to perform kinit"
+    exit 1
+fi
+klist -k "$keytab" 2>&1 1>& /dev/null
+#
 # find out which date we should use to run the script
 hdir=hdfs:///project/awg/cms/phedex/block-replicas-snapshots/csv
 lastSnapshot=`hadoop fs -ls ${hdir} | tail -1 | awk '{print $8}'`

@@ -17,6 +17,7 @@ cmsspark=$droot/$1
 # via WMA_LOG4J environment variable
 # conf="--conf spark.driver.extraClassPath=/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core.jar"
 conf=""
+#conf="--conf spark.authenticate=true"
 # look if we requested to show full log output
 if [[ "$@" =~ "--no-log4j" ]]; then
     conf=" --conf spark.ui.showConsoleProgress=false "
