@@ -151,7 +151,7 @@ if [ $aaa_date != "" ] && [ $aaa_date == $cmssw_date ] && [ $cmssw_date == $eos_
             echo "Abnormal exit of run_spark data_aggregation.py"
             exit 1
         fi
-        run_spark cern_monit.py --hdir "$output_dir_with_date" --stomp="$stomp_path" --amq "$credentials" --verbose --aggregation_schema
+        run_spark cern_monit.py --yarn --hdir "$output_dir_with_date" --stomp="$stomp_path" --amq "$credentials" --verbose --aggregation_schema
         if [ $? == 1 ]; then
             echo "Abnormal exit of run_spark cern_monit.py"
             exit 1
