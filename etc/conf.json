@@ -1,8 +1,8 @@
 {
     "output_dir" : "hdfs:///cms/cms-popularity/agg",
-    "stomp_path" : "/wma/vk/CMSSpark/static/stomp.py-4.1.15-py2.7.egg",
-    "credentials" : "/wma/vk/CMSSpark/acronjob/amq_broker.json",
-    "keytab" : "/wma/vk/CMSSpark/acronjob/agg.keytab",
+    "stomp_path" : "/data/cms/CMSSpark/static/stomp.py-4.1.15-py2.7.egg",
+    "credentials" : "/data/cms/CMSSpark/acronjob/amq_broker.json",
+    "keytab" : "/data/cms/CMSSpark/acronjob/agg.keytab",
     "aaa_dir" : "/project/monitoring/archive/xrootd/enr/gled",
     "cmssw_dir" : "/project/awg/cms/cmssw-popularity/avro-snappy",
     "eos_dir" : "/project/monitoring/archive/eos/logs/reports/cms",
