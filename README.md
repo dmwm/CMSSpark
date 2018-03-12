@@ -53,3 +53,23 @@ analytix cluster:
 - AAA: /project/monitoring/archive/xrootd (daily snapshots in JSON data-format)
 - EOS: /project/monitoring/archive/eos (daily snapshots in JSON data-format)
 - WMArchive: /cms/wmarchive/avro (daily snapshots in Avro data-format)
+
+### Aggregating data and preparing reports
+It is possible to aggregate PhEDEx and DBS data and prepare reports with tables and plots visualizing the data.
+
+#### Initialization
+Before running the scripts please run `./src/bash/reports_init` to clone wiki repository which contains reports. If you don't intend to submit reports to github wiki this step is not necessary.
+
+#### Aggregating by data tier
+Please run `./src/bash/report_tiers/aggregate` to download PhEDEx and DBS data aggregated by data tier.
+
+Then run `python src/python/CMSSpark/reports/visualize_tiers.py` to generate the report which will be available here: `src/bash/CERNTasks.wiki/CMS_Tier_Reports.md`
+
+Scripts should be ran from this directory: `src/bash/report_tiers`
+
+#### Aggregating by campaign
+Please run `./src/bash/report_campaigns/aggregate` download PhEDEx and DBS data aggregated by campaign.
+
+Then run `python src/python/CMSSpark/reports/visualize_campaigns.py` to generate the report which will be available here: `src/bash/CERNTasks.wiki/CMS_Campaign_Reports.md`
+
+Scripts should be ran from this directory: `src/bash/report_campaigns`

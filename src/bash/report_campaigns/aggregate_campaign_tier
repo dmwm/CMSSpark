@@ -1,0 +1,45 @@
+#!/bin/sh
+
+# Parse date argument
+date=20170228
+
+if [[ -n $1 ]]
+then
+    date=$1
+fi
+
+date_length=${#date}
+if [[ $date_length != 8 ]]
+then
+    echo 'Invalid date. Example: 20170228'
+    exit
+fi
+
+echo 'Aggregating for date: '$date
+
+# Results will be put here
+location=/cms/users/$USER/campaign_tier
+hdir=hdfs://$location
+
+# Remove previous data first
+hadoop fs -rm -r $location
+
+PYTHONPATH=$(pwd)/../../python ../../../bin/run_spark /reports/aggregate_campaign_tier.py --fout=$hdir --yarn --verbose --date=$date
+
+hadoop fs -test -e $hdir
+exists=$?
+
+# Download results and recreate csv files only if results exist in hdfs
+if [[ $exists -eq 0 ]]
+then
+    # Delete previously downloaded directory and download new one
+    basename $hdir | xargs rm -rf
+    hadoop fs -get $hdir .
+
+    # Extract header
+    head -1 campaign_tier/part-00000 > campaign_tier_df.csv
+
+    # Concatenate all parts except header
+    header=`cat campaign_tier_df.csv`
+    cat campaign_tier/part* | grep -v $header >> campaign_tier_df.csv
+fi

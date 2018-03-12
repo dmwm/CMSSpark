@@ -1,0 +1,39 @@
+#!/bin/sh
+
+# Parse date argument
+date=20170228
+
+if [[ -n $1 ]]
+then
+    date=$1
+fi
+
+date_length=${#date}
+if [[ $date_length != 8 ]]
+then
+    echo 'Invalid date. Example: 20170228'
+    exit
+fi
+
+echo 'Aggregating for date: '$date
+
+# Results will be put here
+location=/cms/users/$USER/phedex_datasets
+hdir=hdfs://$location
+
+# Remove previous data first
+hadoop fs -rm -r $location
+
+PYTHONPATH=$(pwd)/../../python ../../../bin/run_spark /reports/aggregate_phedex.py --fout=$hdir --yarn --verbose --date=20170228
+
+# Delete previously downloaded directory and download new one
+basename $hdir | xargs rm -rf
+hadoop fs -get $hdir .
+
+# extract header
+head -1 phedex_datasets/2017/02/28/part-00000 > phedex_df.csv
+
+# concatenate all parts except header
+header=`cat phedex_df.csv`
+cat phedex_datasets/2017/02/28/part* | grep -v $header >> phedex_df.csv
+

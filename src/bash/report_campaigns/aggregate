@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# Treat first argument as date. 
+# Date will be validated in actual scripts below.
+date=$1
+
+# Aggregate campaigns
+./aggregate_campaigns $date &
+
+# Aggregate campaign - tier relationship
+./aggregate_campaign_tier $date &
+
+wait

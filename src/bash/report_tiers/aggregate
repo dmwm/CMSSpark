@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# Treat first argument as date. 
+# Date will be validated in actual scripts below.
+date=$1
+
+# Aggregate dbs data
+./aggregate_dbs $date &
+
+# Aggregate PhEDEx
+./aggregate_phedex $date &
+
+wait
