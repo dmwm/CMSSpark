@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# Clone CERNTasks.wiki for automatically generating reports
+if [ -d "CERNTasks.wiki" ]; then
+  echo "CERNTasks.wiki was already cloned"
+else
+  git clone https://github.com/andrius-k/CERNTasks.wiki
+fi
