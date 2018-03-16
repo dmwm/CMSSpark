@@ -114,7 +114,7 @@ def run(fout, date, yarn=None, verbose=None, patterns=None, antipatterns=None, i
     tables.update(phedex_tables(sqlContext, verbose=verbose, fromdate=fromdate, todate=todate))
     phedex = tables['phedex_df']
 
-    instances = ['GLOBAL', 'PHYS01', 'PHYS02', 'PHYS03']
+    instances = ['GLOBAL'] # , 'PHYS01', 'PHYS02', 'PHYS03'
     for instance in instances:
         dbs_dict = dbs_tables(sqlContext, inst=instance, verbose=verbose)
         for key, val in dbs_dict.items():
@@ -142,41 +142,67 @@ def run(fout, date, yarn=None, verbose=None, patterns=None, antipatterns=None, i
                    .drop(ddf_df.d_dataset_access_type_id)\
                    .drop(daf_df.dataset_access_type_id)
 
-    # dataset, size, status
+    # dataset, dbs_size
     dbs_df = dbs_df.where(dbs_df.dataset_access_type == 'VALID')\
                    .join(fdf_df, dbs_df.d_dataset_id == fdf_df.f_dataset_id)\
                    .withColumnRenamed('d_dataset', 'dataset')\
-                   .withColumnRenamed('f_file_size', 'size')\
-                   .withColumnRenamed('dataset_access_type', 'status')\
-                   .drop(dbs_df.d_dataset_id)\
-                   .drop(fdf_df.f_dataset_id)
+                   .withColumnRenamed('f_file_size', 'dbs_size')\
+                #    .drop(dbs_df.d_dataset_id)\
+                #    .drop(fdf_df.f_dataset_id)\
+                #    .drop(dbs_df.dataset_access_type)
 
-    # dataset, campaign, dbs_size, status
-    dbs_df = dbs_df.withColumn('campaign', extract_campaign_udf(dbs_df.dataset))\
-                   .withColumnRenamed('size', 'dbs_size')
+    test_df = dbs_df.where(dbs_df.dataset == '/ZprimeToA0hToA0chichihZZTo4l_2HDM_MZp-1700_MA0-400_13TeV-madgraph/RunIISummer15GS-MCRUN2_71_V1-v1/GEN-SIM')
+    test_df.show()
 
-    dbs_df = dbs_df.groupBy(['dataset', 'campaign'])\
+    # dataset, dbs_size
+    dbs_df = dbs_df.groupBy(['dataset'])\
                    .agg({'dbs_size':'sum'})\
                    .withColumnRenamed('sum(dbs_size)', 'dbs_size')
+    
+    # print 'DBS:'
+    # print dbs_df.select('dataset').count()
+    # print dbs_df.select('dataset').distinct().count()
 
-    # dataset, campaign, phedex_size
+    # dataset, phedex_size
     phedex_cols = ['dataset_name', 'block_bytes']
     phedex_df = phedex.select(phedex_cols)
-    phedex_df = phedex_df.withColumn('campaign', extract_campaign_udf(phedex_df.dataset_name))\
-                .withColumnRenamed('block_bytes', 'phedex_size')\
-                .withColumnRenamed('dataset_name', 'dataset')
-
-    phedex_df = phedex_df.groupBy(['dataset', 'campaign'])\
-                         .agg({'phedex_size':'sum'})\
-                         .withColumnRenamed('sum(phedex_size)', 'phedex_size')
+    phedex_df = phedex_df.withColumnRenamed('block_bytes', 'phedex_size')\
+                         .withColumnRenamed('dataset_name', 'dataset')
     
-    # dataset, campaign, dbs_size, phedex_size, status
-    dbs_phedex_df = dbs_df.join(phedex_df, ['campaign', 'dataset'])
+    # dataset, phedex_size
+    phedex_df = phedex_df.groupBy(['dataset'])\
+                   .agg({'phedex_size':'sum'})\
+                   .withColumnRenamed('sum(phedex_size)', 'phedex_size')
+
+    # print 'PhEDEx:'
+    # print phedex_df.select('dataset').count()
+    # print phedex_df.select('dataset').distinct().count()
+
+    # dataset, dbs_size, phedex_size
+    dbs_phedex_df = dbs_df.join(phedex_df, 'dataset')
+
+    leftovers_df = phedex_df.select('dataset').subtract(dbs_phedex_df.select('dataset').distinct())
+    leftovers_df.write.format("com.databricks.spark.csv")\
+                              .option("header", "true").save('%s/leftovers' % fout)
+
+    # print 'After join:'
+    # print dbs_phedex_df.select('dataset').count()
+    # print dbs_phedex_df.select('dataset').distinct().count()
+    
+    dbs_phedex_df = dbs_phedex_df.withColumn('campaign', extract_campaign_udf(dbs_phedex_df.dataset))
+
+    # print 'After join extracted campaigns:'
+    # print dbs_phedex_df.select('campaign').count()
+    # print dbs_phedex_df.select('campaign').distinct().count()
 
     dbs_phedex_df = dbs_phedex_df.groupBy(['campaign'])\
                                  .agg({'dbs_size':'sum', 'phedex_size': 'sum'})\
                                  .withColumnRenamed('sum(dbs_size)', 'dbs_size')\
                                  .withColumnRenamed('sum(phedex_size)', 'phedex_size')
+
+    print 'After join aggregated by campaign:'
+    print dbs_phedex_df.select('campaign').count()
+    print dbs_phedex_df.select('campaign').distinct().count()
     
     # Select campaign - site pairs and their sizes (from PhEDEx)
 

@@ -6,20 +6,13 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 from subprocess import check_output
 from math import log
+from report_builder import ReportBuilder
 import os
 import shutil
 import operator
 import argparse
 
 PLOTS_PATH = '../CERNTasks.wiki/images/campaign_plots/'
-
-class ReportBuilder():
-    report = ''
-    def append(self, value):
-        ReportBuilder.report += value
-    
-    def get(self):
-        return ReportBuilder.report
 
 report_builder = ReportBuilder()
 
