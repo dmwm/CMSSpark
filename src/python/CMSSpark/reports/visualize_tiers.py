@@ -5,6 +5,7 @@ import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 from subprocess import check_output
+from report_builder import ReportBuilder
 import os
 import shutil
 import operator
@@ -15,12 +16,11 @@ DBS_PLOTS_PATH = 'dbs_plots/'
 PHEDEX_TIME_DATA_FILE = 'spark_exec_time_tier_phedex.txt'
 DBS_TIME_DATA_FILE = 'spark_exec_time_tier_dbs.txt'
 
-report = ''
+report_builder = ReportBuilder()
 
 def append_report(lines):
-    global report
-    report = report + lines
-    report = report + '\n'
+    report_builder.append(lines)
+    report_builder.append('\n')
 
 def write_df_to_report(df, head=0):
     append_report('| Tier | Count | Size (TB) |')
@@ -76,9 +76,8 @@ def read_dbs_time_data():
         return f.read()
 
 def write_report():
-    global report
     with open('../CERNTasks.wiki/CMS_Tier_Reports.md', 'w') as f:
-        f.write(report)
+        f.write(report_builder.get())
 
 def commit_report():
     os.system('(cd ../CERNTasks.wiki/; git add -A; git commit -m "Auto-commiting report"; git push origin master)')

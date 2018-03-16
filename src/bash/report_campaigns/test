@@ -1,0 +1,9 @@
+#!/bin/bash
+
+me=$(dirname "$0")
+wdir=`echo $me | sed -e "s,/bin,,g"`
+
+PYTHONPATH=$wdir/src/python ../../../bin/run_spark /reports/aggregate_campaigns.py --fout=$hdir --yarn --verbose --date=$date
+
+echo $wdir
+
