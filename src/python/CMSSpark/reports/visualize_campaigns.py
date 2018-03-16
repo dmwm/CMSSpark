@@ -13,12 +13,19 @@ import argparse
 
 PLOTS_PATH = '../CERNTasks.wiki/images/campaign_plots/'
 
-report = ''
+class ReportBuilder():
+    report = ''
+    def append(self, value):
+        ReportBuilder.report += value
+    
+    def get(self):
+        return ReportBuilder.report
+
+report_builder = ReportBuilder()
 
 def append_report(lines):
-    global report
-    report = report + lines
-    report = report + '\n'
+    report_builder.append(lines)
+    report_builder.append('\n')
 
 def safe_round(value, decimal_points=1):
     """
@@ -106,8 +113,7 @@ def append_report_header():
     append_report('# PhEDEx and DBS data aggregation based on campaigns for data from 2017-02-28')
     append_report('Results of gathering PhEDEx and DBS information aggregated by campaign')
 
-def write_report():
-    global report
+def write_report(report):
     with open('../CERNTasks.wiki/CMS_Campaign_Reports.md', 'w') as f:
         f.write(report)
 
@@ -143,7 +149,7 @@ def plot_pie_charts(df, file_name):
 def visualize_data_by_campaign():
     df = pd.read_csv('campaigns_dbs_df.csv')
 
-    append_report('## Campaigns')
+    append_report('## Campaigns', )
     
     append_report('### Showing TOP 10 most significant campaigns by DBS size')
     write_campaigns_to_report(df, 10)
@@ -196,6 +202,7 @@ def main():
     opts = parser.parse_args()
 
     create_plot_dirs()
+
     append_report_header()
   
     visualize_data_by_campaign()
@@ -204,7 +211,7 @@ def main():
     visualize_campaign_tier_relationship()
     append_campaign_tier_execution_time()
 
-    write_report()
+    write_report(report_builder.get())
 
     if opts.commit == True:
         commit_report()

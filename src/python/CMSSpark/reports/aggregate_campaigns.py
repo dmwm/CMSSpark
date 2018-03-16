@@ -140,37 +140,44 @@ def run(fout, date, yarn=None, verbose=None, patterns=None, antipatterns=None, i
     # d_dataset_id, d_dataset, dataset_access_type
     dbs_df = ddf_df.join(daf_df, ddf_df.d_dataset_access_type_id == daf_df.dataset_access_type_id)\
                    .drop(ddf_df.d_dataset_access_type_id)\
-                   .drop(daf_df.dataset_access_type_id)\
-                   .withColumnRenamed('d_dataset_access_type_id', 'dataset_access_type_id')
+                   .drop(daf_df.dataset_access_type_id)
 
-    # dataset, size
+    # dataset, size, status
     dbs_df = dbs_df.where(dbs_df.dataset_access_type == 'VALID')\
                    .join(fdf_df, dbs_df.d_dataset_id == fdf_df.f_dataset_id)\
                    .withColumnRenamed('d_dataset', 'dataset')\
                    .withColumnRenamed('f_file_size', 'size')\
+                   .withColumnRenamed('dataset_access_type', 'status')\
                    .drop(dbs_df.d_dataset_id)\
-                   .drop(fdf_df.f_dataset_id)\
-                   .drop(dbs_df.dataset_access_type)
+                   .drop(fdf_df.f_dataset_id)
 
-    # campaign, dbs_size
+    # dataset, campaign, dbs_size, status
     dbs_df = dbs_df.withColumn('campaign', extract_campaign_udf(dbs_df.dataset))\
-                   .groupBy(['campaign'])\
-                   .agg({'size':'sum'})\
-                   .withColumnRenamed('sum(size)', 'dbs_size')\
-                   .drop('dataset')
+                   .withColumnRenamed('size', 'dbs_size')
 
-    # campaign, phedex_size
+    dbs_df = dbs_df.groupBy(['dataset', 'campaign'])\
+                   .agg({'dbs_size':'sum'})\
+                   .withColumnRenamed('sum(dbs_size)', 'dbs_size')
+
+    # dataset, campaign, phedex_size
     phedex_cols = ['dataset_name', 'block_bytes']
     phedex_df = phedex.select(phedex_cols)
     phedex_df = phedex_df.withColumn('campaign', extract_campaign_udf(phedex_df.dataset_name))\
-                .groupBy(['campaign'])\
-                .agg({'block_bytes':'sum'})\
-                .withColumnRenamed('sum(block_bytes)', 'phedex_size')
+                .withColumnRenamed('block_bytes', 'phedex_size')\
+                .withColumnRenamed('dataset_name', 'dataset')
 
-    # campaign, dbs_size, phedex_size
-    dbs_phedex_df = dbs_df.join(phedex_df, dbs_df.campaign == phedex_df.campaign)\
-                          .drop(dbs_df.campaign)
+    phedex_df = phedex_df.groupBy(['dataset', 'campaign'])\
+                         .agg({'phedex_size':'sum'})\
+                         .withColumnRenamed('sum(phedex_size)', 'phedex_size')
+    
+    # dataset, campaign, dbs_size, phedex_size, status
+    dbs_phedex_df = dbs_df.join(phedex_df, ['campaign', 'dataset'])
 
+    dbs_phedex_df = dbs_phedex_df.groupBy(['campaign'])\
+                                 .agg({'dbs_size':'sum', 'phedex_size': 'sum'})\
+                                 .withColumnRenamed('sum(dbs_size)', 'dbs_size')\
+                                 .withColumnRenamed('sum(phedex_size)', 'phedex_size')
+    
     # Select campaign - site pairs and their sizes (from PhEDEx)
 
     # campaign, site, size
