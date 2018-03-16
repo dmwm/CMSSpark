@@ -17,7 +17,7 @@ from pyspark.sql.types import StringType, IntegerType
 # CMSSpark modules
 from CMSSpark.spark_utils import phedex_tables, print_rows
 from CMSSpark.spark_utils import spark_context, split_dataset
-from CMSSpark.utils import elapsed_time, split_date
+from CMSSpark.utils import elapsed_time, split_date, unix2human
 
 class OptionParser():
     def __init__(self):
@@ -45,10 +45,6 @@ def dateStamp(date):
     "Convert YYYYMMDD into sec since epoch"
     sec = time.mktime(time.strptime(date, '%Y%m%d'))
     return sec
-
-def unix2human(tstamp):
-    "Convert unix time stamp into human readable format"
-    return time.strftime('%Y%m%d', time.gmtime(tstamp))
 
 def site_filter(site):
     "Filter site names without _MSS or _Buffer or _Export"
