@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# echo $1
+
+echo ${#"$@"[@]}
+
+for var in "${@:2}"
+do
+    echo "$var"
+done

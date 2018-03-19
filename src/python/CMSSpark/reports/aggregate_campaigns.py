@@ -62,6 +62,9 @@ class OptionParser():
         self.parser.add_argument("--date", action="store",
             dest="date", default="", help='Select CMSSW data for specific date (YYYYMMDD)')
 
+def get_script_dir():
+    return os.path.dirname(os.path.abspath(__file__))
+
 def extract_campaign(dataset):
     return dataset.split('/')[2]
 
@@ -291,7 +294,7 @@ def main():
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s' % elapsed_time(time0))
 
-    with open("spark_exec_time_campaigns.txt", "w") as text_file:
+    with open('%s/../../../bash/report_campaigns/spark_exec_time_campaigns.txt' % get_script_dir(), 'w') as text_file:
         text_file.write(elapsed_time(time0))
 
 if __name__ == '__main__':
