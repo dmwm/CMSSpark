@@ -17,6 +17,9 @@ fi
 
 echo 'Aggregating for date: '$date
 
+# Get current script's absolute path
+scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
+
 # Results will be put here
 location=/cms/users/$USER/dbs_datasets
 hdir=hdfs://$location
@@ -24,7 +27,7 @@ hdir=hdfs://$location
 # Remove previous data first
 hadoop fs -rm -r $location
 
-PYTHONPATH=$(pwd)/../../python ../../../bin/run_spark /reports/aggregate_dbs.py --fout=$hdir --yarn --verbose
+PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_dbs.py --fout=$hdir --yarn --verbose
 
 hadoop fs -test -e $hdir
 exists=$?

@@ -21,13 +21,13 @@ echo 'Aggregating for date: '$date
 scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
 
 # Results will be put here
-location=/cms/users/$USER/campaign_tier
+location=/cms/users/$USER/leftovers
 hdir=hdfs://$location
 
 # Remove previous data first
 hadoop fs -rm -r $location
 
-PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_campaign_tier.py --fout=$hdir --yarn --verbose --date=$date
+PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_leftovers.py --fout=$hdir --yarn --verbose --date=$date
 
 hadoop fs -test -e $hdir
 exists=$?
@@ -39,10 +39,12 @@ then
     basename $hdir | xargs rm -rf
     hadoop fs -get $hdir .
 
-    # Extract header
-    head -1 campaign_tier/part-00000 > campaign_tier_df.csv
+    # Extract PhEDEx header
+    head -1 leftovers/part-00000 > leftovers_df.csv
 
-    # Concatenate all parts except header
-    header=`cat campaign_tier_df.csv`
-    cat campaign_tier/part* | grep -v $header >> campaign_tier_df.csv
+    # Concatenate all PhEDEx parts except header
+    header=`cat leftovers_df.csv`
+    cat leftovers/part* | grep -v $header >> leftovers_df.csv
+
+    cp leftovers_df.csv ~/public/leftovers_df.csv
 fi

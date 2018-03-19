@@ -41,6 +41,9 @@ class OptionParser():
         self.parser.add_argument("--verbose", action="store_true",
             dest="verbose", default=False, help="verbose output")
 
+def get_script_dir():
+    return os.path.dirname(os.path.abspath(__file__))
+
 def dateStamp(date):
     "Convert YYYYMMDD into sec since epoch"
     sec = time.mktime(time.strptime(date, '%Y%m%d'))
@@ -117,7 +120,7 @@ def main():
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s sec' % elapsed_time(time0))
 
-    with open('spark_exec_time_tier_phedex.txt', 'w') as file:
+    with open('%s/../../../bash/report_tiers/spark_exec_time_tier_phedex.txt' % get_script_dir(), 'w') as file:
         file.write(elapsed_time(time0))
 
 if __name__ == '__main__':

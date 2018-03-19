@@ -14,7 +14,8 @@ from types import NoneType
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import struct, array, udf, countDistinct
+from pyspark.sql.types import IntegerType, LongType, StringType, StructType, StructField
 
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
@@ -64,6 +65,9 @@ class OptionParser():
 def get_script_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
+def extract_campaign(dataset):
+    return dataset.split('/')[2]
+
 def quiet_logs(sc):
     """
     Sets logger's level to ERROR so INFO logs would not show up.
@@ -87,17 +91,23 @@ def run(fout, date, yarn=None, verbose=None, patterns=None, antipatterns=None, i
     fromdate = '%s-%s-%s' % (date[:4], date[4:6], date[6:])
     todate = fromdate
 
-    # read DBS and Phedex tables
+    # read Phedex and DBS tables
     tables = {}
-    tables.update(dbs_tables(sqlContext, inst=inst, verbose=verbose))
+
     tables.update(phedex_tables(sqlContext, verbose=verbose, fromdate=fromdate, todate=todate))
     phedex = tables['phedex_df']
-    
-    daf = tables['daf']
-    ddf = tables['ddf']
-    fdf = tables['fdf']
 
-    # DBS
+    instances = ['GLOBAL'] # , 'PHYS01', 'PHYS02', 'PHYS03'
+    for instance in instances:
+        dbs_dict = dbs_tables(sqlContext, inst=instance, verbose=verbose)
+        for key, val in dbs_dict.items():
+            new_key = '%s_%s' % (key, instance)
+            tables[new_key] = val
+    
+    daf = reduce(lambda a,b: a.unionAll(b), [tables['daf_%s' % x] for x in instances])
+    ddf = reduce(lambda a,b: a.unionAll(b), [tables['ddf_%s' % x] for x in instances])
+    fdf = reduce(lambda a,b: a.unionAll(b), [tables['fdf_%s' % x] for x in instances])
+
     dbs_fdf_cols = ['f_dataset_id', 'f_file_size']
     dbs_ddf_cols = ['d_dataset_id', 'd_dataset', 'd_dataset_access_type_id']
     dbs_daf_cols = ['dataset_access_type_id', 'dataset_access_type']
@@ -105,72 +115,59 @@ def run(fout, date, yarn=None, verbose=None, patterns=None, antipatterns=None, i
     fdf_df = fdf.select(dbs_fdf_cols)
     ddf_df = ddf.select(dbs_ddf_cols)
     daf_df = daf.select(dbs_daf_cols)
-    
-    # dataset, dbs_size, dataset_access_type_id
-    dbs_df = fdf_df.join(ddf_df, fdf_df.f_dataset_id == ddf_df.d_dataset_id)\
-                   .drop('f_dataset_id')\
-                   .drop('d_dataset_id')\
-                   .withColumnRenamed('d_dataset', 'dataset')\
-                   .withColumnRenamed('f_file_size', 'size')\
-                   .withColumnRenamed('d_dataset_access_type_id', 'dataset_access_type_id')
 
-    # dataset, size, dataset_access_type
-    dbs_df = dbs_df.join(daf_df, dbs_df.dataset_access_type_id == daf_df.dataset_access_type_id)\
-                   .drop(dbs_df.dataset_access_type_id)\
+    # Aggregate by campaign and find total PhEDEx and DBS size of each campaign
+
+    extract_campaign_udf = udf(lambda dataset: dataset.split('/')[2])
+
+    # d_dataset_id, d_dataset, dataset_access_type
+    dbs_df = ddf_df.join(daf_df, ddf_df.d_dataset_access_type_id == daf_df.dataset_access_type_id)\
+                   .drop(ddf_df.d_dataset_access_type_id)\
                    .drop(daf_df.dataset_access_type_id)
 
     # dataset, dbs_size
     dbs_df = dbs_df.where(dbs_df.dataset_access_type == 'VALID')\
-                   .groupBy('dataset')\
-                   .agg({'size':'sum'})\
-                   .withColumnRenamed('sum(size)', 'dbs_size')
+                   .join(fdf_df, dbs_df.d_dataset_id == fdf_df.f_dataset_id)\
+                   .withColumnRenamed('d_dataset', 'dataset')\
+                   .withColumnRenamed('f_file_size', 'dbs_size')\
+                   .drop(dbs_df.d_dataset_id)\
+                   .drop(fdf_df.f_dataset_id)\
+                   .drop(dbs_df.dataset_access_type)
 
-    # PhEDEx
+    # dataset, dbs_size
+    dbs_df = dbs_df.groupBy(['dataset'])\
+                   .agg({'dbs_size':'sum'})\
+                   .withColumnRenamed('sum(dbs_size)', 'dbs_size')
 
-    size_on_disk_udf = udf(lambda site, size: 0 if site.endswith(('_MSS', '_Buffer', '_Export')) else size)
-
-    # dataset, size, site
+    # dataset, site, phedex_size
     phedex_cols = ['dataset_name', 'block_bytes', 'node_name']
-    phedex_df = phedex.select(phedex_cols)\
-                      .withColumnRenamed('dataset_name', 'dataset')\
-                      .withColumnRenamed('block_bytes', 'size')\
-                      .withColumnRenamed('node_name', 'site')
-    
-    # dataset, phedex_size, size_on_disk
-    phedex_df = phedex_df.withColumn('size_on_disk', size_on_disk_udf(phedex_df.site, phedex_df.size))\
-                         .groupBy('dataset')\
-                         .agg({'size':'sum', 'size_on_disk': 'sum'})\
-                         .withColumnRenamed('sum(size)', 'phedex_size')\
-                         .withColumnRenamed('sum(size_on_disk)', 'size_on_disk')
+    phedex_df = phedex.select(phedex_cols)
+    phedex_df = phedex_df.withColumnRenamed('block_bytes', 'phedex_size')\
+                         .withColumnRenamed('dataset_name', 'dataset')\
+                         .withColumnRenamed('node_name', 'site')
 
-    # dataset, dbs_size, phedex_size, size_on_disk
-    result = phedex_df.join(dbs_df, phedex_df.dataset == dbs_df.dataset)\
-                      .drop(dbs_df.dataset)
+    # dataset, sites, phedex_size
+    phedex_df = phedex_df.groupBy(['dataset'])\
+                   .agg({'phedex_size':'sum', 'site': 'collect_set'})\
+                   .withColumnRenamed('sum(phedex_size)', 'phedex_size')\
+                   .withColumnRenamed('collect_set(site)', 'sites')
+
+    # Subtract to get leftovers
+
+    # dataset
+    leftover_datasets_df = phedex_df.select('dataset').subtract(dbs_df.select('dataset'))
+
+    # dataset, sites, phedex_size, dbs_size
+    leftovers_df = leftover_datasets_df.select('dataset').join(phedex_df, 'dataset')#.join(dbs_df, 'dataset')
 
     extract_campaign_udf = udf(lambda dataset: dataset.split('/')[2])
-    extract_tier_udf = udf(lambda dataset: dataset.split('/')[3])
-
-    # campaign, tier, dbs_size, phedex_size, size_on_disk
-    result = result.withColumn('campaign', extract_campaign_udf(result.dataset))\
-                   .withColumn('tier', extract_tier_udf(result.dataset))\
-                   .drop('dataset')\
-                   .groupBy(['campaign', 'tier'])\
-                   .agg({'dbs_size':'sum', 'phedex_size': 'sum', 'size_on_disk': 'sum'})\
-                   .withColumnRenamed('sum(dbs_size)', 'dbs_size')\
-                   .withColumnRenamed('sum(phedex_size)', 'phedex_size')\
-                   .withColumnRenamed('sum(size_on_disk)', 'size_on_disk')
-
-    # campaign, tier, dbs_size, phedex_size, size_on_disk
-    result = result.withColumn('sum_size', result.dbs_size + result.phedex_size)
-    result = result.orderBy(result.sum_size, ascending=False)\
-                   .drop('sum_size')\
-                   .limit(LIMIT)
+    leftovers_df = leftovers_df.withColumn('campaign', extract_campaign_udf(leftovers_df.dataset))
     
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
     if fout:
-        result.write.format("com.databricks.spark.csv")\
-                    .option("header", "true").save(fout)
+        leftovers_df.write.format("com.databricks.spark.csv")\
+                          .option("header", "true").save(fout)
 
     ctx.stop()
 
@@ -196,7 +193,7 @@ def main():
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s' % elapsed_time(time0))
 
-    with open("%s/../../../bash/report_campaigns/spark_exec_time_campaign_tier.txt" % get_script_dir(), "w") as text_file:
+    with open('%s/../../../bash/leftovers/spark_exec_time_campaigns.txt' % get_script_dir(), 'w') as text_file:
         text_file.write(elapsed_time(time0))
 
 if __name__ == '__main__':
