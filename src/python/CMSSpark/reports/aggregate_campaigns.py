@@ -65,9 +65,6 @@ class OptionParser():
 def get_script_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
-def extract_campaign(dataset):
-    return dataset.split('/')[2]
-
 def quiet_logs(sc):
     """
     Sets logger's level to ERROR so INFO logs would not show up.

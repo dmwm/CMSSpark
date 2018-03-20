@@ -75,3 +75,10 @@ def split_date(date):
     "Split given YYYYMMDD into pieces"
     val = str(date)
     return val[:4], val[4:6], val[6:]
+
+def bytes_to_readable(num, suffix='B'):
+    for unit in ['','K','M','G','T','P','E','Z']:
+        if abs(num) < 1000.0:
+            return "%3.1f %s%s" % (num, unit, suffix)
+        num /= 1000.0
+    return "%.1f %s%s" % (num, 'Yi', suffix)

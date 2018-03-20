@@ -20,7 +20,7 @@ from pyspark.sql.types import IntegerType, LongType, StringType, StructType, Str
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
 from CMSSpark.spark_utils import spark_context, split_dataset
-from CMSSpark.utils import elapsed_time
+from CMSSpark.utils import elapsed_time, bytes_to_readable
 
 LIMIT = 100
 
@@ -64,9 +64,6 @@ class OptionParser():
 
 def get_script_dir():
     return os.path.dirname(os.path.abspath(__file__))
-
-def extract_campaign(dataset):
-    return dataset.split('/')[2]
 
 def quiet_logs(sc):
     """
@@ -118,8 +115,6 @@ def run(fout, date, yarn=None, verbose=None, patterns=None, antipatterns=None, i
 
     # Aggregate by campaign and find total PhEDEx and DBS size of each campaign
 
-    extract_campaign_udf = udf(lambda dataset: dataset.split('/')[2])
-
     # d_dataset_id, d_dataset, dataset_access_type
     dbs_df = ddf_df.join(daf_df, ddf_df.d_dataset_access_type_id == daf_df.dataset_access_type_id)\
                    .drop(ddf_df.d_dataset_access_type_id)\
@@ -154,20 +149,41 @@ def run(fout, date, yarn=None, verbose=None, patterns=None, antipatterns=None, i
 
     # Subtract to get leftovers
 
+    extract_campaign_udf = udf(lambda dataset: dataset.split('/')[2])
+
     # dataset
     leftover_datasets_df = phedex_df.select('dataset').subtract(dbs_df.select('dataset'))
 
-    # dataset, sites, phedex_size, dbs_size
+    # dataset, campaign, sites, phedex_size
     leftovers_df = leftover_datasets_df.select('dataset').join(phedex_df, 'dataset')#.join(dbs_df, 'dataset')
+    leftovers_df = leftovers_df.withColumn('campaign', extract_campaign_udf(leftovers_df.dataset))\
+                               .select(['dataset', 'campaign', 'sites', 'phedex_size'])
 
-    extract_campaign_udf = udf(lambda dataset: dataset.split('/')[2])
-    leftovers_df = leftovers_df.withColumn('campaign', extract_campaign_udf(leftovers_df.dataset))
-    
+    # Subtract to get leftovers that don't even exist in DBS (orphans)
+
+    ddf_datasets_df = ddf_df.withColumnRenamed('d_dataset', 'dataset').select('dataset')
+    leftover_datasets_df = phedex_df.select('dataset').subtract(ddf_datasets_df)
+
+    # dataset, campaign, sites, phedex_size
+    leftovers_orphans_df = leftover_datasets_df.select('dataset').join(phedex_df, 'dataset')#.join(dbs_df, 'dataset')
+    leftovers_orphans_df = leftovers_orphans_df.withColumn('campaign', extract_campaign_udf(leftovers_orphans_df.dataset))\
+                                               .select(['dataset', 'campaign', 'sites', 'phedex_size'])
+
+    # Sum total size of leftovers
+    all_leftovers_size = leftovers_df.select('phedex_size').groupBy().sum().rdd.map(lambda x: x[0]).collect()[0]
+    orphan_leftovers_size = leftovers_orphans_df.select('phedex_size').groupBy().sum().rdd.map(lambda x: x[0]).collect()[0]
+
+    print 'All leftovers PhEDEx size: %s' % bytes_to_readable(all_leftovers_size)
+    print 'Orphan leftovers PhEDEx size: %s' % bytes_to_readable(orphan_leftovers_size)
+
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
     if fout:
         leftovers_df.write.format("com.databricks.spark.csv")\
-                          .option("header", "true").save(fout)
+                          .option("header", "true").save('%s/all' % fout)
+
+        leftovers_orphans_df.write.format("com.databricks.spark.csv")\
+                            .option("header", "true").save('%s/orphans' % fout)
 
     ctx.stop()
 

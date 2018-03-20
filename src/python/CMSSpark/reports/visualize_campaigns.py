@@ -70,7 +70,7 @@ def write_sites_to_report(df, head=0):
         append_report('| ' + row['site'] + ' | ' + str(int(row['campaign_count'])) + ' |')
 
 def write_campaign_tier_relationship_to_report(df, head=0):
-    append_report('| Campaign | Tier | DBS Size (PB - PiB) | PhEDEx Size (PB - PiB) | Size on Disk (PB - PiB) | Ratio |')
+    append_report('| Campaign | Tier | DBS Size (PB - PiB) | PhEDEx Size (PB - PiB) | Ratio | Size on Disk (PB - PiB) |')
     append_report('| ------- | ------ | ------ | ------ | ------ | ------ |')
 
     if head != 0:
@@ -81,8 +81,8 @@ def write_campaign_tier_relationship_to_report(df, head=0):
                       ' | ' + row['tier'] + 
                       ' | ' + to_pb_string(row['dbs_size']) + ' - ' + to_pib_string(row['dbs_size']) +
                       ' | ' + to_pb_string(row['phedex_size']) + ' - ' + to_pib_string(row['phedex_size']) +
-                      ' | ' + to_pb_string(row['size_on_disk']) + ' - ' + to_pib_string(row['size_on_disk']) +
                       ' | ' + '{:.2f}'.format(float(row['phedex_size']/row['dbs_size'])) + 
+                      ' | ' + to_pb_string(row['size_on_disk']) + ' - ' + to_pib_string(row['size_on_disk']) +
                       ' |')
 
 def copy_directory(src, dest):
