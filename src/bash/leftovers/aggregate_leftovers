@@ -36,15 +36,31 @@ exists=$?
 if [[ $exists -eq 0 ]]
 then
     # Delete previously downloaded directory and download new one
-    basename $hdir | xargs rm -rf
-    hadoop fs -get $hdir .
+    #basename $hdir | xargs rm -rf
+    rm -rf $scriptpath/$(basename $hdir)
+    hadoop fs -get $hdir $scriptpath
 
-    # Extract PhEDEx header
-    head -1 leftovers/part-00000 > leftovers_df.csv
+    # Extract all leftovers header
+    head -1 $scriptpath/leftovers/all/part-00000 > $scriptpath/leftovers_all_df.csv
 
-    # Concatenate all PhEDEx parts except header
-    header=`cat leftovers_df.csv`
-    cat leftovers/part* | grep -v $header >> leftovers_df.csv
+    # Concatenate all parts except header
+    header=`cat $scriptpath/leftovers_all_df.csv`
+    cat $scriptpath/leftovers/all/part* | grep -v $header >> $scriptpath/leftovers_all_df.csv
 
-    cp leftovers_df.csv ~/public/leftovers_df.csv
+    # Copy to cernbox directory
+    cp $scriptpath/leftovers_all_df.csv /eos/user/a/$USER/leftovers/leftovers_all_df.csv
+    
+    (cd /eos/user/a/$USER/leftovers/; echo 'Dataframe availible here:' $(pwd)/'leftovers_all_df.csv')
+
+    # Extract orphan leftovers header
+    head -1 $scriptpath/leftovers/orphans/part-00000 > $scriptpath/leftovers_orphans_df.csv
+
+    # Concatenate all parts except header
+    header=`cat $scriptpath/leftovers_orphans_df.csv`
+    cat $scriptpath/leftovers/orphans/part* | grep -v $header >> $scriptpath/leftovers_orphans_df.csv
+
+    # Copy to cernbox directory
+    cp $scriptpath/leftovers_orphans_df.csv /eos/user/a/$USER/leftovers/leftovers_orphans_df.csv
+    
+    (cd /eos/user/a/$USER/leftovers/; echo 'Dataframe availible here:' $(pwd)/'leftovers_orphans_df.csv')
 fi
