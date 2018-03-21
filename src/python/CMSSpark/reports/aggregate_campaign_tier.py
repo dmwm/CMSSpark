@@ -21,48 +21,37 @@ from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
 from CMSSpark.spark_utils import spark_context, split_dataset
 from CMSSpark.utils import elapsed_time
 
-LIMIT = 100
+CAMPAIGN_TIER_TIME_DATA_FILE = 'spark_exec_time_campaign_tier.txt'
 
-class OptionParser():
-    def __init__(self):
-        "User based option parser"
-        desc = "Spark script to process DBS+PhEDEx metadata"
-        self.parser = argparse.ArgumentParser(prog='PROG', description=desc)
-        year = time.strftime("%Y", time.localtime())
-        hdir = 'hdfs:///project/awg/cms'
-        msg = 'Location of CMS folders on HDFS, default %s' % hdir
-        self.parser.add_argument("--hdir", action="store",
-            dest="hdir", default=hdir, help=msg)
-        fout = 'dbs_datasets.csv'
-        self.parser.add_argument("--fout", action="store",
-            dest="fout", default=fout, help='Output file name, default %s' % fout)
-        self.parser.add_argument("--tier", action="store",
-            dest="tier", default="", help='Select datasets for given data-tier, use comma-separated list if you want to handle multiple data-tiers')
-        self.parser.add_argument("--era", action="store",
-            dest="era", default="", help='Select datasets for given acquisition era')
-        self.parser.add_argument("--release", action="store",
-            dest="release", default="", help='Select datasets for given CMSSW release')
-        self.parser.add_argument("--cdate", action="store",
-            dest="cdate", default="", help='Select datasets starting given creation date in YYYYMMDD format')
-        self.parser.add_argument("--patterns", action="store",
-            dest="patterns", default="", help='Select datasets patterns')
-        self.parser.add_argument("--antipatterns", action="store",
-            dest="antipatterns", default="", help='Select datasets antipatterns')
-        msg = 'DBS instance on HDFS: global (default), phys01, phys02, phys03'
-        self.parser.add_argument("--inst", action="store",
-            dest="inst", default="global", help=msg)
-        self.parser.add_argument("--no-log4j", action="store_true",
-            dest="no-log4j", default=False, help="Disable spark log4j messages")
-        self.parser.add_argument("--yarn", action="store_true",
-            dest="yarn", default=False, help="run job on analytics cluster via yarn resource manager")
-        self.parser.add_argument("--verbose", action="store_true",
-            dest="verbose", default=False, help="verbose output")
+def get_options():
+    desc = "Spark script to process DBS+PhEDEx metadata"
+    parser = argparse.ArgumentParser(prog='PROG', description=desc)
 
-        self.parser.add_argument("--date", action="store",
-            dest="date", default="", help='Select CMSSW data for specific date (YYYYMMDD)')
+    parser.add_argument("--fout", action="store",
+        dest="fout", help='Output file name')
+
+    parser.add_argument("--date", action="store",
+        dest="date", help='Select CMSSW data for specific date (YYYYMMDD)')
+
+    parser.add_argument("--verbose", action="store_true",
+        dest="verbose", default=False, help="verbose output")
+
+    parser.add_argument("--yarn", action="store_true",
+        dest="yarn", default=False, help="run job on analytics cluster via yarn resource manager")
+
+    parser.add_argument("--inst", action="store",
+        dest="inst", default="global")
+
+    parser.add_argument("--limit", type=int,
+        dest="limit", default=100)
+
+    return parser.parse_args()
 
 def get_script_dir():
     return os.path.dirname(os.path.abspath(__file__))
+
+def get_destination_dir():
+    return '%s/../../../bash/report_campaigns' % get_script_dir()
 
 def quiet_logs(sc):
     """
@@ -71,7 +60,7 @@ def quiet_logs(sc):
     logger = sc._jvm.org.apache.log4j
     logger.LogManager.getRootLogger().setLevel(logger.Level.ERROR)
 
-def run(fout, date, yarn=None, verbose=None, patterns=None, antipatterns=None, inst='GLOBAL'):
+def run(fout, date, yarn=None, verbose=None, inst='GLOBAL', limit=100):
     """
     Main function to run pyspark job. It requires a schema file, an HDFS directory
     with data and optional script with mapper/reducer functions.
@@ -164,7 +153,7 @@ def run(fout, date, yarn=None, verbose=None, patterns=None, antipatterns=None, i
     result = result.withColumn('sum_size', result.dbs_size + result.phedex_size)
     result = result.orderBy(result.sum_size, ascending=False)\
                    .drop('sum_size')\
-                   .limit(LIMIT)
+                   .limit(limit)
     
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
@@ -176,8 +165,7 @@ def run(fout, date, yarn=None, verbose=None, patterns=None, antipatterns=None, i
 
 def main():
     "Main function"
-    optmgr  = OptionParser()
-    opts = optmgr.parser.parse_args()
+    opts = get_options()
     print("Input arguments: %s" % opts)
     time0 = time.time()
     fout = opts.fout
@@ -185,18 +173,20 @@ def main():
     verbose = opts.verbose
     yarn = opts.yarn
     inst = opts.inst
+    limit = opts.limit
+    
     if  inst in ['global', 'phys01', 'phys02', 'phys03']:
         inst = inst.upper()
     else:
         raise Exception('Unsupported DBS instance "%s"' % inst)
-    patterns = opts.patterns.split(',') if opts.patterns else []
-    antipatterns = opts.antipatterns.split(',') if opts.antipatterns else []
-    run(fout, date, yarn, verbose, patterns, antipatterns, inst)
+    
+    run(fout, date, yarn, verbose, inst, limit)
+
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s' % elapsed_time(time0))
-
-    with open("%s/../../../bash/report_campaigns/spark_exec_time_campaign_tier.txt" % get_script_dir(), "w") as text_file:
+    
+    with open('%s/%s' % (get_destination_dir(), CAMPAIGN_TIER_TIME_DATA_FILE), "w") as text_file:
         text_file.write(elapsed_time(time0))
 
 if __name__ == '__main__':

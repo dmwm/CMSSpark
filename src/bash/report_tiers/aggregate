@@ -4,10 +4,16 @@
 # Date will be validated in actual scripts below.
 date=$1
 
+# Treat second argument as hdfs result location. 
+location=$2
+
+# Get current script's absolute path
+scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
+
 # Aggregate dbs data
-./aggregate_dbs $date &
+$scriptpath/aggregate_dbs $location &
 
 # Aggregate PhEDEx
-./aggregate_phedex $date &
+$scriptpath/aggregate_phedex $date $location &
 
 wait

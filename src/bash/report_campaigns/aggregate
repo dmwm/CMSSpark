@@ -4,10 +4,16 @@
 # Date will be validated in actual scripts below.
 date=$1
 
+# Treat second argument as hdfs result location. 
+location=$2
+
+# Get current script's absolute path
+scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
+
 # Aggregate campaigns
-./aggregate_campaigns $date &
+$scriptpath/aggregate_campaigns $date $location &
 
 # Aggregate campaign - tier relationship
-./aggregate_campaign_tier $date &
+$scriptpath/aggregate_campaign_tier $date $location &
 
 wait

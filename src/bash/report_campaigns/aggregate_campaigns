@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Parse date argument
-date=20170228
+date=''
 
 if [[ -n $1 ]]
 then
@@ -11,18 +11,26 @@ fi
 date_length=${#date}
 if [[ $date_length != 8 ]]
 then
-    echo 'Invalid date. Example: 20170228'
+    echo 'Invalid date. Correct format: YYYYMMDD. Example: 20170228'
     exit
 fi
 
 echo 'Aggregating for date: '$date
 
-# Get current script's absolute path
-scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
+location=/cms/users/$USER/campaigns
+
+if [[ -n $2 ]]
+then
+    location=$2
+fi
+
+echo 'Results path: '$location
 
 # Results will be put here
-location=/cms/users/$USER/campaigns
 hdir=hdfs://$location
+
+# Get current script's absolute path
+scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
 
 # Remove previous data first
 hadoop fs -rm -r $location
@@ -36,27 +44,27 @@ exists=$?
 if [[ $exists -eq 0 ]]
 then
     # Delete previously downloaded directory and download new one
-    basename $hdir | xargs rm -rf
-    hadoop fs -get $hdir .
+    rm -rf "$scriptpath/$(basename $hdir)"
+    hadoop fs -get $hdir $scriptpath
 
     # Extract PhEDEx header
-    head -1 campaigns/phedex/part-00000 > campaigns_phedex_df.csv
+    head -1 $scriptpath/campaigns/phedex/part-00000 > $scriptpath/campaigns_phedex_df.csv
 
     # Concatenate all PhEDEx parts except header
-    header=`cat campaigns_phedex_df.csv`
-    cat campaigns/phedex/part* | grep -v $header >> campaigns_phedex_df.csv
+    header=`cat $scriptpath/campaigns_phedex_df.csv`
+    cat $scriptpath/campaigns/phedex/part* | grep -v $header >> $scriptpath/campaigns_phedex_df.csv
 
     # Extract DBS header
-    head -1 campaigns/dbs/part-00000 > campaigns_dbs_df.csv
+    head -1 $scriptpath/campaigns/dbs/part-00000 > $scriptpath/campaigns_dbs_df.csv
 
     # Concatenate all DBS parts except header
-    header=`cat campaigns_dbs_df.csv`
-    cat campaigns/dbs/part* | grep -v $header >> campaigns_dbs_df.csv
+    header=`cat $scriptpath/campaigns_dbs_df.csv`
+    cat $scriptpath/campaigns/dbs/part* | grep -v $header >> $scriptpath/campaigns_dbs_df.csv
 
     # Extract site - campaign count header
-    head -1 campaigns/site_campaign_count/part-00000 > site_campaign_count_df.csv
+    head -1 $scriptpath/campaigns/site_campaign_count/part-00000 > $scriptpath/site_campaign_count_df.csv
 
     # Concatenate all site - campaign count parts except header
-    header=`cat site_campaign_count_df.csv`
-    cat campaigns/site_campaign_count/part* | grep -v $header >> site_campaign_count_df.csv
+    header=`cat $scriptpath/site_campaign_count_df.csv`
+    cat $scriptpath/campaigns/site_campaign_count/part* | grep -v $header >> $scriptpath/site_campaign_count_df.csv
 fi

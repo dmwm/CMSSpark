@@ -7,6 +7,7 @@ Set of utililities
 """
 
 # system modules
+from math import log
 import os
 import gzip
 import time
@@ -82,3 +83,20 @@ def bytes_to_readable(num, suffix='B'):
             return "%3.1f %s%s" % (num, unit, suffix)
         num /= 1000.0
     return "%.1f %s%s" % (num, 'Yi', suffix)
+
+def safe_round(value, decimal_points=1):
+    """
+    Rounds float to show at least decimal_points decimal digits.
+    If all of them are zeros and -1 < value < 1, rounds to the first
+    non-zero decimal digit.
+    """
+    sign = 1 if value >= 0 else -1
+    value = abs(value)
+    ndigits = int(1 - log(value, 10))
+    return round(value, max(decimal_points, ndigits)) * sign
+
+def bytes_to_pb_string(bytes, decimal_points=1):
+    return str(safe_round(bytes / float(1000**5), decimal_points))
+
+def bytes_to_pib_string(bytes, decimal_points=1):
+    return str(safe_round(bytes / float(1024**5), decimal_points))

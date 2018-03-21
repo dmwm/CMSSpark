@@ -1,28 +1,19 @@
 #!/bin/sh
 
-# Parse date argument
-date=20170228
+location=/cms/users/$USER/dbs_datasets
 
 if [[ -n $1 ]]
 then
-    date=$1
+    location=$1
 fi
 
-date_length=${#date}
-if [[ $date_length != 8 ]]
-then
-    echo 'Invalid date. Example: 20170228'
-    exit
-fi
+echo 'Results path: '$location
 
-echo 'Aggregating for date: '$date
+# Results will be put here
+hdir=hdfs://$location
 
 # Get current script's absolute path
 scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
-
-# Results will be put here
-location=/cms/users/$USER/dbs_datasets
-hdir=hdfs://$location
 
 # Remove previous data first
 hadoop fs -rm -r $location
@@ -36,13 +27,13 @@ exists=$?
 if [[ $exists -eq 0 ]]
 then
     # Delete previously downloaded directory and download new one
-    basename $hdir | xargs rm -rf
-    hadoop fs -get $hdir .
+    rm -rf "$scriptpath/$(basename $hdir)"
+    hadoop fs -get $hdir $scriptpath
 
     # extract header
-    head -1 dbs_datasets/part-00000 > dbs_df.csv
+    head -1 $scriptpath/dbs_datasets/part-00000 > $scriptpath/dbs_df.csv
 
     # concatenate all parts except header
-    header=`cat dbs_df.csv`
-    cat dbs_datasets/part* | grep -v $header >> dbs_df.csv
+    header=`cat $scriptpath/dbs_df.csv`
+    cat $scriptpath/dbs_datasets/part* | grep -v $header >> $scriptpath/dbs_df.csv
 fi
