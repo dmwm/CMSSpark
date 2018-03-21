@@ -5,41 +5,32 @@ import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 from subprocess import check_output
-from math import log
 from report_builder import ReportBuilder
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(os.path.abspath(__file__)))))
+from utils import bytes_to_pb_string, bytes_to_pib_string
 import shutil
 import operator
 import argparse
 
+CAMPAIGNS_TIME_DATA_FILE = 'spark_exec_time_campaigns.txt'
+CAMPAIGN_TIER_TIME_DATA_FILE = 'spark_exec_time_campaign_tier.txt'
+
 report_builder = ReportBuilder()
-
-def append_report(lines):
-    report_builder.append(lines)
-    report_builder.append('\n')
-
-def safe_round(value, decimal_points=1):
-    """
-    Rounds float to show at least decimal_points decimal digits.
-    If all of them are zeros and -1 < value < 1, rounds to the first
-    non-zero decimal digit.
-    """
-    sign = 1 if value >= 0 else -1
-    value = abs(value)
-    ndigits = int(1 - log(value, 10))
-    return round(value, max(decimal_points, ndigits)) * sign
-
-def to_pb_string(bytes, decimal_points=1):
-    return str(safe_round(bytes / float(1000**5), decimal_points))
-
-def to_pib_string(bytes, decimal_points=1):
-    return str(safe_round(bytes / float(1024**5), decimal_points))
 
 def get_script_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
-def get_plots_path():
-    return '%s/../../../bash/CERNTasks.wiki/images/campaign_plots/' % get_script_dir()
+def get_report_dir():
+    return '%s/../../../bash/CERNTasks.wiki' % get_script_dir()
+
+def get_destination_dir():
+    return '%s/../../../bash/report_campaigns' % get_script_dir()
+
+def append_report(lines):
+    report_builder.append(lines)
+    report_builder.append('\n')
 
 def write_campaigns_to_report(df, head=0):
     append_report('| Campaign | PhEDEx Size (PB - PiB) | DBS Size (PB - PiB) | Ratio | Most Significant Site | Second Most Significant Site | Most Significant Site Size (PB - PiB) | Second Most Significant Site Size (PB - PiB) | Number of Sites |')
@@ -50,13 +41,13 @@ def write_campaigns_to_report(df, head=0):
 
     for index, row in df.iterrows():
         append_report('| ' + row['campaign'] + 
-                      ' | ' + to_pb_string(row['phedex_size']) + ' - ' + to_pib_string(row['phedex_size']) + 
-                      ' | ' + to_pb_string(row['dbs_size']) + ' - ' + to_pib_string(row['dbs_size']) + 
+                      ' | ' + bytes_to_pb_string(row['phedex_size']) + ' - ' + bytes_to_pib_string(row['phedex_size']) + 
+                      ' | ' + bytes_to_pb_string(row['dbs_size']) + ' - ' + bytes_to_pib_string(row['dbs_size']) + 
                       ' | ' + '{:.2f}'.format(float(row['phedex_size']/row['dbs_size'])) + 
                       ' | ' + row['mss_name'] + 
                       ' | ' + row['second_mss_name'] + 
-                      ' | ' + to_pb_string(row['mss']) + ' - ' + to_pib_string(row['mss']) + 
-                      ' | ' + to_pb_string(row['second_mss']) + ' - ' + to_pib_string(row['second_mss']) + 
+                      ' | ' + bytes_to_pb_string(row['mss']) + ' - ' + bytes_to_pib_string(row['mss']) + 
+                      ' | ' + bytes_to_pb_string(row['second_mss']) + ' - ' + bytes_to_pib_string(row['second_mss']) + 
                       ' | ' + str(row['sites']) + 
                       ' |')
 def write_sites_to_report(df, head=0):
@@ -79,53 +70,38 @@ def write_campaign_tier_relationship_to_report(df, head=0):
     for index, row in df.iterrows():
         append_report('| ' + row['campaign'] + 
                       ' | ' + row['tier'] + 
-                      ' | ' + to_pb_string(row['dbs_size']) + ' - ' + to_pib_string(row['dbs_size']) +
-                      ' | ' + to_pb_string(row['phedex_size']) + ' - ' + to_pib_string(row['phedex_size']) +
+                      ' | ' + bytes_to_pb_string(row['dbs_size']) + ' - ' + bytes_to_pib_string(row['dbs_size']) +
+                      ' | ' + bytes_to_pb_string(row['phedex_size']) + ' - ' + bytes_to_pib_string(row['phedex_size']) +
                       ' | ' + '{:.2f}'.format(float(row['phedex_size']/row['dbs_size'])) + 
-                      ' | ' + to_pb_string(row['size_on_disk']) + ' - ' + to_pib_string(row['size_on_disk']) +
+                      ' | ' + bytes_to_pb_string(row['size_on_disk']) + ' - ' + bytes_to_pib_string(row['size_on_disk']) +
                       ' |')
 
-def copy_directory(src, dest):
-    dest_dir = os.path.dirname(dest)
-    if not os.path.exists(dest_dir):
-        os.mkdir(dest_dir)
+def create_plot_dirs(plot_dir):
+    plots_absolute_path = '%s/images/%s' % (get_report_dir(), plot_dir)
 
-    # Delete destination first
-    shutil.rmtree(dest)
-
-    try:
-        shutil.copytree(src, dest)
-    # Directories are the same
-    except shutil.Error as e:
-        print('Directory not copied. Error: %s' % e)
-    # Any error saying that the directory doesn't exist
-    except OSError as e:
-        print('Directory not copied. Error: %s' % e)
-
-def create_plot_dirs():
-    if not os.path.exists(get_plots_path()):
-        os.makedirs(get_plots_path())
+    if not os.path.exists(plots_absolute_path):
+        os.makedirs(plots_absolute_path)
 
 def append_report_header():
     append_report('# PhEDEx and DBS data aggregation based on campaigns for data from 2017-02-28')
     append_report('Results of gathering PhEDEx and DBS information aggregated by campaign')
 
 def write_report(report):
-    with open('%s/../../../bash/CERNTasks.wiki/CMS_Campaign_Reports.md' % get_script_dir(), 'w') as f:
+    with open('%s/CMS_Campaign_Reports.md' % get_report_dir(), 'w') as f:
         f.write(report)
 
 def commit_report():
-    os.system('(cd %s/../../../bash/CERNTasks.wiki/; git add -A; git commit -m "Auto-commiting report"; git push origin master)' % get_script_dir())
+    os.system('(cd %s/; git add -A; git commit -m "Auto-commiting report"; git push origin master)' % get_report_dir())
 
 def append_campaign_execution_time():
-    with open('%s/../../../bash/report_campaigns/spark_exec_time_campaigns.txt' % get_script_dir(), 'r') as f:
+    with open('%s/%s' % (get_destination_dir(), CAMPAIGNS_TIME_DATA_FILE), 'r') as f:
         append_report('#### Spark job execution time for data above: %s' % f.read())
 
 def append_campaign_tier_execution_time():
-    with open('%s/../../../bash/report_campaigns/spark_exec_time_campaign_tier.txt' % get_script_dir(), 'r') as f:
+    with open('%s/%s' % (get_destination_dir(), CAMPAIGN_TIER_TIME_DATA_FILE), 'r') as f:
         append_report('#### Spark job execution time for data above: %s' % f.read())
 
-def plot_pie_charts(df, file_name):
+def plot_pie_charts(df, plot_file):
     head = df.head(6)\
              .set_index('campaign')\
              .drop(['mss_name', 'second_mss_name', 'mss', 'second_mss', 'dbs_size', 'phedex_size', 'sites'], axis=1)
@@ -140,11 +116,11 @@ def plot_pie_charts(df, file_name):
     plt.tight_layout()
     plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1, wspace=0.4)
 
-    plot_filepath = get_plots_path() + file_name
+    plot_filepath = '%s/images/%s' % (get_report_dir(), plot_file)
     plt.savefig(plot_filepath, dpi=120)
 
-def visualize_data_by_campaign():
-    df = pd.read_csv('%s/../../../bash/report_campaigns/campaigns_dbs_df.csv' % get_script_dir())
+def visualize_data_by_campaign(plots_dir):
+    df = pd.read_csv('%s/campaigns_dbs_df.csv' % get_destination_dir())
 
     append_report('## Campaigns', )
     
@@ -152,28 +128,28 @@ def visualize_data_by_campaign():
     write_campaigns_to_report(df, 10)
 
     # Make pie chart of sites for most significant DBS campaigns
-    plot_filename = 'dbs_size_campaigns_plot.jpg'
-    plot_pie_charts(df, plot_filename)
+    plot_file = '%s/dbs_size_campaigns_plot.jpg' % plots_dir
+    plot_pie_charts(df, plot_file)
 
     append_report('### Plot of 6 most significant DBS campaigns')
     append_report('Each pie chart visualizes the size of campaign data in each data site that campaign is present.')
-    append_report('![6 most significant DBS campaigns](images/campaign_plots/%s)' % plot_filename)
+    append_report('![6 most significant DBS campaigns](images/%s)' % plot_file)
 
-    df = pd.read_csv('%s/../../../bash/report_campaigns/campaigns_phedex_df.csv' % get_script_dir())
+    df = pd.read_csv('%s/campaigns_phedex_df.csv' % get_destination_dir())
 
     append_report('### Showing TOP 10 most significant campaigns by PhEDEx size')
     write_campaigns_to_report(df, 10)
 
     # Make pie chart of sites for most significant PhEDEx campaigns
-    plot_filename = 'phedex_size_campaigns_plot.jpg'
-    plot_pie_charts(df, plot_filename)
+    plot_file = '%s/phedex_size_campaigns_plot.jpg' % plots_dir
+    plot_pie_charts(df, plot_file)
 
     append_report('### Plot of 6 most significant PhEDEx campaigns')
     append_report('Each pie chart visualizes the size of campaign data in each data site that campaign is present.')
-    append_report('![6 most significant PhEDEx campaigns](images/campaign_plots/%s)' % plot_filename)
+    append_report('![6 most significant PhEDEx campaigns](images/%s)' % plot_file)
 
 def visualize_site_campaign_count():
-    df = pd.read_csv('%s/../../../bash/report_campaigns/site_campaign_count_df.csv' % get_script_dir())
+    df = pd.read_csv('%s/site_campaign_count_df.csv' % get_destination_dir())
 
     append_report('## Sites')
 
@@ -182,7 +158,7 @@ def visualize_site_campaign_count():
     write_sites_to_report(df, 10)
 
 def visualize_campaign_tier_relationship():
-    df = pd.read_csv('%s/../../../bash/report_campaigns/campaign_tier_df.csv' % get_script_dir())
+    df = pd.read_csv('%s/campaign_tier_df.csv' % get_destination_dir())
 
     append_report('## Campaign sizes in data tiers')
 
@@ -196,13 +172,16 @@ def main():
                         dest="commit", 
                         default=False, 
                         help="Determines whether report should be committed to Github wiki")
+    parser.add_argument("--plots_dir", action="store",
+                        dest="plots_dir", default='campaign_plots', 
+                        help="Determines directory where plots will be saved")
     opts = parser.parse_args()
 
-    create_plot_dirs()
+    create_plot_dirs(opts.plots_dir)
 
     append_report_header()
   
-    visualize_data_by_campaign()
+    visualize_data_by_campaign(opts.plots_dir)
     visualize_site_campaign_count()
     append_campaign_execution_time()
     visualize_campaign_tier_relationship()

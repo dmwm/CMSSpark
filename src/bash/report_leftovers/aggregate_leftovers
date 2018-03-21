@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Parse date argument
-date=20170228
+date=''
 
 if [[ -n $1 ]]
 then
@@ -11,23 +11,39 @@ fi
 date_length=${#date}
 if [[ $date_length != 8 ]]
 then
-    echo 'Invalid date. Example: 20170228'
+    echo 'Invalid date. Correct format: YYYYMMDD. Example: 20170228'
     exit
 fi
 
 echo 'Aggregating for date: '$date
 
-# Get current script's absolute path
-scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
+location=/cms/users/$USER/leftovers
+
+if [[ -n $2 ]]
+then
+    location=$2
+fi
+
+echo 'Results path: '$location
+
+inst='all'
+if [[ -n $3 ]]
+then
+    inst=$3
+fi
+
+echo 'DBS instances: '$inst
 
 # Results will be put here
-location=/cms/users/$USER/leftovers
 hdir=hdfs://$location
+
+# Get current script's absolute path
+scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
 
 # Remove previous data first
 hadoop fs -rm -r $location
 
-PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_leftovers.py --fout=$hdir --yarn --verbose --date=$date
+PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_leftovers.py --fout=$hdir --yarn --verbose --date=$date --inst=$inst
 
 hadoop fs -test -e $hdir
 exists=$?
@@ -36,8 +52,7 @@ exists=$?
 if [[ $exists -eq 0 ]]
 then
     # Delete previously downloaded directory and download new one
-    #basename $hdir | xargs rm -rf
-    rm -rf $scriptpath/$(basename $hdir)
+    rm -rf "$scriptpath/$(basename $hdir)"
     hadoop fs -get $hdir $scriptpath
 
     # Extract all leftovers header
@@ -47,11 +62,6 @@ then
     header=`cat $scriptpath/leftovers_all_df.csv`
     cat $scriptpath/leftovers/all/part* | grep -v $header >> $scriptpath/leftovers_all_df.csv
 
-    # Copy to cernbox directory
-    cp $scriptpath/leftovers_all_df.csv /eos/user/a/$USER/leftovers/leftovers_all_df.csv
-    
-    (cd /eos/user/a/$USER/leftovers/; echo 'Dataframe availible here:' $(pwd)/'leftovers_all_df.csv')
-
     # Extract orphan leftovers header
     head -1 $scriptpath/leftovers/orphans/part-00000 > $scriptpath/leftovers_orphans_df.csv
 
@@ -59,8 +69,9 @@ then
     header=`cat $scriptpath/leftovers_orphans_df.csv`
     cat $scriptpath/leftovers/orphans/part* | grep -v $header >> $scriptpath/leftovers_orphans_df.csv
 
-    # Copy to cernbox directory
-    cp $scriptpath/leftovers_orphans_df.csv /eos/user/a/$USER/leftovers/leftovers_orphans_df.csv
-    
-    (cd /eos/user/a/$USER/leftovers/; echo 'Dataframe availible here:' $(pwd)/'leftovers_orphans_df.csv')
+    # Uncomment following lines if you want to copy results to cernbox directory
+    #cp $scriptpath/leftovers_all_df.csv /eos/user/a/$USER/leftovers/leftovers_all_df.csv
+    #cp $scriptpath/leftovers_orphans_df.csv /eos/user/a/$USER/leftovers/leftovers_orphans_df.csv
+    #(cd /eos/user/a/$USER/leftovers/; echo 'Dataframe availible here:' $(pwd)/'leftovers_all_df.csv')
+    #(cd /eos/user/a/$USER/leftovers/; echo 'Dataframe availible here:' $(pwd)/'leftovers_orphans_df.csv')
 fi

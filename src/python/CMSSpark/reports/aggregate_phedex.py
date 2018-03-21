@@ -17,43 +17,50 @@ from pyspark.sql.types import StringType, IntegerType
 # CMSSpark modules
 from CMSSpark.spark_utils import phedex_tables, print_rows
 from CMSSpark.spark_utils import spark_context, split_dataset
-from CMSSpark.utils import elapsed_time, split_date, unix2human
+from CMSSpark.utils import elapsed_time, split_date
 
-class OptionParser():
-    def __init__(self):
-        "User based option parser"
-        desc = "Spark script to process DBS+PhEDEx metadata"
-        self.parser = argparse.ArgumentParser(prog='PROG', description=desc)
-        year = time.strftime("%Y", time.localtime())
-        hdir = 'hdfs:///project/awg/cms'
-        msg = 'Location of CMS folders on HDFS, default %s' % hdir
-        self.parser.add_argument("--hdir", action="store",
-            dest="hdir", default=hdir, help=msg)
-        fout = 'phedex.csv'
-        self.parser.add_argument("--fout", action="store",
-            dest="fout", default=fout, help='Output file name, default %s' % fout)
-        self.parser.add_argument("--date", action="store",
-            dest="date", default="", help='Select CMSSW data for specific date (YYYYMMDD)')
-        self.parser.add_argument("--no-log4j", action="store_true",
-            dest="no-log4j", default=False, help="Disable spark log4j messages")
-        self.parser.add_argument("--yarn", action="store_true",
-            dest="yarn", default=False, help="run job on analytics cluster via yarn resource manager")
-        self.parser.add_argument("--verbose", action="store_true",
-            dest="verbose", default=False, help="verbose output")
+PHEDEX_TIME_DATA_FILE = 'spark_exec_time_tier_phedex.txt'
+
+def get_options():
+    desc = "Spark script to process DBS+PhEDEx metadata"
+    parser = argparse.ArgumentParser(prog='PROG', description=desc)
+
+    parser.add_argument("--fout", action="store",
+        dest="fout", help='Output file name')
+
+    parser.add_argument("--date", action="store",
+        dest="date", help='Select CMSSW data for specific date (YYYYMMDD)')
+
+    parser.add_argument("--verbose", action="store_true",
+        dest="verbose", default=False, help="verbose output")
+
+    parser.add_argument("--yarn", action="store_true",
+        dest="yarn", default=False, help="run job on analytics cluster via yarn resource manager")
+
+    return parser.parse_args()
 
 def get_script_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
-def dateStamp(date):
-    "Convert YYYYMMDD into sec since epoch"
-    sec = time.mktime(time.strptime(date, '%Y%m%d'))
-    return sec
+def get_destination_dir():
+    return '%s/../../../bash/report_tiers' % get_script_dir()
 
 def site_filter(site):
     "Filter site names without _MSS or _Buffer or _Export"
     if site.endswith('_MSS') or site.endswith('_Buffer') or site.endswith('_Export'):
         return 0
     return 1
+
+def unix2human(tstamp):
+    "Convert unix time stamp into human readable format"
+    return time.strftime('%Y%m%d', time.gmtime(tstamp))
+
+def quiet_logs(sc):
+    """
+    Sets logger's level to ERROR so INFO logs would not show up.
+    """
+    logger = sc._jvm.org.apache.log4j
+    logger.LogManager.getRootLogger().setLevel(logger.Level.ERROR)
 
 def run(date, fout, yarn=None, verbose=None):
     """
@@ -62,6 +69,9 @@ def run(date, fout, yarn=None, verbose=None):
     """
     # define spark context, it's main object which allow to communicate with spark
     ctx = spark_context('cms', yarn, verbose)
+
+    quiet_logs(ctx)
+    
     sqlContext = HiveContext(ctx)
 
     fromdate = '%s-%s-%s' % (date[:4], date[4:6], date[6:])
@@ -74,7 +84,6 @@ def run(date, fout, yarn=None, verbose=None):
     # register user defined function
     unix2date = udf(unix2human, StringType())
     siteFilter = udf(site_filter, IntegerType())
-    one_day = 60*60*24
 
     # aggregate phedex info into dataframe
     cols = ['node_name', 'dataset_name', 'block_bytes', 'replica_time_create', 'br_user_group_id']
@@ -93,34 +102,33 @@ def run(date, fout, yarn=None, verbose=None):
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
     if  fout:
-        year, month, day = split_date(date)
-        out = '%s/%s/%s/%s' % (fout, year, month, day)
         cols = ['date','site','dataset','size','replica_date', 'groupid']
         # don't write header since when we'll read back the data it will
         # mismatch the data types, i.e. headers are string and rows
         # may be different data types
         pdf.select(cols)\
             .write.format("com.databricks.spark.csv")\
-            .option("header", "true").save(out)
+            .option("header", "true").save(fout)
 
     ctx.stop()
 
 def main():
     "Main function"
-    optmgr  = OptionParser()
-    opts = optmgr.parser.parse_args()
+    opts = get_options()
     print("Input arguments: %s" % opts)
     time0 = time.time()
     fout = opts.fout
     date = opts.date
     verbose = opts.verbose
     yarn = opts.yarn
+
     run(date, fout, yarn, verbose)
+
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s sec' % elapsed_time(time0))
 
-    with open('%s/../../../bash/report_tiers/spark_exec_time_tier_phedex.txt' % get_script_dir(), 'w') as file:
+    with open('%s/%s' % (get_destination_dir(), PHEDEX_TIME_DATA_FILE), 'w') as file:
         file.write(elapsed_time(time0))
 
 if __name__ == '__main__':

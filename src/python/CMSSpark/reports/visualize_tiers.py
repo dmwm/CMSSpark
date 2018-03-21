@@ -7,16 +7,26 @@ import matplotlib.pyplot as plt
 from subprocess import check_output
 from report_builder import ReportBuilder
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(os.path.abspath(__file__)))))
+from utils import bytes_to_readable
 import shutil
 import operator
 import argparse
 
-PHEDEX_PLOTS_PATH = 'phedex_plots/'
-DBS_PLOTS_PATH = 'dbs_plots/'
 PHEDEX_TIME_DATA_FILE = 'spark_exec_time_tier_phedex.txt'
 DBS_TIME_DATA_FILE = 'spark_exec_time_tier_dbs.txt'
 
 report_builder = ReportBuilder()
+
+def get_script_dir():
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_report_dir():
+    return '%s/../../../bash/CERNTasks.wiki' % get_script_dir()
+
+def get_destination_dir():
+    return '%s/../../../bash/report_tiers' % get_script_dir()
 
 def append_report(lines):
     report_builder.append(lines)
@@ -32,57 +42,35 @@ def write_df_to_report(df, head=0):
     for index, row in df.iterrows():
         append_report('| ' + index + ' | ' + str(int(row['tier_count'])) + ' | ' + str(round(row['sum_size'], 1)) + ' |')
 
-def copy_directory(src, dest):
-    dest_dir = os.path.dirname(dest)
-    if not os.path.exists(dest_dir):
-        os.mkdir(dest_dir)
-    
-    # Delete destination first
-    shutil.rmtree(dest)
+def create_plot_dirs(phedex_plots_dir, dbs_plots_dir):
+    phedex_absolute_path = '%s/images/%s' % (get_report_dir(), phedex_plots_dir)
+    dbs_absolute_path = '%s/images/%s' % (get_report_dir(), dbs_plots_dir)
 
-    try:
-        shutil.copytree(src, dest)
-    # Directories are the same
-    except shutil.Error as e:
-        print('Directory not copied. Error: %s' % e)
-    # Any error saying that the directory doesn't exist
-    except OSError as e:
-        print('Directory not copied. Error: %s' % e)
-
-
-def bytes_to_readable(num, suffix='B'):
-    for unit in ['','K','M','G','T','P','E','Z']:
-        if abs(num) < 1024.0:
-            return "%3.1f %s%s" % (num, unit, suffix)
-        num /= 1024.0
-    return "%.1f %s%s" % (num, 'Yi', suffix)
-
-def create_plot_dirs():
-    if not os.path.exists(PHEDEX_PLOTS_PATH):
-        os.makedirs(PHEDEX_PLOTS_PATH)
-    if not os.path.exists(DBS_PLOTS_PATH):
-        os.makedirs(DBS_PLOTS_PATH)
+    if not os.path.exists(phedex_absolute_path):
+        os.makedirs(phedex_absolute_path)
+    if not os.path.exists(dbs_absolute_path):
+        os.makedirs(dbs_absolute_path)
 
 def append_report_header():
     append_report('# PhEDEx and DBS data aggregation results')
     append_report('Results of gathering information of all data tiers in every data site. The results are the number of entries in each data tier (tier count) and the sum of sizes of entries in that tier (size).')
 
 def read_phedex_time_data():
-    with open(PHEDEX_TIME_DATA_FILE) as f:
+    with open('%s/%s' % (get_destination_dir(), PHEDEX_TIME_DATA_FILE)) as f:
         return f.read()
 
 def read_dbs_time_data():
-    with open(DBS_TIME_DATA_FILE) as f:
+    with open('%s/%s' % (get_destination_dir(), DBS_TIME_DATA_FILE)) as f:
         return f.read()
 
 def write_report():
-    with open('../CERNTasks.wiki/CMS_Tier_Reports.md', 'w') as f:
+    with open('%s/CMS_Tier_Reports.md' % get_report_dir(), 'w') as f:
         f.write(report_builder.get())
 
 def commit_report():
-    os.system('(cd ../CERNTasks.wiki/; git add -A; git commit -m "Auto-commiting report"; git push origin master)')
+    os.system('(cd %s/; git add -A; git commit -m "Auto-commiting report"; git push origin master)' % get_report_dir())
 
-def make_plot(result, file_path):
+def make_plot(result, plot_file):
     axes = result.plot(kind='bar', subplots=True, layout=(2,1), figsize=(8, 6), fontsize=6)
 
     axes[0][0].set_title('')
@@ -92,13 +80,12 @@ def make_plot(result, file_path):
 
     plt.xticks(rotation=45, horizontalalignment='right')
     plt.tight_layout()
-    plot_filename = file_path + '_plot.jpg'
-    plt.savefig(plot_filename, dpi=120)
 
-    return plot_filename
+    plot_filepath = '%s/images/%s' % (get_report_dir(), plot_file)
+    plt.savefig(plot_filepath, dpi=120)
 
-def analyse_phedex_data():
-    df = pd.read_csv('phedex_df.csv')
+def analyse_phedex_data(plots_dir):
+    df = pd.read_csv('%s/phedex_df.csv' % get_destination_dir())
     # sites = df.groupby(df.site.str[:2])['site'].agg(lambda x: set(x)).index.tolist()
     sites = ['T1', 'T2', 'T3']
 
@@ -119,19 +106,17 @@ def analyse_phedex_data():
         append_report('### Site {0}. Showing TOP 5 most significant data-tiers'.format(site))
         write_df_to_report(result, 5)
 
-        plot_filename = make_plot(result, PHEDEX_PLOTS_PATH + site)
+        plot_file = '%s/phedex_data_tiers_%s.jpg' % (plots_dir, site)
+        make_plot(result, plot_file)
 
         append_report('### Plot')
-        append_report('![5 most significant data-tiers](images/%s)' % plot_filename)
+        append_report('![5 most significant data-tiers](images/%s)' % plot_file)
 
     time = read_phedex_time_data()
     append_report('#### Spark job run time: {0}'.format(time))
 
-    # Move plot files to wiki repo
-    copy_directory(PHEDEX_PLOTS_PATH, '../CERNTasks.wiki/images/' + PHEDEX_PLOTS_PATH)
-
-def analyse_dbs_data():
-    df = pd.read_csv('dbs_df.csv')
+def analyse_dbs_data(plots_dir):
+    df = pd.read_csv('%s/dbs_df.csv' % get_destination_dir())
     result = df.groupby(df.dataset.str.split('/').str[3]).agg({'size': 'sum', 'dataset': 'count'})
 
     result = result.rename(columns={'size': 'sum_size', 'dataset': 'tier_count'})
@@ -144,16 +129,14 @@ def analyse_dbs_data():
     append_report('## DBS data. Showing TOP 5 most significant data-tiers')
     write_df_to_report(result, 5)
 
-    plot_filename = make_plot(result, DBS_PLOTS_PATH + 'dbs')
+    plot_file = '%s/dbs_data_tiers.jpg' % plots_dir
+    make_plot(result, plot_file)
 
     append_report('### Plot')
-    append_report('![5 most significant data-tiers](images/%s)' % plot_filename)
+    append_report('![5 most significant data-tiers](images/%s)' % plot_file)
 
     time = read_dbs_time_data()
     append_report('#### Spark job run time: {0}'.format(time))
-
-    # Move plot file to wiki repo
-    copy_directory(DBS_PLOTS_PATH, '../CERNTasks.wiki/images/' + DBS_PLOTS_PATH)
 
 def aggregate_all_datastreams_info():
     append_report('## Sizes of all datastreams')
@@ -196,13 +179,19 @@ def main():
                         dest="commit", 
                         default=False, 
                         help="Determines whether report should be committed to Github wiki")
+    parser.add_argument("--phedex_plots_dir", action="store",
+                        dest="phedex_plots_dir", default='phedex_plots', 
+                        help="Determines directory where PhEDEx plots will be saved")
+    parser.add_argument("--dbs_plots_dir", action="store",
+                        dest="dbs_plots_dir", default='dbs_plots', 
+                        help="Determines directory where DBS plots will be saved")
     opts = parser.parse_args()
 
-    create_plot_dirs()
+    create_plot_dirs(opts.phedex_plots_dir, opts.dbs_plots_dir)
     append_report_header()
   
-    analyse_phedex_data()
-    analyse_dbs_data()
+    analyse_phedex_data(opts.phedex_plots_dir)
+    analyse_dbs_data(opts.dbs_plots_dir)
     aggregate_all_datastreams_info()
 
     write_report()
