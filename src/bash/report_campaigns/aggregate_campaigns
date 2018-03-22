@@ -43,28 +43,30 @@ exists=$?
 # Download results and recreate csv files only if results exist in hdfs
 if [[ $exists -eq 0 ]]
 then
+    result_dir="$(basename $hdir)"
+
     # Delete previously downloaded directory and download new one
-    rm -rf "$scriptpath/$(basename $hdir)"
+    rm -rf "$scriptpath/$result_dir"
     hadoop fs -get $hdir $scriptpath
 
     # Extract PhEDEx header
-    head -1 $scriptpath/campaigns/phedex/part-00000 > $scriptpath/campaigns_phedex_df.csv
+    head -1 $scriptpath/$result_dir/phedex/part-00000 > $scriptpath/campaigns_phedex_df.csv
 
     # Concatenate all PhEDEx parts except header
     header=`cat $scriptpath/campaigns_phedex_df.csv`
-    cat $scriptpath/campaigns/phedex/part* | grep -v $header >> $scriptpath/campaigns_phedex_df.csv
+    cat $scriptpath/$result_dir/phedex/part* | grep -v $header >> $scriptpath/campaigns_phedex_df.csv
 
     # Extract DBS header
-    head -1 $scriptpath/campaigns/dbs/part-00000 > $scriptpath/campaigns_dbs_df.csv
+    head -1 $scriptpath/$result_dir/dbs/part-00000 > $scriptpath/campaigns_dbs_df.csv
 
     # Concatenate all DBS parts except header
     header=`cat $scriptpath/campaigns_dbs_df.csv`
-    cat $scriptpath/campaigns/dbs/part* | grep -v $header >> $scriptpath/campaigns_dbs_df.csv
+    cat $scriptpath/$result_dir/dbs/part* | grep -v $header >> $scriptpath/campaigns_dbs_df.csv
 
     # Extract site - campaign count header
-    head -1 $scriptpath/campaigns/site_campaign_count/part-00000 > $scriptpath/site_campaign_count_df.csv
+    head -1 $scriptpath/$result_dir/site_campaign_count/part-00000 > $scriptpath/site_campaign_count_df.csv
 
     # Concatenate all site - campaign count parts except header
     header=`cat $scriptpath/site_campaign_count_df.csv`
-    cat $scriptpath/campaigns/site_campaign_count/part* | grep -v $header >> $scriptpath/site_campaign_count_df.csv
+    cat $scriptpath/$result_dir/site_campaign_count/part* | grep -v $header >> $scriptpath/site_campaign_count_df.csv
 fi

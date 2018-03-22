@@ -51,23 +51,25 @@ exists=$?
 # Download results and recreate csv files only if results exist in hdfs
 if [[ $exists -eq 0 ]]
 then
+    result_dir="$(basename $hdir)"
+
     # Delete previously downloaded directory and download new one
-    rm -rf "$scriptpath/$(basename $hdir)"
+    rm -rf "$scriptpath/$result_dir"
     hadoop fs -get $hdir $scriptpath
 
     # Extract all leftovers header
-    head -1 $scriptpath/leftovers/all/part-00000 > $scriptpath/leftovers_all_df.csv
+    head -1 $scriptpath/$result_dir/all/part-00000 > $scriptpath/leftovers_all_df.csv
 
     # Concatenate all parts except header
     header=`cat $scriptpath/leftovers_all_df.csv`
-    cat $scriptpath/leftovers/all/part* | grep -v $header >> $scriptpath/leftovers_all_df.csv
+    cat $scriptpath/$result_dir/all/part* | grep -v $header >> $scriptpath/leftovers_all_df.csv
 
     # Extract orphan leftovers header
-    head -1 $scriptpath/leftovers/orphans/part-00000 > $scriptpath/leftovers_orphans_df.csv
+    head -1 $scriptpath/$result_dir/orphans/part-00000 > $scriptpath/leftovers_orphans_df.csv
 
     # Concatenate all parts except header
     header=`cat $scriptpath/leftovers_orphans_df.csv`
-    cat $scriptpath/leftovers/orphans/part* | grep -v $header >> $scriptpath/leftovers_orphans_df.csv
+    cat $scriptpath/$result_dir/orphans/part* | grep -v $header >> $scriptpath/leftovers_orphans_df.csv
 
     # Uncomment following lines if you want to copy results to cernbox directory
     #cp $scriptpath/leftovers_all_df.csv /eos/user/a/$USER/leftovers/leftovers_all_df.csv

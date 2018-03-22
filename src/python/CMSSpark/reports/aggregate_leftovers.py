@@ -22,7 +22,7 @@ from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
 from CMSSpark.spark_utils import spark_context, split_dataset
 from CMSSpark.utils import elapsed_time, bytes_to_readable
 
-LEFTOVERS_TIME_DATA_FILE = 'spark_exec_time_campaigns.txt'
+LEFTOVERS_TIME_DATA_FILE = 'spark_exec_time_leftovers.txt'
 
 def get_options():
     desc = "Spark script to process DBS+PhEDEx metadata"
