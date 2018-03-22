@@ -148,7 +148,6 @@ def process(idir, dates, fout):
             vals = [str(k) for k in list(key)+list(val)]
             ostream.write(','.join(vals[:-1]) + '\n')
 
-
 def main():
     "Main function"
     optmgr = OptionParser()
@@ -156,7 +155,6 @@ def main():
     dates = opts.dates.split('-')
     idates = [int(d) for d in dates]
     process(opts.idir, idates, opts.fout)
-
 
 if __name__ == '__main__':
     main()

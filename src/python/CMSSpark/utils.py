@@ -100,3 +100,14 @@ def bytes_to_pb_string(bytes, decimal_points=1):
 
 def bytes_to_pib_string(bytes, decimal_points=1):
     return str(safe_round(bytes / float(1024**5), decimal_points))
+
+def info(func):
+    "decorator to spark workflow"
+    def wrapper():
+        time0 = time.time()
+        func()
+        print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
+        print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
+        print('Elapsed time: %s sec' % elapsed_time(time0))
+    wrapper.__name__ = func.__name__
+    return wrapper
