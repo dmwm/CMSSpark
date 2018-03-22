@@ -55,20 +55,20 @@ def append_report_header():
     append_report('# PhEDEx and DBS data aggregation results')
     append_report('Results of gathering information of all data tiers in every data site. The results are the number of entries in each data tier (tier count) and the sum of sizes of entries in that tier (size).')
 
-def read_phedex_time_data():
-    with open('%s/%s' % (get_destination_dir(), PHEDEX_TIME_DATA_FILE)) as f:
-        return f.read()
-
-def read_dbs_time_data():
-    with open('%s/%s' % (get_destination_dir(), DBS_TIME_DATA_FILE)) as f:
-        return f.read()
-
 def write_report():
-    with open('%s/CMS_Tier_Reports.md' % get_report_dir(), 'w') as f:
+    with open('%s/CMS_Tiers_Report.md' % get_report_dir(), 'w') as f:
         f.write(report_builder.get())
 
 def commit_report():
     os.system('(cd %s/; git add -A; git commit -m "Auto-commiting report"; git push origin master)' % get_report_dir())
+
+def append_phedex_execution_time():
+    with open('%s/%s' % (get_destination_dir(), PHEDEX_TIME_DATA_FILE), 'r') as f:
+        append_report('#### Spark job execution time: %s' % f.read())
+
+def append_dbs_execution_time():
+    with open('%s/%s' % (get_destination_dir(), DBS_TIME_DATA_FILE), 'r') as f:
+        append_report('#### Spark job execution time: %s' % f.read())
 
 def make_plot(result, plot_file):
     axes = result.plot(kind='bar', subplots=True, layout=(2,1), figsize=(8, 6), fontsize=6)
@@ -112,9 +112,6 @@ def analyse_phedex_data(plots_dir):
         append_report('### Plot')
         append_report('![5 most significant data-tiers](images/%s)' % plot_file)
 
-    time = read_phedex_time_data()
-    append_report('#### Spark job run time: {0}'.format(time))
-
 def analyse_dbs_data(plots_dir):
     df = pd.read_csv('%s/dbs_df.csv' % get_destination_dir())
     result = df.groupby(df.dataset.str.split('/').str[3]).agg({'size': 'sum', 'dataset': 'count'})
@@ -134,9 +131,6 @@ def analyse_dbs_data(plots_dir):
 
     append_report('### Plot')
     append_report('![5 most significant data-tiers](images/%s)' % plot_file)
-
-    time = read_dbs_time_data()
-    append_report('#### Spark job run time: {0}'.format(time))
 
 def aggregate_all_datastreams_info():
     append_report('## Sizes of all datastreams')
@@ -191,7 +185,9 @@ def main():
     append_report_header()
   
     analyse_phedex_data(opts.phedex_plots_dir)
+    append_phedex_execution_time()
     analyse_dbs_data(opts.dbs_plots_dir)
+    append_dbs_execution_time()
     aggregate_all_datastreams_info()
 
     write_report()

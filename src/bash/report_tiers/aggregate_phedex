@@ -43,14 +43,16 @@ exists=$?
 # Download results and recreate csv files only if results exist in hdfs
 if [[ $exists -eq 0 ]]
 then
+    result_dir="$(basename $hdir)"
+
     # Delete previously downloaded directory and download new one
-    rm -rf "$scriptpath/$(basename $hdir)"
+    rm -rf "$scriptpath/$result_dir"
     hadoop fs -get $hdir $scriptpath
 
     # extract header
-    head -1 $scriptpath/phedex_datasets/part-00000 > $scriptpath/phedex_df.csv
+    head -1 $scriptpath/$result_dir/part-00000 > $scriptpath/phedex_df.csv
 
     # concatenate all parts except header
     header=`cat $scriptpath/phedex_df.csv`
-    cat $scriptpath/phedex_datasets/part* | grep -v $header >> $scriptpath/phedex_df.csv
+    cat $scriptpath/$result_dir/part* | grep -v $header >> $scriptpath/phedex_df.csv
 fi

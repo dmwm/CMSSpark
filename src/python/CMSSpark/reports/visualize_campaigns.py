@@ -87,7 +87,7 @@ def append_report_header():
     append_report('Results of gathering PhEDEx and DBS information aggregated by campaign')
 
 def write_report(report):
-    with open('%s/CMS_Campaign_Reports.md' % get_report_dir(), 'w') as f:
+    with open('%s/CMS_Campaigns_Report.md' % get_report_dir(), 'w') as f:
         f.write(report)
 
 def commit_report():

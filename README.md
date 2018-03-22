@@ -73,3 +73,6 @@ Please run `./src/bash/report_campaigns/aggregate` download PhEDEx and DBS data 
 Then run `python src/python/CMSSpark/reports/visualize_campaigns.py` to generate the report which will be available here: `src/bash/CERNTasks.wiki/CMS_Campaign_Reports.md`
 
 Scripts should be ran from this directory: `src/bash/report_campaigns`
+
+#### Aggregating leftover datasets
+Please follow instructions [these instructions](README_Leftovers.md).
