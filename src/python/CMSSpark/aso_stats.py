@@ -13,8 +13,6 @@ import sys
 import gzip
 import time
 import json
-import argparse
-from types import NoneType
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
@@ -27,29 +25,8 @@ from pyspark.sql.types import StringType
 from CMSSpark.spark_utils import fts_tables
 from CMSSpark.spark_utils import aso_tables, print_rows
 from CMSSpark.spark_utils import spark_context, unpack_struct
-from CMSSpark.utils import elapsed_time
-
-class OptionParser():
-    def __init__(self):
-        "User based option parser"
-        desc = "Spark script to process ASO metadata"
-        self.parser = argparse.ArgumentParser(prog='PROG', description=desc)
-        year = time.strftime("%Y", time.localtime())
-        hdir = 'hdfs:///project/awg/cms'
-        msg = 'Location of CMS folders on HDFS, default %s' % hdir
-        self.parser.add_argument("--hdir", action="store",
-            dest="hdir", default=hdir, help=msg)
-        fout = ''
-        self.parser.add_argument("--fout", action="store",
-            dest="fout", default=fout, help='Output file name, default %s' % fout)
-        self.parser.add_argument("--date", action="store",
-            dest="date", default="", help='Select CMSSW data for specific date (YYYYMMDD)')
-        self.parser.add_argument("--no-log4j", action="store_true",
-            dest="no-log4j", default=False, help="Disable spark log4j messages")
-        self.parser.add_argument("--yarn", action="store_true",
-            dest="yarn", default=False, help="run job on analytics cluster via yarn resource manager")
-        self.parser.add_argument("--verbose", action="store_true",
-            dest="verbose", default=False, help="verbose output")
+from CMSSpark.utils import info
+from CMSSpark.conf import OptionParser
 
 def aso_date(date):
     "Convert given date into ASO date format"
@@ -126,18 +103,13 @@ def run(date, fout, yarn=None, verbose=None):
 
     ctx.stop()
 
+@info
 def main():
     "Main function"
-    optmgr  = OptionParser()
+    optmgr = OptionParser('aso_stats')
     opts = optmgr.parser.parse_args()
     print("Input arguments: %s" % opts)
-    time0 = time.time()
     run(opts.date, opts.fout, opts.yarn, opts.verbose)
-    print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
-    print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
-    print('Elapsed time: %s sec' % elapsed_time(time0))
 
 if __name__ == '__main__':
     main()
-
-

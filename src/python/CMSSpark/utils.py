@@ -75,3 +75,14 @@ def split_date(date):
     "Split given YYYYMMDD into pieces"
     val = str(date)
     return val[:4], val[4:6], val[6:]
+
+def info(func):
+    "decorator to spark workflow"
+    def wrapper():
+        time0 = time.time()
+        func()
+        print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
+        print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
+        print('Elapsed time: %s sec' % elapsed_time(time0))
+    wrapper.__name__ = func.__name__
+    return wrapper

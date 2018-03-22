@@ -5,7 +5,6 @@
 # test arguments
 if [ "$#" -eq 0 ]; then
     echo "Usage: run_spark <cmsspark_script> <options>"
-    echo "Supported scripts: dbs_phedex.py dbs_aaa.py dbs_eos.py dbs_cmssw.py dbs_jm.py cern_monit.py"
     exit 1
 fi
 
@@ -16,7 +15,8 @@ cmsspark=$droot/$1
 # allow to disable spark output, client should setup his/her own log4j.properties
 # via WMA_LOG4J environment variable
 # conf="--conf spark.driver.extraClassPath=/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core.jar"
-conf=""
+# enable simple secret to run in non-yarn mode
+conf="--conf spark.authenticate.secret=cmsspark"
 #conf="--conf spark.authenticate=true"
 # look if we requested to show full log output
 if [[ "$@" =~ "--no-log4j" ]]; then
@@ -31,6 +31,20 @@ csvjar=/afs/cern.ch/user/l/lmeniche/public/spark-csv-assembly-1.4.0.jar
 csvjar=/afs/cern.ch/user/v/valya/public/spark/spark-csv-assembly-1.4.0.jar
 avrojar=/usr/lib/avro/avro-mapred.jar
 sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
+
+# determine if we can load CVMFS
+# https://cern.service-now.com/service-portal/article.do?n=KB0005361
+if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh ] && \
+   [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ] && \
+   [ -f /usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar ]; then
+    echo "Enable CVMFS ..."
+    source /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh
+    source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
+    conf="$conf --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python"
+    conf="$conf --conf spark.driver.extraClassPath='/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar'"
+#    conf="$conf --conf spark.driver.extraClassPath='/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar'"
+    conf="$conf --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+fi
 
 args="${@:2}"
 echo "$cmsspark $args"

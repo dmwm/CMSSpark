@@ -13,7 +13,6 @@ import sys
 import time
 import json
 from datetime import datetime as dt
-from types import NoneType
 from subprocess import Popen, PIPE
 
 # local modules
