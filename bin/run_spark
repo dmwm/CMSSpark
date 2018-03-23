@@ -33,14 +33,15 @@ sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
 # determine if we can load CVMFS
 # https://cern.service-now.com/service-portal/article.do?n=KB0005361
 cvmfs=""
-if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh ] && \
-   [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ] && \
-   [ -f /usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar ]; then
-    echo "Enable CVMFS ..."
-    source /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh
-    source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
-    cvmfs="true"
-fi
+# TMP: disable since cvmfs still fails
+#if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh ] && \
+#   [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ] && \
+#   [ -f /usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar ]; then
+#    echo "Enable CVMFS ..."
+#    source /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh
+#    source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
+#    cvmfs="true"
+#fi
 
 args="${@:2}"
 echo "$cmsspark $args"
