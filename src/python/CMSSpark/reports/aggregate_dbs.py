@@ -13,30 +13,18 @@ from pyspark.sql import HiveContext
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
 from CMSSpark.spark_utils import spark_context, split_dataset
-from CMSSpark.utils import elapsed_time
+from CMSSpark.utils import info_save
+from CMSSpark.conf import OptionParser
 
 DBS_TIME_DATA_FILE = 'spark_exec_time_tier_dbs.txt'
 
 def get_options():
-    desc = "Spark script to process DBS+PhEDEx metadata"
-    parser = argparse.ArgumentParser(prog='PROG', description=desc)
+    opts = OptionParser('DBS')
 
-    parser.add_argument("--fout", action="store",
-        dest="fout", help='Output file name')
-
-    parser.add_argument("--date", action="store",
-        dest="date", help='Select CMSSW data for specific date (YYYYMMDD)')
-
-    parser.add_argument("--verbose", action="store_true",
-        dest="verbose", default=False, help="verbose output")
-
-    parser.add_argument("--yarn", action="store_true",
-        dest="yarn", default=False, help="run job on analytics cluster via yarn resource manager")
-
-    parser.add_argument("--inst", action="store",
+    opts.parser.add_argument("--inst", action="store",
         dest="inst", default="global")
 
-    return parser.parse_args()
+    return opts.parser.parse_args()
 
 def get_script_dir():
     return os.path.dirname(os.path.abspath(__file__))
@@ -101,6 +89,7 @@ def run(fout, yarn=None, verbose=None, inst='GLOBAL'):
 
     ctx.stop()
 
+@info_save('%s/%s' % (get_destination_dir(), DBS_TIME_DATA_FILE))
 def main():
     "Main function"
     opts = get_options()
@@ -120,9 +109,6 @@ def main():
     print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
     print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
     print('Elapsed time: %s sec' % elapsed_time(time0))
-
-    with open('%s/%s' % (get_destination_dir(), DBS_TIME_DATA_FILE), 'w') as file:
-        file.write(elapsed_time(time0))
 
 if __name__ == '__main__':
     main()

@@ -111,3 +111,22 @@ def info(func):
         print('Elapsed time: %s sec' % elapsed_time(time0))
     wrapper.__name__ = func.__name__
     return wrapper
+
+def info_save(file_path):
+    def real_info_save(func):
+        "Decorator to spark workflow that will measure how long it took to execute a job and write result to specified file"
+        def wrapper():
+            time0 = time.time()
+            func()
+            elapsed = elapsed_time(time0)
+            print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
+            print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
+            print('Elapsed time: %s' % elapsed)
+
+            # Save time info to file
+            with open(file_path, 'w') as f:
+                f.write(elapsed)
+        
+        wrapper.__name__ = func.__name__
+        return wrapper
+    return real_info_save
