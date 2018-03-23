@@ -34,17 +34,16 @@ sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
 
 # determine if we can load CVMFS
 # https://cern.service-now.com/service-portal/article.do?n=KB0005361
-if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh ] && \
-   [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ] && \
-   [ -f /usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar ]; then
-    echo "Enable CVMFS ..."
-    source /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh
-    source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
-    conf="$conf --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python"
-    conf="$conf --conf spark.driver.extraClassPath='/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar'"
-#    conf="$conf --conf spark.driver.extraClassPath='/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar'"
-    conf="$conf --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
-fi
+#if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh ] && \
+#   [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ] && \
+#   [ -f /usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar ]; then
+#    echo "Enable CVMFS ..."
+#    source /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh
+#    source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
+#    conf="$conf --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python"
+#    conf="$conf --conf spark.driver.extraClassPath='/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar'"
+#    conf="$conf --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+#fi
 
 args="${@:2}"
 echo "$cmsspark $args"
