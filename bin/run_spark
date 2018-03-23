@@ -12,17 +12,15 @@ fi
 droot=`python -c "import CMSSpark; print '/'.join(CMSSpark.__file__.split('/')[:-1])"`
 cmsspark=$droot/$1
 
-# allow to disable spark output, client should setup his/her own log4j.properties
-# via WMA_LOG4J environment variable
-# conf="--conf spark.driver.extraClassPath=/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core.jar"
 # enable simple secret to run in non-yarn mode
 conf="--conf spark.authenticate.secret=cmsspark"
-#conf="--conf spark.authenticate=true"
-# look if we requested to show full log output
+
+# look if we requested to show full log output, to disable spark output
+# client should setup his/her own log4j.properties via WMA_LOG4J environment variable
 if [[ "$@" =~ "--no-log4j" ]]; then
     conf=" --conf spark.ui.showConsoleProgress=false "
     if [ -n "$LOG4J_CONF" ] && [ -f $LOG4J_CONF ]; then
-        conf="$conf --conf spark.driver.extraJavaOptions=\"-Dlog4j.configuration=file:$LOG4J_CONF\""
+        conf="$conf --conf spark.driver.extraJavaOptions='-Dlog4j.configuration=file:$LOG4J_CONF'"
     fi
 fi
 
@@ -34,16 +32,15 @@ sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
 
 # determine if we can load CVMFS
 # https://cern.service-now.com/service-portal/article.do?n=KB0005361
-#if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh ] && \
-#   [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ] && \
-#   [ -f /usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar ]; then
-#    echo "Enable CVMFS ..."
-#    source /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh
-#    source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
-#    conf="$conf --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python"
-#    conf="$conf --conf spark.driver.extraClassPath='/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar'"
-#    conf="$conf --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
-#fi
+cvmfs=""
+if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh ] && \
+   [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ] && \
+   [ -f /usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar ]; then
+    echo "Enable CVMFS ..."
+    source /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh
+    source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
+    cvmfs="true"
+fi
 
 args="${@:2}"
 echo "$cmsspark $args"
@@ -54,6 +51,8 @@ if [ "$2" == "-h" ] || [ "$2" == "--help" ] || [ "$2" == "-help" ]; then
     python $cmsspark --help
     exit 0
 fi
+echo "PYTHONPATH: $PYTHONPATH"
+echo "cmsspark: $cmsspark $args"
 if [ -n "$yarn" ]; then
     # to tune up these numbers:
     #  - executor-memory not more than 5G
@@ -61,14 +60,25 @@ if [ -n "$yarn" ]; then
     #  - cores = 2/4/8
     # Temp solution to have a wrapper for python27 on spark cluster
     # once CERN IT will resolve python version we can remove PYSPARK_PYTHON
-    echo "YARN execution"
-#    PYSPARK_PYTHON='/afs/cern.ch/user/v/valya/public/python27' \
-    spark-submit --jars $csvjar,$avrojar,$sparkexjar \
-        --master yarn-client \
-        --driver-class-path '/usr/lib/hive/lib/*' \
-        --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
-        --executor-memory 5g \
-        $conf $cmsspark $args
+    echo "YARN execution: $conf"
+    if [ "$cvmfs" == "true" ]; then
+        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+            --master yarn \
+            --executor-memory 5g \
+            --driver-class-path '/usr/lib/hive/lib/*' \
+            --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
+            --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python \
+            --conf spark.driver.extraClassPath='/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar' \
+            --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
+            $conf $cmsspark $args
+    else
+        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+            --master yarn \
+            --executor-memory 5g \
+            --driver-class-path '/usr/lib/hive/lib/*' \
+            --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
+            $conf $cmsspark $args
+    fi
 else
     # submit spark job with our file, please note
     # that user may increase memory options if necessary
@@ -78,11 +88,22 @@ else
     # Modify with local[*] to use all the available cores in the node
     #   optionally increase driver memory with --driver-memory 2G (default 1G)
     echo "LOCAL (NO-YARN) execution"
-#    PYSPARK_PYTHON='/afs/cern.ch/user/v/valya/public/python27' \
-    spark-submit --jars $csvjar,$avrojar,$sparkexjar \
-        --executor-memory $((`nproc`/4))G \
-        --master local[$((`nproc`/4))] \
-        --driver-class-path '/usr/lib/hive/lib/*' \
-        --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
-        $conf $cmsspark $args
+    if [ "$cvmfs" == "true" ]; then
+        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+            --executor-memory $((`nproc`/4))G \
+            --master local[$((`nproc`/4))] \
+            --driver-class-path '/usr/lib/hive/lib/*' \
+            --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
+            --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python \
+            --conf spark.driver.extraClassPath='/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar' \
+            --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
+            $conf $cmsspark $args
+    else
+        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+            --executor-memory $((`nproc`/4))G \
+            --master local[$((`nproc`/4))] \
+            --driver-class-path '/usr/lib/hive/lib/*' \
+            --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
+            $conf $cmsspark $args
+    fi
 fi
