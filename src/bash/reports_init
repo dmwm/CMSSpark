@@ -1,8 +1,11 @@
 #!/bin/sh
 
+# Get current script's absolute path
+scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
+
 # Clone CERNTasks.wiki for automatically generating reports
-if [ -d "CERNTasks.wiki" ]; then
+if [ -d "$scriptpath/CERNTasks.wiki" ]; then
   echo "CERNTasks.wiki was already cloned"
 else
-  git clone https://github.com/andrius-k/CERNTasks.wiki
+  git clone https://github.com/andrius-k/CERNTasks.wiki $scriptpath
 fi
