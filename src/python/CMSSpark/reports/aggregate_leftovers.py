@@ -182,9 +182,5 @@ def main():
     
     run(fout, date, yarn, verbose, inst)
 
-    print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
-    print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
-    print('Elapsed time: %s' % elapsed_time(time0))
-
 if __name__ == '__main__':
     main()
