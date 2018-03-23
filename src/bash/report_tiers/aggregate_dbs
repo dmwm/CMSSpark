@@ -1,5 +1,12 @@
 #!/bin/sh
 
+if [ $# -eq 0 ] || [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ]; then
+    echo "Usage: ./"$(basename "$0")" [location]"
+    echo "Example: ./"$(basename "$0")" /cms/users/$USER/dbs_datasets"
+    echo "[location] = hdfs location of resulting files. Default: /cms/users/$USER/dbs_datasets"
+    exit 0
+fi
+
 location=/cms/users/$USER/dbs_datasets
 
 if [[ -n $1 ]]

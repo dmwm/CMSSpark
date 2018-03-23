@@ -1,5 +1,13 @@
 #!/bin/sh
 
+if [ $# -eq 0 ] || [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ]; then
+    echo "Usage: ./"$(basename "$0")" <date> [location]"
+    echo "Example: ./"$(basename "$0")" 20170228 /cms/users/$USER/phedex_datasets"
+    echo "<date> = PhEDEx date in the following format: YYYYMMDD."
+    echo "[location] = hdfs location of resulting files. Default: /cms/users/$USER/phedex_datasets"
+    exit 0
+fi
+
 # Parse date argument
 date=''
 
