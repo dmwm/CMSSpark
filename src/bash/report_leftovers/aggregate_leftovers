@@ -1,5 +1,14 @@
 #!/bin/sh
 
+if [ $# -eq 0 ] || [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ]; then
+    echo "Usage: ./"$(basename "$0")" <date> [location] [inst]"
+    echo "Example: ./"$(basename "$0")" 20170228 /cms/users/$USER/leftovers all"
+    echo "<date> = PhEDEx date in the following format: YYYYMMDD."
+    echo "[location] = hdfs location of resulting files. Default: /cms/users/$USER/leftovers"
+    echo "[inst] = DBS instance. Possible values: global, phys01, phys02, phys03, all. Default: all"
+    exit 0
+fi
+
 # Parse date argument
 date=''
 

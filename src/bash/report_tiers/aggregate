@@ -1,19 +1,29 @@
 #!/bin/sh
 
+if [ $# -eq 0 ] || [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ]; then
+    echo "Usage: ./"$(basename "$0")" <date> [dbs_location] [phedex_location]"
+    echo "Example: ./"$(basename "$0")" 20170228 /cms/users/$USER/dbs_datasets /cms/users/$USER/phedex_datasets"
+    echo "<date> = PhEDEx date in the following format: YYYYMMDD."
+    echo "[dbs_location] = hdfs location of resulting DBS files. Default: /cms/users/$USER/dbs_datasets"
+    echo "[phedex_location] = hdfs location of resulting PhEDEx files. Default: /cms/users/$USER/phedex_datasets"
+    exit 0
+fi
+
 # Treat first argument as date. 
 # Date will be validated in actual scripts below.
 date=$1
 
-# Treat second argument as hdfs result location. 
-location=$2
+# Treat second and third arguments as hdfs result locations. 
+dbs_location=$2
+phedex_location=$3
 
 # Get current script's absolute path
 scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
 
 # Aggregate dbs data
-$scriptpath/aggregate_dbs $location &
+$scriptpath/aggregate_dbs $dbs_location &
 
 # Aggregate PhEDEx
-$scriptpath/aggregate_phedex $date $location &
+$scriptpath/aggregate_phedex $date $phedex_location &
 
 wait

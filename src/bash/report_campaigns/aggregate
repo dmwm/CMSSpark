@@ -1,19 +1,29 @@
 #!/bin/sh
 
+if [ $# -eq 0 ] || [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ]; then
+    echo "Usage: ./"$(basename "$0")" <date> [campaigns_location] [campaign_tier_location]"
+    echo "Example: ./"$(basename "$0")" 20170228 /cms/users/$USER/campaigns /cms/users/$USER/campaign_tier"
+    echo "<date> = PhEDEx date in the following format: YYYYMMDD."
+    echo "[campaigns_location] = hdfs location of resulting DBS files. Default: /cms/users/$USER/campaigns"
+    echo "[campaign_tier_location] = hdfs location of resulting PhEDEx files. Default: /cms/users/$USER/campaign_tier"
+    exit 0
+fi
+
 # Treat first argument as date. 
 # Date will be validated in actual scripts below.
 date=$1
 
-# Treat second argument as hdfs result location. 
-location=$2
+# Treat second and third arguments as hdfs result locations. 
+campaigns_location=$2
+campaign_tier_location=$3
 
 # Get current script's absolute path
 scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
 
 # Aggregate campaigns
-$scriptpath/aggregate_campaigns $date $location &
+$scriptpath/aggregate_campaigns $date $campaigns_location &
 
 # Aggregate campaign - tier relationship
-$scriptpath/aggregate_campaign_tier $date $location &
+$scriptpath/aggregate_campaign_tier $date $campaign_tier_location &
 
 wait
