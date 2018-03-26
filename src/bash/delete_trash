@@ -1,3 +1,0 @@
-#!/bin/sh
-
-hadoop fs -rm -r /user/$USER/.Trash
