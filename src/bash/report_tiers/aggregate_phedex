@@ -41,7 +41,7 @@ hdir=hdfs://$location
 scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
 
 # Remove previous data first
-hadoop fs -rm -r $location
+hadoop fs -rm -r -skipTrash $location
 
 PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_phedex.py --fout=$hdir --yarn --verbose --date=$date
 
