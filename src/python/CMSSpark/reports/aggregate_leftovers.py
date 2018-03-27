@@ -3,15 +3,10 @@
 Spark script to parse and aggregate DBS and PhEDEx records on HDFS.
 """
 
-# system modules
+# System modules
 import os
-import re
-import sys
-import time
-import json
-import argparse
-from types import NoneType
 
+# Pyspark modules
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
 from pyspark.sql.functions import struct, array, udf, countDistinct
@@ -169,7 +164,7 @@ def main():
     "Main function"
     opts = get_options()
     print("Input arguments: %s" % opts)
-    time0 = time.time()
+    
     fout = opts.fout
     date = opts.date
     verbose = opts.verbose

@@ -1,11 +1,6 @@
-# system modules
+# System modules
 import os
-import re
-import sys
 import time
-import json
-import argparse
-from types import NoneType
 
 # pyspark modules
 from pyspark import SparkContext, StorageLevel
@@ -104,7 +99,7 @@ def main():
     "Main function"
     opts = get_options()
     print("Input arguments: %s" % opts)
-    time0 = time.time()
+    
     fout = opts.fout
     date = opts.date
     verbose = opts.verbose

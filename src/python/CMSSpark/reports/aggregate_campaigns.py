@@ -3,15 +3,10 @@
 Spark script to parse and aggregate DBS and PhEDEx records on HDFS.
 """
 
-# system modules
+# System modules
 import os
-import re
-import sys
-import time
-import json
-import argparse
-from types import NoneType
 
+# Pyspark modules
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import HiveContext
 from pyspark.sql.functions import struct, array, udf, countDistinct
@@ -110,10 +105,6 @@ def run(fout, date, yarn=None, verbose=None, inst='GLOBAL', limit=100):
     ddf_df = ddf.select(dbs_ddf_cols)
     daf_df = daf.select(dbs_daf_cols)
 
-    # Aggregate by campaign and find total PhEDEx and DBS size of each campaign
-
-    extract_campaign_udf = udf(lambda dataset: dataset.split('/')[2])
-
     # d_dataset_id, d_dataset, dataset_access_type
     dbs_df = ddf_df.join(daf_df, ddf_df.d_dataset_access_type_id == daf_df.dataset_access_type_id)\
                    .drop(ddf_df.d_dataset_access_type_id)\
@@ -133,11 +124,28 @@ def run(fout, date, yarn=None, verbose=None, inst='GLOBAL', limit=100):
                    .agg({'dbs_size':'sum'})\
                    .withColumnRenamed('sum(dbs_size)', 'dbs_size')
 
-    # dataset, phedex_size
-    phedex_cols = ['dataset_name', 'block_bytes']
-    phedex_df = phedex.select(phedex_cols)
-    phedex_df = phedex_df.withColumnRenamed('block_bytes', 'phedex_size')\
-                         .withColumnRenamed('dataset_name', 'dataset')
+    # dataset_name, block_bytes, node_name
+    phedex_cols = ['dataset_name', 'block_bytes', 'node_name']
+    phedex_all_df = phedex.select(phedex_cols)
+    
+    aggregate(sqlContext, fout, phedex_all_df, dbs_df, limit)
+    aggregate(sqlContext, fout, phedex_all_df, dbs_df, limit, disk_only=True)
+
+    ctx.stop()
+
+def aggregate(sqlContext, fout, phedex_all_df, dbs_df, limit, disk_only=False):
+    extract_campaign_udf = udf(lambda dataset: dataset.split('/')[2])
+
+    if disk_only == True:
+        is_tape = lambda site: site.endswith('_MSS') | site.endswith('_Buffer') | site.endswith('_Export')
+        phedex_filtered_df = phedex_all_df.where(is_tape(phedex_all_df.node_name) == False)
+    else:
+        phedex_filtered_df = phedex_all_df
+
+    # dataset, phedex_site
+    phedex_df = phedex_filtered_df.withColumnRenamed('block_bytes', 'phedex_size')\
+                                  .withColumnRenamed('dataset_name', 'dataset')\
+                                  .drop('node_name')
     
     # dataset, phedex_size
     phedex_df = phedex_df.groupBy(['dataset'])\
@@ -146,39 +154,27 @@ def run(fout, date, yarn=None, verbose=None, inst='GLOBAL', limit=100):
 
     # dataset, dbs_size, phedex_size
     dbs_phedex_df = dbs_df.join(phedex_df, 'dataset')
-
-    leftovers_df = phedex_df.select('dataset').subtract(dbs_phedex_df.select('dataset').distinct())
-    leftovers_df.write.format("com.databricks.spark.csv")\
-                              .option("header", "true").save('%s/leftovers' % fout)
     
     dbs_phedex_df = dbs_phedex_df.withColumn('campaign', extract_campaign_udf(dbs_phedex_df.dataset))
 
+    # dataset, campaign, dbs_size, phedex_size
     dbs_phedex_df = dbs_phedex_df.groupBy(['campaign'])\
                                  .agg({'dbs_size':'sum', 'phedex_size': 'sum'})\
                                  .withColumnRenamed('sum(dbs_size)', 'dbs_size')\
                                  .withColumnRenamed('sum(phedex_size)', 'phedex_size')
-    
-    # Select campaign - site pairs and their sizes (from PhEDEx)
 
     # campaign, site, size
-    phedex_cols = ['dataset_name', 'node_name', 'block_bytes']
-    campaign_site_df = phedex.select(phedex_cols)
-    campaign_site_df = campaign_site_df.withColumn('campaign', extract_campaign_udf(campaign_site_df.dataset_name))\
-                .groupBy(['campaign', 'node_name'])\
-                .agg({'block_bytes':'sum'})\
-                .withColumnRenamed('sum(block_bytes)', 'size')\
-                .withColumnRenamed('node_name', 'site')
+    campaign_site_df = phedex_filtered_df.withColumn('campaign', extract_campaign_udf(phedex_filtered_df.dataset_name))\
+                                         .groupBy(['campaign', 'node_name'])\
+                                         .agg({'block_bytes':'sum'})\
+                                         .withColumnRenamed('sum(block_bytes)', 'size')\
+                                         .withColumnRenamed('node_name', 'site')
 
-    # Aggregate data for site - campaign count table
-
-    # site, count
-    site_campaign_count_df = campaign_site_df.groupBy(['site'])\
-                                             .agg(countDistinct('campaign'))\
-                                             .withColumnRenamed('count(campaign)', 'campaign_count')\
-                                             .orderBy('campaign_count', ascending=False)\
-                                             .limit(limit)
-
-    # Find two most significant sites for each campaign
+    # site, campaign_count
+    site_campaign_count = campaign_site_df.groupBy(['site'])\
+                                          .agg(countDistinct('campaign'))\
+                                          .withColumnRenamed('count(campaign)', 'campaign_count')\
+                                          .orderBy('campaign_count', ascending=False)
 
     columns_before_pivot = campaign_site_df.columns
 
@@ -202,33 +198,32 @@ def run(fout, date, yarn=None, verbose=None, inst='GLOBAL', limit=100):
                    .withColumn('second_mss', second_mss_udf(struct([result[x] for x in sites_columns])))\
                    .withColumn('second_mss_name', second_mss_name_udf(struct([result[x] for x in sites_columns])))
 
-    # campaign, phedex_size, dbs_size, mss, mss_name, second_mss, second_mss_name, sites
-    result = result.join(dbs_phedex_df, result.campaign == dbs_phedex_df.campaign)\
-                   .drop(result.campaign)
+    result = result.join(dbs_phedex_df, 'campaign')
 
     sorted_by_phedex = result.orderBy(result.phedex_size, ascending=False).limit(limit)
     sorted_by_dbs = result.orderBy(result.dbs_size, ascending=False).limit(limit)
-    
+    site_campaign_count = site_campaign_count.limit(limit)
+
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
     if fout:
+        suffix = 'disk_only' if disk_only else 'full'
+
         sorted_by_phedex.write.format("com.databricks.spark.csv")\
-                              .option("header", "true").save('%s/phedex' % fout)
+                              .option("header", "true").save('%s/phedex_%s' % (fout, suffix))
         
         sorted_by_dbs.write.format("com.databricks.spark.csv")\
-                           .option("header", "true").save('%s/dbs' % fout)
+                           .option("header", "true").save('%s/dbs_%s' % (fout, suffix))
 
-        site_campaign_count_df.write.format("com.databricks.spark.csv")\
-                              .option("header", "true").save('%s/site_campaign_count' % fout)
-
-    ctx.stop()
+        site_campaign_count.write.format("com.databricks.spark.csv")\
+                                 .option("header", "true").save('%s/site_campaign_count_%s' % (fout, suffix))
 
 @info_save('%s/%s' % (get_destination_dir(), CAMPAIGNS_TIME_DATA_FILE))
 def main():
     "Main function"
     opts = get_options()
     print("Input arguments: %s" % opts)
-    time0 = time.time()
+    
     fout = opts.fout
     date = opts.date
     verbose = opts.verbose

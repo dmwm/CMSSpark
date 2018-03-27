@@ -1,17 +1,13 @@
 import pandas as pd
-
 import matplotlib as mpl
 # We will not be showing images because we don't haw UI
 mpl.use('Agg')
 import matplotlib.pyplot as plt
-from subprocess import check_output
 from report_builder import ReportBuilder
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(os.path.abspath(__file__)))))
 from utils import bytes_to_pb_string, bytes_to_pib_string
-import shutil
-import operator
 import argparse
 
 CAMPAIGNS_TIME_DATA_FILE = 'spark_exec_time_campaigns.txt'
@@ -120,28 +116,58 @@ def plot_pie_charts(df, plot_file):
     plt.savefig(plot_filepath, dpi=120)
 
 def visualize_data_by_campaign(plots_dir):
-    df = pd.read_csv('%s/campaigns_dbs_df.csv' % get_destination_dir())
+    # Full datasets
+    df = pd.read_csv('%s/campaigns_dbs_full_df.csv' % get_destination_dir())
 
-    append_report('## Campaigns', )
+    append_report('## Campaigns in all sites')
     
     append_report('### Showing TOP 10 most significant campaigns by DBS size')
     write_campaigns_to_report(df, 10)
 
     # Make pie chart of sites for most significant DBS campaigns
-    plot_file = '%s/dbs_size_campaigns_plot.jpg' % plots_dir
+    plot_file = '%s/dbs_size_full_campaigns_plot.jpg' % plots_dir
     plot_pie_charts(df, plot_file)
 
     append_report('### Plot of 6 most significant DBS campaigns')
     append_report('Each pie chart visualizes the size of campaign data in each data site that campaign is present.')
     append_report('![6 most significant DBS campaigns](images/%s)' % plot_file)
 
-    df = pd.read_csv('%s/campaigns_phedex_df.csv' % get_destination_dir())
+    df = pd.read_csv('%s/campaigns_phedex_full_df.csv' % get_destination_dir())
 
     append_report('### Showing TOP 10 most significant campaigns by PhEDEx size')
     write_campaigns_to_report(df, 10)
 
     # Make pie chart of sites for most significant PhEDEx campaigns
-    plot_file = '%s/phedex_size_campaigns_plot.jpg' % plots_dir
+    plot_file = '%s/phedex_size_full_campaigns_plot.jpg' % plots_dir
+    plot_pie_charts(df, plot_file)
+
+    append_report('### Plot of 6 most significant PhEDEx campaigns')
+    append_report('Each pie chart visualizes the size of campaign data in each data site that campaign is present.')
+    append_report('![6 most significant PhEDEx campaigns](images/%s)' % plot_file)
+
+    # Only disk (tape datasets excluded)
+    df = pd.read_csv('%s/campaigns_dbs_disk_only_df.csv' % get_destination_dir())
+
+    append_report('## Campaigns only in disk')
+    
+    append_report('### Showing TOP 10 most significant campaigns by DBS size')
+    write_campaigns_to_report(df, 10)
+
+    # Make pie chart of sites for most significant DBS campaigns
+    plot_file = '%s/dbs_size_disk_only_campaigns_plot.jpg' % plots_dir
+    plot_pie_charts(df, plot_file)
+
+    append_report('### Plot of 6 most significant DBS campaigns')
+    append_report('Each pie chart visualizes the size of campaign data in each data site that campaign is present.')
+    append_report('![6 most significant DBS campaigns](images/%s)' % plot_file)
+
+    df = pd.read_csv('%s/campaigns_phedex_disk_only_df.csv' % get_destination_dir())
+
+    append_report('### Showing TOP 10 most significant campaigns by PhEDEx size')
+    write_campaigns_to_report(df, 10)
+
+    # Make pie chart of sites for most significant PhEDEx campaigns
+    plot_file = '%s/phedex_size_disk_only_campaigns_plot.jpg' % plots_dir
     plot_pie_charts(df, plot_file)
 
     append_report('### Plot of 6 most significant PhEDEx campaigns')
@@ -149,14 +175,24 @@ def visualize_data_by_campaign(plots_dir):
     append_report('![6 most significant PhEDEx campaigns](images/%s)' % plot_file)
 
 def visualize_site_campaign_count():
-    df = pd.read_csv('%s/site_campaign_count_df.csv' % get_destination_dir())
+    # All sites
+    df = pd.read_csv('%s/site_campaign_count_full_df.csv' % get_destination_dir())
 
-    append_report('## Sites')
+    append_report('## All sites')
 
     append_report('### Showing TOP 10 most significant sites by campaign count')
 
     write_sites_to_report(df, 10)
 
+    # Only disk (tape sites excluded)
+    df = pd.read_csv('%s/site_campaign_count_disk_only_df.csv' % get_destination_dir())
+
+    append_report('## Disk only sites')
+
+    append_report('### Showing TOP 10 most significant sites by campaign count')
+
+    write_sites_to_report(df, 10)
+    
 def visualize_campaign_tier_relationship():
     df = pd.read_csv('%s/campaign_tier_df.csv' % get_destination_dir())
 
