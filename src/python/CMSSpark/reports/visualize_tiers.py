@@ -1,16 +1,14 @@
 import pandas as pd
-
 import matplotlib as mpl
 # We will not be showing images because we don't haw UI
 mpl.use('Agg')
 import matplotlib.pyplot as plt
-from subprocess import check_output
 from report_builder import ReportBuilder
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(os.path.abspath(__file__)))))
+from subprocess import check_output
 from utils import bytes_to_readable
-import shutil
 import operator
 import argparse
 

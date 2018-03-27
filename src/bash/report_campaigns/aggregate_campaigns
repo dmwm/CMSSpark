@@ -58,23 +58,44 @@ then
     hadoop fs -get $hdir $scriptpath
 
     # Extract PhEDEx header
-    head -1 $scriptpath/$result_dir/phedex/part-00000 > $scriptpath/campaigns_phedex_df.csv
+    head -1 $scriptpath/$result_dir/phedex_full/part-00000 > $scriptpath/campaigns_phedex_full_df.csv
 
     # Concatenate all PhEDEx parts except header
-    header=`cat $scriptpath/campaigns_phedex_df.csv`
-    cat $scriptpath/$result_dir/phedex/part* | grep -v $header >> $scriptpath/campaigns_phedex_df.csv
+    header=`cat $scriptpath/campaigns_phedex_full_df.csv`
+    cat $scriptpath/$result_dir/phedex_full/part* | grep -v $header >> $scriptpath/campaigns_phedex_full_df.csv
 
     # Extract DBS header
-    head -1 $scriptpath/$result_dir/dbs/part-00000 > $scriptpath/campaigns_dbs_df.csv
+    head -1 $scriptpath/$result_dir/dbs_full/part-00000 > $scriptpath/campaigns_dbs_full_df.csv
 
     # Concatenate all DBS parts except header
-    header=`cat $scriptpath/campaigns_dbs_df.csv`
-    cat $scriptpath/$result_dir/dbs/part* | grep -v $header >> $scriptpath/campaigns_dbs_df.csv
+    header=`cat $scriptpath/campaigns_dbs_full_df.csv`
+    cat $scriptpath/$result_dir/dbs_full/part* | grep -v $header >> $scriptpath/campaigns_dbs_full_df.csv
+
+    # Extract PhEDEx header
+    head -1 $scriptpath/$result_dir/phedex_disk_only/part-00000 > $scriptpath/campaigns_phedex_disk_only_df.csv
+
+    # Concatenate all PhEDEx parts except header
+    header=`cat $scriptpath/campaigns_phedex_disk_only_df.csv`
+    cat $scriptpath/$result_dir/phedex_disk_only/part* | grep -v $header >> $scriptpath/campaigns_phedex_disk_only_df.csv
+
+    # Extract DBS header
+    head -1 $scriptpath/$result_dir/dbs_disk_only/part-00000 > $scriptpath/campaigns_dbs_disk_only_df.csv
+
+    # Concatenate all DBS parts except header
+    header=`cat $scriptpath/campaigns_dbs_disk_only_df.csv`
+    cat $scriptpath/$result_dir/dbs_disk_only/part* | grep -v $header >> $scriptpath/campaigns_dbs_disk_only_df.csv
 
     # Extract site - campaign count header
-    head -1 $scriptpath/$result_dir/site_campaign_count/part-00000 > $scriptpath/site_campaign_count_df.csv
+    head -1 $scriptpath/$result_dir/site_campaign_count_full/part-00000 > $scriptpath/site_campaign_count_full_df.csv
 
     # Concatenate all site - campaign count parts except header
-    header=`cat $scriptpath/site_campaign_count_df.csv`
-    cat $scriptpath/$result_dir/site_campaign_count/part* | grep -v $header >> $scriptpath/site_campaign_count_df.csv
+    header=`cat $scriptpath/site_campaign_count_full_df.csv`
+    cat $scriptpath/$result_dir/site_campaign_count_full/part* | grep -v $header >> $scriptpath/site_campaign_count_full_df.csv
+
+    # Extract site - campaign count header
+    head -1 $scriptpath/$result_dir/site_campaign_count_disk_only/part-00000 > $scriptpath/site_campaign_count_disk_only_df.csv
+
+    # Concatenate all site - campaign count parts except header
+    header=`cat $scriptpath/site_campaign_count_disk_only_df.csv`
+    cat $scriptpath/$result_dir/site_campaign_count_disk_only/part* | grep -v $header >> $scriptpath/site_campaign_count_disk_only_df.csv
 fi

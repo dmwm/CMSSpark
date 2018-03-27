@@ -1,5 +1,4 @@
 import pandas as pd
-from subprocess import check_output
 from report_builder import ReportBuilder
 import os
 import sys
@@ -32,7 +31,7 @@ def write_dataset_to_report(df, head=0):
         df = df[:head]
 
     for index, row in df.iterrows():
-        append_report('| ' + row['campaign'] + 
+        append_report('| ' + row['dataset'] + 
                       ' | ' + row['sites'][13:-1] + 
                       ' | ' + bytes_to_pb_string(row['phedex_size']) + ' - ' + bytes_to_pib_string(row['phedex_size']) + 
                       ' | ' + row['campaign'] + 
@@ -59,6 +58,7 @@ def visualize_all_leftovers():
 
     append_report('## All leftovers')
     append_report('These are datasets that are present in PhEDEx but are either not in BDS or has DBS status that is not VALID.')
+    append_report('')
     
     write_dataset_to_report(df, 20)
 
@@ -70,6 +70,7 @@ def visualize_orphan_leftovers():
 
     append_report('## Orphan leftovers')
     append_report('Orphans are those datasets that are present in PhEDEx but are not present in DBS at all.')
+    append_report('')
     
     write_dataset_to_report(df, 20)
 
