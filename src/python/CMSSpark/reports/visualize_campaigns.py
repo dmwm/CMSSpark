@@ -101,12 +101,13 @@ def plot_pie_charts(df, plot_file):
     head = df.head(6)\
              .set_index('campaign')\
              .drop(['mss_name', 'second_mss_name', 'mss', 'second_mss', 'dbs_size', 'phedex_size', 'sites'], axis=1)
-
+    
     fig, axes = plt.subplots(2, 3, figsize=(30, 15))
     for i, (idx, row) in enumerate(head.iterrows()):
         ax = axes[i // 3, i % 3]
-        row = row[row.gt(row.sum() * .01)]
-        ax.pie(row, labels=row.index, startangle=30)
+        row_sum = row.sum()
+        row = row[row.gt(row_sum * .01)]
+        ax.pie(row, labels=row.index, startangle=30, autopct=lambda val: '%s PB' % bytes_to_pb_string(val/100*row_sum))
         ax.set_title(idx)
     
     plt.tight_layout()
