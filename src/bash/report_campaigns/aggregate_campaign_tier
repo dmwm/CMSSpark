@@ -25,18 +25,16 @@ fi
 
 echo 'Aggregating for date: '$date
 
-location=/cms/users/$USER/campaign_tier
+hdir=/cms/users/$USER/campaign_tier
 
 if [[ -n $2 ]]
 then
-    location=$2
+    hdir=$2
 fi
 
-hdir=$location
-
-if [[ $location != hdfs://* ]]
+if [[ $hdir != hdfs://* ]]
 then
-    hdir=hdfs://$location
+    hdir=hdfs://$hdir
 fi
 
 echo 'Results path: '$hdir
@@ -45,7 +43,7 @@ echo 'Results path: '$hdir
 scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
 
 # Remove previous data first
-hadoop fs -rm -r -skipTrash $location
+hadoop fs -rm -r -skipTrash $hdir
 
 PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_campaign_tier.py --fout=$hdir --yarn --verbose --date=$date
 

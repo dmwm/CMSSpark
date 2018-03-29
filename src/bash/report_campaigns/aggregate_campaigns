@@ -25,23 +25,25 @@ fi
 
 echo 'Aggregating for date: '$date
 
-location=/cms/users/$USER/campaigns
+hdir=/cms/users/$USER/campaigns
 
 if [[ -n $2 ]]
 then
-    location=$2
+    hdir=$2
 fi
 
-echo 'Results path: '$location
+if [[ $hdir != hdfs://* ]]
+then
+    hdir=hdfs://$hdir
+fi
 
-# Results will be put here
-hdir=hdfs://$location
+echo 'Results path: '$hdir
 
 # Get current script's absolute path
 scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
 
 # Remove previous data first
-hadoop fs -rm -r -skipTrash $location
+hadoop fs -rm -r -skipTrash $hdir
 
 PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_campaigns.py --fout=$hdir --yarn --verbose --date=$date
 

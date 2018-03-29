@@ -26,14 +26,19 @@ fi
 
 echo 'Aggregating for date: '$date
 
-location=/cms/users/$USER/leftovers
+hdir=/cms/users/$USER/leftovers
 
 if [[ -n $2 ]]
 then
-    location=$2
+    hdir=$2
 fi
 
-echo 'Results path: '$location
+if [[ $hdir != hdfs://* ]]
+then
+    hdir=hdfs://$hdir
+fi
+
+echo 'Results path: '$hdir
 
 inst='all'
 if [[ -n $3 ]]
@@ -43,14 +48,11 @@ fi
 
 echo 'DBS instances: '$inst
 
-# Results will be put here
-hdir=hdfs://$location
-
 # Get current script's absolute path
 scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
 
 # Remove previous data first
-hadoop fs -rm -r -skipTrash $location
+hadoop fs -rm -r -skipTrash $hdir
 
 PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_leftovers.py --fout=$hdir --yarn --verbose --date=$date --inst=$inst
 
