@@ -32,10 +32,14 @@ then
     location=$2
 fi
 
-echo 'Results path: '$location
+hdir=$location
 
-# Results will be put here
-hdir=hdfs://$location
+if [[ $location != hdfs://* ]]
+then
+    hdir=hdfs://$location
+fi
+
+echo 'Results path: '$hdir
 
 # Get current script's absolute path
 scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
