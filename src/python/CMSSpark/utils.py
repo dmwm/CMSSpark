@@ -90,7 +90,11 @@ def safe_round(value, decimal_points=1):
     If all of them are zeros and -1 < value < 1, rounds to the first
     non-zero decimal digit.
     """
-    sign = 1 if value >= 0 else -1
+    sign = 1
+    if value < 0:
+        sign = -1
+    elif value == 0:
+        return 0.0
     value = abs(value)
     ndigits = int(1 - log(value, 10))
     return round(value, max(decimal_points, ndigits)) * sign
