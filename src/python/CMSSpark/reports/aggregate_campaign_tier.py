@@ -143,26 +143,6 @@ def run(fout, date, yarn=None, verbose=None, inst='GLOBAL', limit=100):
     result = result.orderBy(result.sum_size, ascending=False)\
                    .drop('sum_size')\
                    .limit(limit)
-
-    # , 'phedex_size': 'sum'
-    # result = result.withColumn('campaign', extract_campaign_udf(result.dataset))\
-    #                .withColumn('tier', extract_tier_udf(result.dataset))\
-    #                .groupBy('campaign')\
-    #                .agg({'tier': 'collect_list', 'phedex_size': 'collect_list', 'dbs_size': 'collect_list', 'size_on_disk': 'sum'})\
-    #                .withColumnRenamed('collect_list(tier)', 'tiers_list')\
-    #                .withColumnRenamed('collect_list(phedex_size)', 'phedex_sizes_list')\
-    #                .withColumnRenamed('collect_list(dbs_size)', 'dbs_sizes_list')\
-    #                .withColumnRenamed('sum(size_on_disk)', 'size_on_disk')
-
-    # zip_ = udf(lambda tier, dbs, phedex: list(zip(tier, dbs, phedex)), 
-    # ArrayType(StructType([StructField("_1", StringType()), StructField("_2", DoubleType()), StructField("_3", LongType())])))
-
-    # result = result.withColumn('tiers', zip_(result.tiers_list, result.dbs_sizes_list, result.phedex_sizes_list))\
-    #                .drop('tiers_list')\
-    #                .drop('phedex_sizes_list')\
-    #                .drop('dbs_sizes_list')
-    
-    # result = result.limit(limit)
     
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
