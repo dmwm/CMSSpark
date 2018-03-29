@@ -1,0 +1,103 @@
+#!/bin/sh
+
+if [ $# -eq 0 ] || [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ]; then
+    echo "Usage: ./"$(basename "$0")" <date> [location]"
+    echo "Example: ./"$(basename "$0")" 20170228 /cms/users/$USER/campaigns"
+    echo "<date> = PhEDEx date in the following format: YYYYMMDD."
+    echo "[location] = hdfs location of resulting files. Default: /cms/users/$USER/campaigns"
+    exit 0
+fi
+
+# Parse date argument
+date=''
+
+if [[ -n $1 ]]
+then
+    date=$1
+fi
+
+date_length=${#date}
+if [[ $date_length != 8 ]]
+then
+    echo 'Invalid date. Correct format: YYYYMMDD. Example: 20170228'
+    exit
+fi
+
+echo 'Aggregating for date: '$date
+
+hdir=/cms/users/$USER/campaigns
+
+if [[ -n $2 ]]
+then
+    hdir=$2
+fi
+
+if [[ $hdir != hdfs://* ]]
+then
+    hdir=hdfs://$hdir
+fi
+
+echo 'Results path: '$hdir
+
+# Get current script's absolute path
+scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
+
+# Remove previous data first
+hadoop fs -rm -r -skipTrash $hdir
+
+PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_campaigns.py --fout=$hdir --yarn --verbose --date=$date
+
+hadoop fs -test -e $hdir
+exists=$?
+
+# Download results and recreate csv files only if results exist in hdfs
+if [[ $exists -eq 0 ]]
+then
+    result_dir="$(basename $hdir)"
+
+    # Delete previously downloaded directory and download new one
+    rm -rf "$scriptpath/$result_dir"
+    hadoop fs -get $hdir $scriptpath
+
+    # Extract PhEDEx header
+    head -1 $scriptpath/$result_dir/phedex_full/part-00000 > $scriptpath/campaigns_phedex_full_df.csv
+
+    # Concatenate all PhEDEx parts except header
+    header=`cat $scriptpath/campaigns_phedex_full_df.csv`
+    cat $scriptpath/$result_dir/phedex_full/part* | grep -v $header >> $scriptpath/campaigns_phedex_full_df.csv
+
+    # Extract DBS header
+    head -1 $scriptpath/$result_dir/dbs_full/part-00000 > $scriptpath/campaigns_dbs_full_df.csv
+
+    # Concatenate all DBS parts except header
+    header=`cat $scriptpath/campaigns_dbs_full_df.csv`
+    cat $scriptpath/$result_dir/dbs_full/part* | grep -v $header >> $scriptpath/campaigns_dbs_full_df.csv
+
+    # Extract PhEDEx header
+    head -1 $scriptpath/$result_dir/phedex_disk_only/part-00000 > $scriptpath/campaigns_phedex_disk_only_df.csv
+
+    # Concatenate all PhEDEx parts except header
+    header=`cat $scriptpath/campaigns_phedex_disk_only_df.csv`
+    cat $scriptpath/$result_dir/phedex_disk_only/part* | grep -v $header >> $scriptpath/campaigns_phedex_disk_only_df.csv
+
+    # Extract DBS header
+    head -1 $scriptpath/$result_dir/dbs_disk_only/part-00000 > $scriptpath/campaigns_dbs_disk_only_df.csv
+
+    # Concatenate all DBS parts except header
+    header=`cat $scriptpath/campaigns_dbs_disk_only_df.csv`
+    cat $scriptpath/$result_dir/dbs_disk_only/part* | grep -v $header >> $scriptpath/campaigns_dbs_disk_only_df.csv
+
+    # Extract site - campaign count header
+    head -1 $scriptpath/$result_dir/site_campaign_count_full/part-00000 > $scriptpath/site_campaign_count_full_df.csv
+
+    # Concatenate all site - campaign count parts except header
+    header=`cat $scriptpath/site_campaign_count_full_df.csv`
+    cat $scriptpath/$result_dir/site_campaign_count_full/part* | grep -v $header >> $scriptpath/site_campaign_count_full_df.csv
+
+    # Extract site - campaign count header
+    head -1 $scriptpath/$result_dir/site_campaign_count_disk_only/part-00000 > $scriptpath/site_campaign_count_disk_only_df.csv
+
+    # Concatenate all site - campaign count parts except header
+    header=`cat $scriptpath/site_campaign_count_disk_only_df.csv`
+    cat $scriptpath/$result_dir/site_campaign_count_disk_only/part* | grep -v $header >> $scriptpath/site_campaign_count_disk_only_df.csv
+fi

@@ -1,0 +1,68 @@
+#!/bin/sh
+
+if [ $# -eq 0 ] || [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ]; then
+    echo "Usage: ./"$(basename "$0")" <date> [location]"
+    echo "Example: ./"$(basename "$0")" 20170228 /cms/users/$USER/phedex_datasets"
+    echo "<date> = PhEDEx date in the following format: YYYYMMDD."
+    echo "[location] = hdfs location of resulting files. Default: /cms/users/$USER/phedex_datasets"
+    exit 0
+fi
+
+# Parse date argument
+date=''
+
+if [[ -n $1 ]]
+then
+    date=$1
+fi
+
+date_length=${#date}
+if [[ $date_length != 8 ]]
+then
+    echo 'Invalid date. Correct format: YYYYMMDD. Example: 20170228'
+    exit
+fi
+
+echo 'Aggregating for date: '$date
+
+hdir=/cms/users/$USER/phedex_datasets
+
+if [[ -n $2 ]]
+then
+    hdir=$2
+fi
+
+if [[ $hdir != hdfs://* ]]
+then
+    hdir=hdfs://$hdir
+fi
+
+echo 'Results path: '$hdir
+
+# Get current script's absolute path
+scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
+
+# Remove previous data first
+hadoop fs -rm -r -skipTrash $hdir
+
+PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_phedex.py --fout=$hdir --yarn --verbose --date=$date
+
+hadoop fs -test -e $hdir
+exists=$?
+
+# Download results and recreate csv files only if results exist in hdfs
+if [[ $exists -eq 0 ]]
+then
+    result_dir="$(basename $hdir)"
+
+    # Delete previously downloaded directory and download new one
+    rm -rf "$scriptpath/$result_dir"
+    hadoop fs -get $hdir $scriptpath
+
+    # extract header
+    head -1 $scriptpath/$result_dir/part-00000 > $scriptpath/phedex_df.csv
+
+    # concatenate all parts except header
+    header=`cat $scriptpath/phedex_df.csv`
+    cat $scriptpath/$result_dir/part* | grep -v $header >> $scriptpath/phedex_df.csv
+fi

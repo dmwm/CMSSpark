@@ -1,0 +1,50 @@
+#!/bin/sh
+
+if [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ]; then
+    echo "Usage: ./"$(basename "$0")" [location]"
+    echo "Example: ./"$(basename "$0")" /cms/users/$USER/dbs_datasets"
+    echo "[location] = hdfs location of resulting files. Default: /cms/users/$USER/dbs_datasets"
+    exit 0
+fi
+
+hdir=/cms/users/$USER/dbs_datasets
+
+if [[ -n $1 ]]
+then
+    hdir=$1
+fi
+
+if [[ $hdir != hdfs://* ]]
+then
+    hdir=hdfs://$hdir
+fi
+
+echo 'Results path: '$hdir
+
+# Get current script's absolute path
+scriptpath="$( cd "$(dirname "$0")" ; pwd -P )"
+
+# Remove previous data first
+hadoop fs -rm -r -skipTrash $hdir
+
+PYTHONPATH=$scriptpath/../../python $scriptpath/../../../bin/run_spark /reports/aggregate_dbs.py --fout=$hdir --yarn --verbose
+
+hadoop fs -test -e $hdir
+exists=$?
+
+# Download results and recreate csv files only if results exist in hdfs
+if [[ $exists -eq 0 ]]
+then
+    result_dir="$(basename $hdir)"
+
+    # Delete previously downloaded directory and download new one
+    rm -rf "$scriptpath/$result_dir"
+    hadoop fs -get $hdir $scriptpath
+
+    # extract header
+    head -1 $scriptpath/$result_dir/part-00000 > $scriptpath/dbs_df.csv
+
+    # concatenate all parts except header
+    header=`cat $scriptpath/dbs_df.csv`
+    cat $scriptpath/$result_dir/part* | grep -v $header >> $scriptpath/dbs_df.csv
+fi
