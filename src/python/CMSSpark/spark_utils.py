@@ -168,6 +168,10 @@ def spark_context(appname='cms', yarn=None, verbose=False, python_files=[]):
 def delete_hadoop_directory(path):
     os.popen("hadoop fs -rm -r \"" + path + "\"")
 
+def unix2human(tstamp):
+    "Convert unix time stamp into human readable format"
+    return time.strftime('%Y%m%d', time.gmtime(tstamp))
+
 def phedex_summary_tables(sqlContext, hdir='hdfs:///cms/phedex', verbose=False):
     """
     Parse PhEDEx records on HDFS via mapping PhEDEx tables to Spark SQLContext.

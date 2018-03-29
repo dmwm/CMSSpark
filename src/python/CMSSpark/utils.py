@@ -7,6 +7,7 @@ Set of utililities
 """
 
 # system modules
+from math import log
 import os
 import gzip
 import time
@@ -76,6 +77,34 @@ def split_date(date):
     val = str(date)
     return val[:4], val[4:6], val[6:]
 
+def bytes_to_readable(num, suffix='B'):
+    for unit in ['','K','M','G','T','P','E','Z']:
+        if abs(num) < 1000.0:
+            return "%3.1f %s%s" % (num, unit, suffix)
+        num /= 1000.0
+    return "%.1f %s%s" % (num, 'Yi', suffix)
+
+def safe_round(value, decimal_points=1):
+    """
+    Rounds float to show at least decimal_points decimal digits.
+    If all of them are zeros and -1 < value < 1, rounds to the first
+    non-zero decimal digit.
+    """
+    sign = 1
+    if value < 0:
+        sign = -1
+    elif value == 0:
+        return 0.0
+    value = abs(value)
+    ndigits = int(1 - log(value, 10))
+    return round(value, max(decimal_points, ndigits)) * sign
+
+def bytes_to_pb_string(bytes, decimal_points=1):
+    return str(safe_round(bytes / float(1000**5), decimal_points))
+
+def bytes_to_pib_string(bytes, decimal_points=1):
+    return str(safe_round(bytes / float(1024**5), decimal_points))
+
 def info(func):
     "decorator to spark workflow"
     def wrapper():
@@ -86,3 +115,22 @@ def info(func):
         print('Elapsed time: %s sec' % elapsed_time(time0))
     wrapper.__name__ = func.__name__
     return wrapper
+
+def info_save(file_path):
+    def real_info_save(func):
+        "Decorator to spark workflow that will measure how long it took to execute a job and write result to specified file"
+        def wrapper():
+            time0 = time.time()
+            func()
+            elapsed = elapsed_time(time0)
+            print('Start time  : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time0)))
+            print('End time    : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(time.time())))
+            print('Elapsed time: %s' % elapsed)
+
+            # Save time info to file
+            with open(file_path, 'w') as f:
+                f.write(elapsed)
+        
+        wrapper.__name__ = func.__name__
+        return wrapper
+    return real_info_save

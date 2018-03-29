@@ -90,3 +90,20 @@ ENV/
 
 # PyCharm IDE
 .idea
+
+# Reports wiki repo
+CERNTasks.wiki/
+
+macOS stuff:
+.DS_Store
+
+# Auto-generated files
+datasets/
+campaigns/
+*_datasets/
+*_plots/
+*.csv
+*.pdf
+spark_exec_time_*.txt
+_SUCCESS
+part-*
