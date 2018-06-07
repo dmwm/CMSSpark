@@ -13,7 +13,7 @@ droot=`python -c "import CMSSpark; print '/'.join(CMSSpark.__file__.split('/')[:
 cmsspark=$droot/$1
 
 # enable simple secret to run in non-yarn mode
-conf="--conf spark.authenticate.secret=cmsspark"
+conf="--conf spark.authenticate.secret=cmsspark --conf spark.yarn.security.tokens.hive.enabled=false"
 
 # look if we requested to show full log output, to disable spark output
 # client should setup his/her own log4j.properties via WMA_LOG4J environment variable
