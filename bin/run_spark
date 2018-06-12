@@ -24,6 +24,10 @@ if [[ "$@" =~ "--no-log4j" ]]; then
     fi
 fi
 
+# from https://cern.service-now.com/service-portal/view-request.do?n=RQF0876659
+# we can specify in jar files as following (before Spark 2.0):
+# --packages com.databricks:spark-csv_2.11:1.6.0
+
 # set avro jars
 csvjar=/afs/cern.ch/user/v/valya/public/spark/spark-csv-assembly-1.4.0.jar
 avrojar=/afs/cern.ch/user/v/valya/public/spark/avro-mapred-1.7.6-cdh5.7.6.jar
