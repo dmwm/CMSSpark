@@ -1,5 +1,9 @@
 # CMSSpark
 
+[![License:MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/vkuznet/LICENSE)
+[![DOI](https://zenodo.org/badge/74044584.svg)](https://zenodo.org/badge/latestdoi/74044584)
+[![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/intent/tweet?text=CMSSpark%20framework%20&url=https://github.com/vkuznet/CMSSpark&hashtags=cms,spark,BigData,lhc,physics)
+
 Set of spark scripts to parse and extract useful aggregated info from various
 CMS data streams on HDFS. So far, it supports DBS, PhEDEx, AAA, EOS, CMSSW
 data parsing on HDFS.
