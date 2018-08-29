@@ -27,7 +27,7 @@ from CMSSpark.conf import OptionParser
 def jm_date(date):
     "Convert given date into JobMonitoring date format"
     if  not date:
-        date = time.strftime("year=%Y/month=%-m/date=%d", time.gmtime(time.time()-60*60*24))
+        date = time.strftime("year=%Y/month=%-m/day=%d", time.gmtime(time.time()-60*60*24))
         return date
     if  len(date) != 8:
         raise Exception("Given date %s is not in YYYYMMDD format")
