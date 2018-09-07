@@ -39,7 +39,7 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None, inst='G
     fdf = tables['fdf']
 
     # join tables
-    cols = ['d_dataset','d_dataset_id', 'b_block_id','b_file_count','f_block_id','f_file_id','f_dataset_id','f_event_count','f_file_size']
+    cols = ['d_dataset','d_dataset_id', 'd_creation_date', 'b_block_id','b_file_count','f_block_id','f_file_id','f_dataset_id','f_event_count','f_file_size']
 
     # join tables
     stmt = 'SELECT %s FROM ddf JOIN bdf on ddf.d_dataset_id = bdf.b_dataset_id JOIN fdf on bdf.b_block_id=fdf.f_block_id' % ','.join(cols)
@@ -51,12 +51,13 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None, inst='G
 
     # construct aggregation
     fjoin = joins\
-            .groupBy(['d_dataset'])\
+            .groupBy(['d_dataset', 'd_creation_date'])\
             .agg({'b_file_count':'sum', 'f_event_count':'sum', 'f_file_size':'sum'})\
             .withColumnRenamed('d_dataset', 'dataset')\
             .withColumnRenamed('sum(b_file_count)', 'nfiles')\
             .withColumnRenamed('sum(f_event_count)', 'nevents')\
-            .withColumnRenamed('sum(f_file_size)', 'size')
+            .withColumnRenamed('sum(f_file_size)', 'size')\
+            .withColumnRenamed('d_creation_date', 'creation_date')
 
     # keep table around
     fjoin.persist(StorageLevel.MEMORY_AND_DISK)
