@@ -85,6 +85,7 @@ gzip ${wdir}/phedex_${mind}_${maxd}.csv
 ifile=phedex_${mind}_${maxd}.csv.gz
 edir=/afs/cern.ch/user/v/valya/public/analytics/ecom17
 edir=/eos/user/v/valya/analytics
+edir=/eos/user/c/cmspopdb/popularity
 if [ ! -f $edir/$ifile ]; then
     if [ -f $edir/phedex_current365.csv.gz ]; then
         # remove previous file it points to
