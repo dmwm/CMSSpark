@@ -32,6 +32,10 @@ fi
 csvjar=/afs/cern.ch/user/v/valya/public/spark/spark-csv-assembly-1.4.0.jar
 avrojar=/afs/cern.ch/user/v/valya/public/spark/avro-mapred-1.7.6-cdh5.7.6.jar
 sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
+jars="$csvjar,$avrojar"
+if [ -n "$sparkexjar" ]; then
+    jars="$jars,$sparkexjar"
+fi
 mapreduce=/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
 if [ ! -f $mapreduce ]; then
     mapreduct=/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
@@ -71,7 +75,7 @@ if [ -n "$yarn" ]; then
     # once CERN IT will resolve python version we can remove PYSPARK_PYTHON
     echo "YARN execution: $conf"
     if [ "$cvmfs" == "true" ]; then
-        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+        spark-submit --jars $jars \
             --master yarn \
             --executor-memory 5g \
             --driver-class-path '/usr/lib/hive/lib/*' \
@@ -81,7 +85,7 @@ if [ -n "$yarn" ]; then
             --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
             $conf $cmsspark $args
     else
-        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+        spark-submit --jars $jars \
             --master yarn \
             --executor-memory 5g \
             --driver-class-path '/usr/lib/hive/lib/*' \
@@ -98,7 +102,7 @@ else
     #   optionally increase driver memory with --driver-memory 2G (default 1G)
     echo "LOCAL (NO-YARN) execution"
     if [ "$cvmfs" == "true" ]; then
-        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+        spark-submit --jars $jars \
             --executor-memory $((`nproc`/4))G \
             --master local[$((`nproc`/4))] \
             --driver-class-path '/usr/lib/hive/lib/*' \
@@ -108,7 +112,7 @@ else
             --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
             $conf $cmsspark $args
     else
-        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+        spark-submit --jars $jars \
             --executor-memory $((`nproc`/4))G \
             --master local[$((`nproc`/4))] \
             --driver-class-path '/usr/lib/hive/lib/*' \
