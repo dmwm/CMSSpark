@@ -31,7 +31,7 @@ fi
 # set avro jars
 csvjar=/afs/cern.ch/user/v/valya/public/spark/spark-csv-assembly-1.4.0.jar
 avrojar=/afs/cern.ch/user/v/valya/public/spark/avro-mapred-1.7.6-cdh5.7.6.jar
-sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
+sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* 2> /dev/null | tail -1`
 jars="$csvjar,$avrojar"
 if [ -n "$sparkexjar" ]; then
     jars="$jars,$sparkexjar"
