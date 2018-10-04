@@ -35,6 +35,9 @@ sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* 2> /dev/null | tail -
 jars="$csvjar,$avrojar"
 if [ -n "$sparkexjar" ]; then
     jars="$jars,$sparkexjar"
+else
+    sparkexjar=/afs/cern.ch/user/v/valya/public/spark/spark-examples-1.6.0-cdh5.15.1-hadoop2.6.0-cdh5.15.1.jar
+    jars="$jars,$sparkexjar"
 fi
 mapreduce=/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
 if [ ! -f $mapreduce ]; then
