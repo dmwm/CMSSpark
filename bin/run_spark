@@ -34,7 +34,18 @@ fi
 # set avro jars
 csvjar=/afs/cern.ch/user/v/valya/public/spark/spark-csv-assembly-1.4.0.jar
 avrojar=/afs/cern.ch/user/v/valya/public/spark/avro-mapred-1.7.6-cdh5.7.6.jar
-sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* | tail -1`
+sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* 2> /dev/null | tail -1`
+jars="$csvjar,$avrojar"
+if [ -n "$sparkexjar" ]; then
+    jars="$jars,$sparkexjar"
+else
+    sparkexjar=/afs/cern.ch/user/v/valya/public/spark/spark-examples-1.6.0-cdh5.15.1-hadoop2.6.0-cdh5.15.1.jar
+    jars="$jars,$sparkexjar"
+fi
+mapreduce=/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
+if [ ! -f $mapreduce ]; then
+    mapreduct=/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
+fi
 
 args="${@:2}"
 echo "$cmsspark $args"
@@ -44,14 +55,14 @@ yarn=`echo $args | grep -- "--yarn"`
 # https://cern.service-now.com/service-portal/article.do?n=KB0005361
 cvmfs=""
 ctest=`echo $args | grep -- "--cvmfs"`
-if [ -n "$ctest" ]; then
-if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh ] && \
-   [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ]; then
-    echo "Enable CVMFS ..."
-    source /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh
-    source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
-    cvmfs="true"
-fi
+if [ -n "`hostname -s | grep ^lxplus`" ] || [ -n "$ctest" ]; then
+    if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh ] && \
+       [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ]; then
+        echo "Enable CVMFS ..."
+        source /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh
+        source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
+        cvmfs="true"
+    fi
 fi
 
 if [ "$2" == "-h" ] || [ "$2" == "--help" ] || [ "$2" == "-help" ]; then
@@ -70,17 +81,17 @@ if [ -n "$yarn" ]; then
     # once CERN IT will resolve python version we can remove PYSPARK_PYTHON
     echo "YARN execution: $conf"
     if [ "$cvmfs" == "true" ]; then
-        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+        spark-submit --jars $jars \
             --master yarn \
             --executor-memory 5g \
             --driver-class-path '/usr/lib/hive/lib/*' \
             --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
             --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python \
-            --conf spark.driver.extraClassPath='/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar' \
+            --conf spark.driver.extraClassPath=$mapreduce \
             --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
             $conf $cmsspark $args
     else
-        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+        spark-submit --jars $jars \
             --master yarn \
             --executor-memory 5g \
             --driver-class-path '/usr/lib/hive/lib/*' \
@@ -97,17 +108,17 @@ else
     #   optionally increase driver memory with --driver-memory 2G (default 1G)
     echo "LOCAL (NO-YARN) execution"
     if [ "$cvmfs" == "true" ]; then
-        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+        spark-submit --jars $jars \
             --executor-memory $((`nproc`/4))G \
             --master local[$((`nproc`/4))] \
             --driver-class-path '/usr/lib/hive/lib/*' \
             --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
             --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python \
-            --conf spark.driver.extraClassPath='/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar' \
+            --conf spark.driver.extraClassPath=$mapreduce \
             --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
             $conf $cmsspark $args
     else
-        spark-submit --jars $csvjar,$avrojar,$sparkexjar \
+        spark-submit --jars $jars \
             --executor-memory $((`nproc`/4))G \
             --master local[$((`nproc`/4))] \
             --driver-class-path '/usr/lib/hive/lib/*' \
