@@ -2,6 +2,9 @@
 # Author: Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
 # A wrapper script to submit spark job with CMSSpark python script.
 
+# on vocms092 spark-submit resides in non-standard location
+export PATH=$PATH:/usr/hdp/spark/bin
+
 # test arguments
 if [ "$#" -eq 0 ]; then
     echo "Usage: run_spark <cmsspark_script> <options>"
