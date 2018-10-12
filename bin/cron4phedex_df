@@ -8,7 +8,12 @@
 addr=vkuznet@gmail.com
 
 # DO NOT EDIT BELOW THIS LINE
+
+# location of phedex dataframes
 idir=$1
+# location of final phedex dataframe after merge
+localDir=$2
+
 mkdir -p $idir
 me=$(dirname "$0")
 wdir=`echo $me | sed -e "s,/bin,,g"`
@@ -80,6 +85,7 @@ trap "echo \"$msg\" | mail -s \"Cron alert Phedex df\" \"$addr\"" ERR
 
 $cmd >> $log 2>&1
 gzip ${wdir}/phedex_${mind}_${maxd}.csv
+mv ${wdir}/phedex_${mind}_${maxd}.csv $localDir
 
 # move file to permanent place
 ifile=phedex_${mind}_${maxd}.csv.gz
