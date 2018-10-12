@@ -1,0 +1,51 @@
+#!/bin/bash
+# this script is designed to be used in crontab, i.e. with full path
+# adjust script to put your desired notification address if necessary
+#
+# it should be called with absolute path
+
+#addr=cms-popdb-alarms@cern.ch
+addr=vkuznet@gmail.com
+
+# DO NOT EDIT BELOW THIS LINE
+idir=$1
+mkdir -p $idir
+me=$(dirname "$0")
+wdir=`echo $me | sed -e "s,/bin,,g"`
+mkdir -p $wdir/logs
+log=$wdir/logs/dbs_condor_df-`date +%Y%m%d`.log
+export PYTHONPATH=$wdir/src/python:$PYTHONPATH
+export PATH=$wdir/bin:$PATH
+
+# Kerberos
+conf=$wdir/etc/conf.json
+keytab=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['keytab']"`
+principal=`klist -k "$keytab" | tail -1 | awk '{print $2}'`
+echo "principal=$principal" >> $log 2>&1
+kinit $principal -k -t "$keytab" >> $log 2>&1
+if [ $? == 1 ]; then
+    echo "Unable to perform kinit" >> $log 2>&1
+    exit 1
+fi
+klist -k "$keytab" >> $log 2>&1
+
+today=`date +%Y%m%d`
+pdir=hdfs:///cms/dbs_condor/dataset
+idir=$1
+mkdir -p $idir
+
+# we look-up an yesterday date to fetch data from HDFS
+year=`date +%Y`
+month=`date +%m`
+day=`date +%d -d "yesterday"`
+odir=${idir}/${year}/data
+hadoop fs -ls $pdir/$year/$month/$day 2>&1 1>& /dev/null
+if [ $? -eq 0 ]; then
+    idir=$pdir/$year/$month/$day
+    fout="$odir/dataset-${year}${month}${day}.csv"
+    hadoop fs -cat $idir/part-00000 2>/dev/null | head -1 > $fout 2> $log
+    header=`cat $fout`
+    hadoop fs -cat $idir/part-* 2>/dev/null | grep -v $header | sed -e "s,\",,g" >> $fout 2>> $log
+else
+    echo "HDFS area $pdir/$year/$month/$day does not exist ..." >> $log
+fi
