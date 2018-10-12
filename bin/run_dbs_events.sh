@@ -18,7 +18,10 @@ fi
 mkdir -p $odir
 
 # run dbs_events.py workflow
-PYTHONPATH=$PWD/src/python bin/run_spark dbs_events.py --yarn --fout=$hdir
+echo "PATH=$PATH"
+echo "PYTHONPATH=$PYTHONPATH"
+echo "PWD=$PWD"
+run_spark dbs_events.py --yarn --fout=$hdir
 
 # get back data frame parts
 hadoop fs -get /cms/dbs_events $odir/
