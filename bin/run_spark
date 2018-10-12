@@ -34,13 +34,18 @@ fi
 # set avro jars
 csvjar=/afs/cern.ch/user/v/valya/public/spark/spark-csv-assembly-1.4.0.jar
 avrojar=/afs/cern.ch/user/v/valya/public/spark/avro-mapred-1.7.6-cdh5.7.6.jar
-sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* 2> /dev/null | tail -1`
 jars="$csvjar,$avrojar"
-if [ -n "$sparkexjar" ]; then
+if [ -f /usr/hdp/spark-2/examples/jars/spark-examples_2.11-2.3.2.jar ]; then
+    sparkexjar=/usr/hdp/spark-2/examples/jars/spark-examples_2.11-2.3.2.jar
     jars="$jars,$sparkexjar"
 else
-    sparkexjar=/afs/cern.ch/user/v/valya/public/spark/spark-examples-1.6.0-cdh5.15.1-hadoop2.6.0-cdh5.15.1.jar
-    jars="$jars,$sparkexjar"
+    sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* 2> /dev/null | tail -1`
+    if [ -n "$sparkexjar" ]; then
+        jars="$jars,$sparkexjar"
+    else
+        sparkexjar=/afs/cern.ch/user/v/valya/public/spark/spark-examples-1.6.0-cdh5.15.1-hadoop2.6.0-cdh5.15.1.jar
+        jars="$jars,$sparkexjar"
+    fi
 fi
 mapreduce=/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
 if [ ! -f $mapreduce ]; then
