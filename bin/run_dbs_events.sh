@@ -7,7 +7,7 @@ fi
 
 wdir=$1
 odir=$wdir/dbs_events
-odf=$wdir/dbs_df.csv
+odf=$wdir/dbs_events.csv
 hdir=hdfs:///cms/dbs_events
 
 # remove existing hadoop area
