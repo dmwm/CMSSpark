@@ -85,7 +85,7 @@ trap "echo \"$msg\" | mail -s \"Cron alert Phedex df\" \"$addr\"" ERR
 
 $cmd >> $log 2>&1
 gzip ${wdir}/phedex_${mind}_${maxd}.csv
-mv ${wdir}/phedex_${mind}_${maxd}.csv $localDir
+mv ${wdir}/phedex_${mind}_${maxd}.csv.gz $localDir
 
 # move file to permanent place
 ifile=phedex_${mind}_${maxd}.csv.gz
