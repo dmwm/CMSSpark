@@ -15,7 +15,7 @@ import json
 
 # pyspark modules
 from pyspark import SparkContext, StorageLevel
-from pyspark.sql import HiveContext
+from pyspark.sql import SQLContext
 from pyspark.sql.functions import lit, sum, count, col, split
 from pyspark.sql.functions import udf
 from pyspark.sql.types import StringType, IntegerType
@@ -48,7 +48,7 @@ def run(date, fout, yarn=None, verbose=None):
     """
     # define spark context, it's main object which allow to communicate with spark
     ctx = spark_context('cms', yarn, verbose)
-    sqlContext = HiveContext(ctx)
+    sqlContext = SQLContext(ctx)
 
     fromdate = '%s-%s-%s' % (date[:4], date[4:6], date[6:])
     todate = fromdate

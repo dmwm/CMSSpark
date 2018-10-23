@@ -16,7 +16,7 @@ import datetime
 import calendar
 
 from pyspark import SparkContext, StorageLevel
-from pyspark.sql import HiveContext
+from pyspark.sql import SQLContext
 
 # CMSSpark modules
 from CMSSpark.spark_utils import avro_rdd, print_rows
@@ -94,7 +94,7 @@ def run(fout, hdir, date, yarn=None, verbose=None):
 
     # define spark context, it's main object which allow to communicate with spark
     ctx = spark_context('cms', yarn, verbose)
-    sqlContext = HiveContext(ctx)
+    sqlContext = SQLContext(ctx)
 
     # read DBS and Phedex tables
     # construct here hdfs path and pass empty string as a date

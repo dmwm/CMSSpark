@@ -16,7 +16,7 @@ droot=`python -c "import CMSSpark; print '/'.join(CMSSpark.__file__.split('/')[:
 cmsspark=$droot/$1
 
 # enable simple secret to run in non-yarn mode
-conf="--conf spark.authenticate.secret=cmsspark --conf spark.yarn.security.tokens.hive.enabled=false"
+conf="--conf spark.authenticate.secret=cmsspark --conf spark.yarn.security.tokens.hive.enabled=false --conf spark.driver.port=5001 --conf spark.blockManager.port=5101 --conf spark.ui.port=5201"
 
 # look if we requested to show full log output, to disable spark output
 # client should setup his/her own log4j.properties via WMA_LOG4J environment variable
@@ -89,8 +89,6 @@ if [ -n "$yarn" ]; then
         spark-submit --jars $jars \
             --master yarn \
             --executor-memory 5g \
-            --driver-class-path '/usr/lib/hive/lib/*' \
-            --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
             --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python \
             --conf spark.driver.extraClassPath=$mapreduce \
             --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
@@ -99,8 +97,6 @@ if [ -n "$yarn" ]; then
         spark-submit --jars $jars \
             --master yarn \
             --executor-memory 5g \
-            --driver-class-path '/usr/lib/hive/lib/*' \
-            --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
             $conf $cmsspark $args
     fi
 else
@@ -116,8 +112,6 @@ else
         spark-submit --jars $jars \
             --executor-memory $((`nproc`/4))G \
             --master local[$((`nproc`/4))] \
-            --driver-class-path '/usr/lib/hive/lib/*' \
-            --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
             --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python \
             --conf spark.driver.extraClassPath=$mapreduce \
             --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
@@ -126,8 +120,6 @@ else
         spark-submit --jars $jars \
             --executor-memory $((`nproc`/4))G \
             --master local[$((`nproc`/4))] \
-            --driver-class-path '/usr/lib/hive/lib/*' \
-            --driver-java-options '-Dspark.executor.extraClassPath=/usr/lib/hive/lib/*' \
             $conf $cmsspark $args
     fi
 fi

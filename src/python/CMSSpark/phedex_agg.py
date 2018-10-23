@@ -15,7 +15,7 @@ import json
 
 # pyspark modules
 from pyspark import SparkContext, StorageLevel
-from pyspark.sql import HiveContext
+from pyspark.sql import SQLContext
 from pyspark.sql.functions import lit, sum, count, col, split
 from pyspark.sql import functions as F
 from pyspark.sql.functions import udf
@@ -50,7 +50,7 @@ def run(fout, yarn=None, verbose=None):
     """
     # define spark context, it's main object which allow to communicate with spark
     ctx = spark_context('cms', yarn, verbose)
-    sqlContext = HiveContext(ctx)
+    sqlContext = SQLContext(ctx)
 
     # read Phedex tables
     tables = {}

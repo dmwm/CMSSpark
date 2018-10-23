@@ -26,7 +26,6 @@ from CMSSpark.schemas import schema_jm, schema_cmssw, schema_asodb, schema_empty
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import Row
 from pyspark.sql import SQLContext
-from pyspark.sql import HiveContext
 from pyspark.sql import DataFrame
 from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField, StringType, BooleanType, LongType
 from pyspark.sql.functions import split, col
