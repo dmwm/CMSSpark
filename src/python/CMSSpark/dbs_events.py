@@ -33,7 +33,7 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None, inst='G
 
     # read DBS and Phedex tables
     tables = {}
-    tables.update(dbs_tables(sqlContext, inst=inst, verbose=verbose))
+    tables.update(dbs_tables(sqlContext, inst=inst, verbose=verbose, tables=['ddf', 'bdf', 'fdf']))
     ddf = tables['ddf']
     bdf = tables['bdf']
     fdf = tables['fdf']
