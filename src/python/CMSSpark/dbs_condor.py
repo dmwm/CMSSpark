@@ -54,7 +54,8 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
 
     # read DBS and Phedex tables
     tables = {}
-    tables.update(dbs_tables(sqlContext, inst=inst, verbose=verbose))
+    dbs_tables = ['daf', 'ddf', 'bdf', 'fdf', 'aef', 'pef', 'mcf', 'ocf', 'rvf']
+    tables.update(dbs_tables(sqlContext, inst=inst, verbose=verbose, tables=dbs_tables))
 #    tables.update(phedex_tables(sqlContext, verbose=verbose))
 #    phedex_df = tables['phedex_df']
     daf = tables['daf'] # dataset access table
