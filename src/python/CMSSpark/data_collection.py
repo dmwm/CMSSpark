@@ -11,7 +11,7 @@ import calendar
 import argparse
 
 from pyspark import SparkContext, StorageLevel
-from pyspark.sql import HiveContext
+from pyspark.sql import SQLContext
 
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables, jm_tables
@@ -408,7 +408,7 @@ def main():
     ctx = spark_context('cms', yarn, verbose)
 
     # Create SQL context to be used for SQL queries
-    sql_context = HiveContext(ctx)
+    sql_context = SQLContext(ctx)
 
     # Initialize DBS tables (will be used with AAA, CMSSW)
     dbs_tables(sql_context, inst=inst, verbose=verbose)

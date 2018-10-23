@@ -13,7 +13,7 @@ import argparse
 import hashlib
 
 from pyspark import SparkContext, StorageLevel
-from pyspark.sql import HiveContext
+from pyspark.sql import SQLContext
 
 # CMSSpark modules
 from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables_enr, eos_tables, jm_tables, phedex_tables
@@ -515,7 +515,7 @@ def main():
     quiet_logs(ctx)
 
     # Create SQL context to be used for SQL queries
-    sql_context = HiveContext(ctx)
+    sql_context = SQLContext(ctx)
 
     # Initialize DBS tables
     dbs_tables(sql_context, inst=inst, verbose=verbose)

@@ -15,7 +15,7 @@ import time
 import json
 
 from pyspark import SparkContext, StorageLevel
-from pyspark.sql import HiveContext
+from pyspark.sql import SQLContext
 from pyspark.sql.functions import sum as agg_sum
 from pyspark.sql.functions import countDistinct, count, col, lit, mean
 from pyspark.sql.functions import udf
@@ -51,7 +51,7 @@ def run(date, fout, yarn=None, verbose=None):
     """
     # define spark context, it's main object which allow to communicate with spark
     ctx = spark_context('cms', yarn, verbose)
-    sqlContext = HiveContext(ctx)
+    sqlContext = SQLContext(ctx)
 
     # read ASO and FTS tables
     date = aso_date(date)

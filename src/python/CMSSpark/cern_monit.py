@@ -16,7 +16,7 @@ from subprocess import Popen, PIPE
 
 # pyspark modules
 from pyspark import SparkContext, SparkFiles
-from pyspark.sql import HiveContext
+from pyspark.sql import SQLContext
 
 # CMSSpark modules
 from CMSSpark.spark_utils import spark_context, print_rows, unionAll
@@ -245,7 +245,7 @@ def run(path, amq, stomp, yarn=None, aggregation_schema=False, verbose=False):
             raise Exception('Wrong AMQ broker file name, please name it as amq_broker.json')
     else:
         raise Exception('No AMQ credential file is provided')
-    sqlContext = HiveContext(ctx)
+    sqlContext = SQLContext(ctx)
 
     hpath = "hadoop fs -ls %s | awk '{print $8}'" % path
     if  verbose:
