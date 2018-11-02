@@ -518,7 +518,7 @@ def main():
     sql_context = SQLContext(ctx)
 
     # Initialize DBS tables
-    dbs_tables(sql_context, inst=inst, verbose=verbose)
+    dbs_tables(sql_context, inst=inst, verbose=verbose, tables=['fdf', 'bdf', 'ddf'])
 
     # Initialize PhEDEx table to be used in file_block_site table
     phedex_tables(sql_context, verbose=verbose)
