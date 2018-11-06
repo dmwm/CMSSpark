@@ -340,7 +340,7 @@ def schema_cmssw():
         StructField("READ_VECTOR_COUNT_SIGMA", StringType(), True),
         StructField("USER_DN", StringType(), True),
         StructField("APP_INFO", StringType(), True),
-        StructField("START_TIME", LongType(), True),
+        StructField("START_TIME", StringType(), True),
         StructField("END_TIME", StringType(), True),
         StructField("START_DATE", LongType(), True),
         StructField("END_DATE", LongType(), True),
