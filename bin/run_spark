@@ -49,7 +49,7 @@ else
 fi
 mapreduce=/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
 if [ ! -f $mapreduce ]; then
-    mapreduct=/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
+    mapreduce=/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
 fi
 
 args="${@:2}"
