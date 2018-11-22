@@ -80,3 +80,7 @@ Scripts should be ran from this directory: `src/bash/report_campaigns`
 
 #### Aggregating leftover datasets
 Please follow instructions [these instructions](README_Leftovers.md).
+
+### Citation
+Please use this paper for citation:
+[https://arxiv.org/abs/1811.04785](https://arxiv.org/abs/1811.04785)
