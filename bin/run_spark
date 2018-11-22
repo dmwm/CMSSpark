@@ -32,24 +32,36 @@ fi
 # --packages com.databricks:spark-csv_2.11:1.6.0
 
 # set avro jars
-csvjar=/afs/cern.ch/user/v/valya/public/spark/spark-csv-assembly-1.4.0.jar
-avrojar=/afs/cern.ch/user/v/valya/public/spark/avro-mapred-1.7.6-cdh5.7.6.jar
-jars="$csvjar,$avrojar"
-if [ -f /usr/hdp/spark-2/examples/jars/spark-examples_2.11-2.3.2.jar ]; then
-    sparkexjar=/usr/hdp/spark-2/examples/jars/spark-examples_2.11-2.3.2.jar
-    jars="$jars,$sparkexjar"
+spark2=`spark-submit --version 2>&1 | grep "version 2"`
+if [ -n "$spark2" ]; then
+    echo "Using spark 2.X"
+    jars=""
+    conf="$conf --packages com.databricks:spark-avro_2.11:4.0.0"
 else
-    sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* 2> /dev/null | tail -1`
-    if [ -n "$sparkexjar" ]; then
+    echo "Using spark 1.X"
+    csvjar=/afs/cern.ch/user/v/valya/public/spark/spark-csv-assembly-1.4.0.jar
+    avrojar=/afs/cern.ch/user/v/valya/public/spark/avro-mapred-1.7.6-cdh5.7.6.jar
+    jars="$csvjar,$avrojar"
+    if [ -f /usr/hdp/spark-2/examples/jars/spark-examples_2.11-2.3.2.jar ]; then
+        sparkexjar=/usr/hdp/spark-2/examples/jars/spark-examples_2.11-2.3.2.jar
         jars="$jars,$sparkexjar"
     else
-        sparkexjar=/afs/cern.ch/user/v/valya/public/spark/spark-examples-1.6.0-cdh5.15.1-hadoop2.6.0-cdh5.15.1.jar
-        jars="$jars,$sparkexjar"
+        sparkexjar=`ls /usr/lib/spark/examples/lib/spark-examples* 2> /dev/null | tail -1`
+        if [ -n "$sparkexjar" ]; then
+            jars="$jars,$sparkexjar"
+        else
+            sparkexjar=/afs/cern.ch/user/v/valya/public/spark/spark-examples-1.6.0-cdh5.15.1-hadoop2.6.0-cdh5.15.1.jar
+            jars="$jars,$sparkexjar"
+        fi
+    fi
+    mapreduce=/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
+    if [ ! -f $mapreduce ]; then
+        mapreduce=/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
     fi
 fi
-mapreduce=/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
-if [ ! -f $mapreduce ]; then
-    mapreduce=/usr/lib/hadoop-mapreduce/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar
+
+if [ -n "$jars" ]; then
+    jars="--jars $jars"
 fi
 
 args="${@:2}"
@@ -69,6 +81,10 @@ if [ -n "`hostname -s | grep ^lxplus`" ] || [ -n "$ctest" ]; then
         cvmfs="true"
     fi
 fi
+# source proper environemnt for it-hadoop-client machines
+if [ -n "`hostname -s | grep ithdp`" ]; then
+    source hadoop-setconf.sh analytix
+fi
 
 if [ "$2" == "-h" ] || [ "$2" == "--help" ] || [ "$2" == "-help" ]; then
     # run help
@@ -86,7 +102,7 @@ if [ -n "$yarn" ]; then
     # once CERN IT will resolve python version we can remove PYSPARK_PYTHON
     echo "YARN execution: $conf"
     if [ "$cvmfs" == "true" ]; then
-        spark-submit --jars $jars \
+        spark-submit $jars \
             --master yarn \
             --executor-memory 5g \
             --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python \
@@ -94,7 +110,7 @@ if [ -n "$yarn" ]; then
             --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
             $conf $cmsspark $args
     else
-        spark-submit --jars $jars \
+        spark-submit $jars \
             --master yarn \
             --executor-memory 5g \
             $conf $cmsspark $args
@@ -109,7 +125,7 @@ else
     #   optionally increase driver memory with --driver-memory 2G (default 1G)
     echo "LOCAL (NO-YARN) execution"
     if [ "$cvmfs" == "true" ]; then
-        spark-submit --jars $jars \
+        spark-submit $jars \
             --executor-memory $((`nproc`/4))G \
             --master local[$((`nproc`/4))] \
             --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python \
@@ -117,7 +133,7 @@ else
             --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
             $conf $cmsspark $args
     else
-        spark-submit --jars $jars \
+        spark-submit $jars \
             --executor-memory $((`nproc`/4))G \
             --master local[$((`nproc`/4))] \
             $conf $cmsspark $args
