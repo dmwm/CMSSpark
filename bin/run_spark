@@ -27,6 +27,14 @@ if [[ "$@" =~ "--no-log4j" ]]; then
     fi
 fi
 
+# read spark options from configuration file if it exists
+# the SPARK_OPTIONS file should provide <option=value> line for every option
+# spark.network.timeout=120s
+# spark.rpc.numRetries=3
+if [ -n "$SPARK_OPTIONS" ]; then
+    conf="$conf `cat $SPARK_OPTIONS | awk '{ORS=" "; print "--conf "$0""}'`"
+fi
+
 # from https://cern.service-now.com/service-portal/view-request.do?n=RQF0876659
 # we can specify in jar files as following (before Spark 2.0):
 # --packages com.databricks:spark-csv_2.11:1.6.0
