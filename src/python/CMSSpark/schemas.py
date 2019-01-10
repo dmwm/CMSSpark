@@ -73,6 +73,24 @@ def schema_dataset_access_types():
             StructField("dataset_access_type", StringType(), True)
         ])
 
+def schema_data_tiers():
+    """
+    DBS DATA_TIERS table schema
+
+    DATA_TIER_ID NOT NULL NUMBER(38)
+    DATA_TIER_NAME NOT NULL VARCHAR2(100)
+    CREATION_DATE NOT NULL NUMBER(38)
+    CREATE_BY NOT NULL VARCHAR2(100)
+
+    :returns: StructType consisting StructField array
+    """
+    return StructType([
+            StructField("data_tier_id", IntegerType(), True),
+            StructField("data_tier_name", StringType(), True),
+            StructField("data_tier_creation_date", DoubleType(), True),
+            StructField("data_tier_create_by", StringType(), True)
+        ])
+
 def schema_datasets():
     """
     DBS DATASETS table schema
