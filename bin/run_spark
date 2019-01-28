@@ -17,7 +17,8 @@ cmsspark=$droot/$1
 
 # enable simple secret to run in non-yarn mode
 conf=""
-if [ -n "`hostname -s`" != "vocms092" ]; then
+hostname=`hostname -s`
+if [ "$hostname" != "vocms092" ]; then
 conf="--conf spark.authenticate.secret=cmsspark --conf spark.yarn.security.tokens.hive.enabled=false --conf spark.driver.port=5001 --conf spark.blockManager.port=5101 --conf spark.ui.port=5201"
 fi
 
