@@ -14,6 +14,7 @@ import time
 import json
 from datetime import datetime as dt
 from subprocess import Popen, PIPE
+from functools import reduce
 
 # local modules
 from CMSSpark.schemas import schema_processing_eras, schema_dataset_access_types
@@ -65,9 +66,15 @@ def files(path, verbose=0):
     hpath = "hadoop fs -ls %s | awk '{print $8}'" % path
     if  verbose:
         print("Lookup area: %s" % hpath)
-    pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+    if sys.version_info[0] < 3:
+        pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+    else:
+        pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True, encoding="utf-8")
     pipe.wait()
-    fnames = [f for f in pipe.stdout.read().split('\n') if f.find('part') != -1]
+    if sys.version_info[0] < 3:
+        fnames = [f for f in pipe.stdout.read().split('\n') if f.find('part') != -1]
+    else:
+        fnames = [f.strip() for f in pipe.stdout.readlines() if f.find('part') != -1]
     return fnames
 
 def avro_files(path, verbose=0):
@@ -75,9 +82,15 @@ def avro_files(path, verbose=0):
     hpath = "hadoop fs -ls %s | awk '{print $8}'" % path
     if  verbose:
         print("### Avro files area: %s" % hpath)
-    pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+    if sys.version_info[0] < 3:
+        pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
+    else:
+        pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True, encoding="utf-8")
     pipe.wait()
-    fnames = [f for f in pipe.stdout.read().split('\n') if f.endswith('avro')]
+    if sys.version_info[0] < 3:
+        fnames = [f for f in pipe.stdout.read().split('\n') if f.endswith('avro')]
+    else:
+        fnames = [f.strip() for f in pipe.stdout.readlines() if f.endswith('avro')]
     return fnames
 
 def unionAll(dfs, cols=None):
