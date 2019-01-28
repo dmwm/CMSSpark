@@ -120,6 +120,9 @@ def file_list(basedir, fromdate=None, todate=None):
         fromdate = dt.strptime(fromdate, "%Y-%m-%d")
         todate = dt.strptime(todate, "%Y-%m-%d")
     except ValueError as err:
+        print("### fromdate", fromdate)
+        print("### todate", todate)
+        print("### error", str(err))
         raise ValueError("Unparsable date parameters. Date should be specified in form: YYYY-mm-dd")		
  		
     pattern = re.compile(r"(\d{4}-\d{2}-\d{2})")
@@ -533,6 +536,8 @@ def eos_tables(sqlContext,
 
     Example of EOS JSON record on HDFS
     {"data":"\"log=9e7436fe-1d8e-11e7-ba07-a0369f1fbf0c&path=/store/mc/PhaseISpring17GS/MinBias_TuneCUETP8M1_13TeV-pythia8/GEN-SIM/90X_upgrade2017_realistic_v20-v1/50000/72C78841-2110-E711-867F-F832E4CC4D39.root&ruid=8959&rgid=1399&td=nobody.693038:472@fu-c2e05-24-03-daq2fus1v0--cms&host=p05798818q44165.cern.ch&lid=1048850&fid=553521212&fsid=18722&ots=1491788403&otms=918&cts=1491789688&ctms=225&rb=19186114&rb_min=104&rb_max=524288&rb_sigma=239596.05&wb=0&wb_min=0&wb_max=0&wb_sigma=0.00&sfwdb=7576183815&sbwdb=6313410471&sxlfwdb=7575971197&sxlbwdb=6313300667&nrc=72&nwc=0&nfwds=24&nbwds=10&nxlfwds=12&nxlbwds=4&rt=9130.44&wt=0.00&osize=3850577700&csize=3850577700&sec.prot=gsi&sec.name=cmsprd&sec.host=cms-ucsrv-c2f46-32-07.cern.ch&sec.vorg=&sec.grps=&sec.role=&sec.info=/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=amaltaro/CN=718748/CN=Alan Malta Rodrigues&sec.app=\"","metadata":{"host":"eoscms-srv-m1.cern.ch","kafka_timestamp":1491789692305,"partition":"14","path":"cms","producer":"eos","timestamp":1491789689562,"topic":"eos_logs","type":"reports","type_prefix":"logs"}}
+    # in 2019 we have the following structure
+    {"data":{"eos.csize":"49834","eos.ctms":"177","eos.cts":"1548009771","eos.fid":"1282182923","eos.fsid":"8953","eos.fstpath":"/data08/0001f4da/4c6c8f0b","eos.host":"lxfsrf65c02.cern.ch","eos.lid":"1048850","eos.log":"30a723b0-1ce3-11e9-b49d-a0369f1fba7c","eos.nbwds":"0","eos.nfwds":"0","eos.nrc":"0","eos.nwc":"3","eos.nxlbwds":"0","eos.nxlfwds":"0","eos.osize":"0","eos.otms":"109","eos.ots":"1548009771","eos.path":"/eos/cms/store/unified/www/joblogs/vlimant_ACDC0_task_SUS-RunIISummer16FSPremix-00090__v1_T_190118_174333_8486/139/SUS-RunIISummer16FSPremix-00090_0/f585f0eb-1e6b-4722-8266-5254e7975115-72-1-logArchive/job/WMTaskSpace/cmsRun1/lheevent/process/madevent/SubProcesses/P3_gq_urdlxgq/G168.08/run1_app.log","eos.rb":"0","eos.rb_max":"0","eos.rb_min":"0","eos.rb_sigma":"0.00","eos.rc_max":"0","eos.rc_min":"0","eos.rc_sigma":"0.00","eos.rc_sum":"0","eos.rgid":"1399","eos.rs_op":"0","eos.rsb_max":"0","eos.rsb_min":"0","eos.rsb_sigma":"0.00","eos.rsb_sum":"0","eos.rt":"0.00","eos.ruid":"103074","eos.rv_op":"0","eos.rvb_max":"0","eos.rvb_min":"0","eos.rvb_sigma":"0.00","eos.rvb_sum":"0","eos.rvt":"0.00","eos.sbwdb":"0","eos.sec.app":"fuse","eos.sec.host":"vocms0268.ipv6.cern.ch","eos.sec.name":"vlimant","eos.sec.prot":"krb5","eos.sfwdb":"0","eos.sxlbwdb":"0","eos.sxlfwdb":"0","eos.td":"daemon.23360:250@lxfsre50c03","eos.wb":"0","eos.wb_max":"0","eos.wb_min":"0","eos.wb_sigma":"0.00","eos.wt":"0.07","raw":"log=30a723b0-1ce3-11e9-b49d-a0369f1fba7c&path=/eos/cms/store/unified/www/joblogs/vlimant_ACDC0_task_SUS-RunIISummer16FSPremix-00090__v1_T_190118_174333_8486/139/SUS-RunIISummer16FSPremix-00090_0/f585f0eb-1e6b-4722-8266-5254e7975115-72-1-logArchive/job/WMTaskSpace/cmsRun1/lheevent/process/madevent/SubProcesses/P3_gq_urdlxgq/G168.08/run1_app.log&fstpath=/data08/0001f4da/4c6c8f0b&ruid=103074&rgid=1399&td=daemon.23360:250@lxfsre50c03&host=lxfsrf65c02.cern.ch&lid=1048850&fid=1282182923&fsid=8953&ots=1548009771&otms=109&cts=1548009771&ctms=177&nrc=0&nwc=3&rb=0&rb_min=0&rb_max=0&rb_sigma=0.00&rv_op=0&rvb_min=0&rvb_max=0&rvb_sum=0&rvb_sigma=0.00&rs_op=0&rsb_min=0&rsb_max=0&rsb_sum=0&rsb_sigma=0.00&rc_min=0&rc_max=0&rc_sum=0&rc_sigma=0.00&wb=0&wb_min=0&wb_max=0&wb_sigma=0.00&sfwdb=0&sbwdb=0&sxlfwdb=0&sxlbwdb=0&nfwds=0&nbwds=0&nxlfwds=0&nxlbwds=0&rt=0.00&rvt=0.00&wt=0.07&osize=0&csize=49834&sec.prot=krb5&sec.name=vlimant&sec.host=vocms0268.ipv6.cern.ch&sec.vorg=&sec.grps=&sec.role=&sec.info=&sec.app=fuse","real_timestamp":"1548009771000"},"metadata":{"_id":"e2a22c6d-77b3-dd33-d5d8-3357c1988e49","host":"eoscms-srv-m1.cern.ch","json":"true","kafka_timestamp":1548009773721,"partition":"19","path":"cms","producer":"eos","timestamp":1548009771000,"topic":"eos_logs","type":"reports","type_prefix":"logs"}}
 
     The EOS record consist of data and metadata parts where data part squashed
     into single string all requested parameters.
@@ -554,36 +559,23 @@ def eos_tables(sqlContext,
         tables = {'eos_df':eos_df}
         return tables
     
-    try:
-        rdd = unionAll([sqlContext.read.json(path) for path in files_in_hpath], cols)
-    except:
-        rdd = unionAll([sqlContext.jsonFile(path) for path in files_in_hpath], cols)
+    # in Spark 2.X and 2019 we have different record
+    edf = sqlContext.read.json(hpath)
+    if verbose:
+        edf.printSchema()
+    data = edf.data
+    eos_df = edf.select(data.getField("eos.path").alias("file_lfn"), data.getField("eos.sec.info").alias("user_dn"), data.getField("eos.sec.app").alias("application"), data.getField("eos.sec.host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
+    eos_df.registerTempTable('eos_df')
+    if verbose:
+        eos_df.printSchema()
+        records = eos_df.take(1) # take function will return list of records
+        print("### rdd records", records, type(records))
 
-    def parse_log(r):
-        "Local helper function to parse EOS record and extract intersting fields"
-        rdict = {'file_lfn':'', 'user_dn':'', 'application':'', 'host':''}
-        for item in str(r['data']).split('&'):
-            if  item.startswith('path='):
-                rdict['file_lfn'] = item.split('path=')[-1]
-            if  item.startswith('sec.info='):
-                rdict['user_dn'] = item.split('sec.info=')[-1]
-            if  item.startswith('sec.app='):
-                rdict['application'] = item.split('sec.app=')[-1]
-            if  item.startswith('sec.host='):
-                rdict['host'] = item.split('sec.host=')[-1]
-
-        rdict['timestamp'] = r['timestamp']
-
-        return rdict
-
-    eos_rdd = rdd.map(lambda r: parse_log(r))
-
-    records = eos_rdd.take(1) # take function will return list of records
     if  verbose:
+        records = eos_df.take(1) # take function will return list of records
         print("### eos_rdd records", records, type(records))
 
     # create new spark DataFrame
-    eos_df = sqlContext.createDataFrame(eos_rdd)
     eos_df.registerTempTable('eos_df')
     tables = {'eos_df':eos_df}
     return tables
