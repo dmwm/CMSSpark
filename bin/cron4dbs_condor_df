@@ -8,6 +8,8 @@
 addr=vkuznet@gmail.com
 
 # DO NOT EDIT BELOW THIS LINE
+# for Spark 2.X
+export PATH=$PATH:/usr/hdp/hadoop/bin
 idir=$1
 mkdir -p $idir
 me=$(dirname "$0")

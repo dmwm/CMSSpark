@@ -8,6 +8,8 @@
 addr=vkuznet@gmail.com
 
 # DO NOT EDIT BELOW THIS LINE
+# for Spark 2.X
+export PATH=$PATH:/usr/hdp/hadoop/bin
 
 # location of phedex dataframes
 idir=$1
