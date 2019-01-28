@@ -16,7 +16,10 @@ droot=`python -c "import CMSSpark; print '/'.join(CMSSpark.__file__.split('/')[:
 cmsspark=$droot/$1
 
 # enable simple secret to run in non-yarn mode
+conf=""
+if [ -n "`hostname -s`" != "vocms092" ]; then
 conf="--conf spark.authenticate.secret=cmsspark --conf spark.yarn.security.tokens.hive.enabled=false --conf spark.driver.port=5001 --conf spark.blockManager.port=5101 --conf spark.ui.port=5201"
+fi
 
 # look if we requested to show full log output, to disable spark output
 # client should setup his/her own log4j.properties via WMA_LOG4J environment variable
@@ -43,7 +46,12 @@ fi
 spark2=`spark-submit --version 2>&1 | grep "version 2"`
 if [ -n "$spark2" ]; then
     echo "Using spark 2.X"
-    jars=""
+    sparkexjar=`ls /usr/hdp/spark/jars/spark-examples* /usr/hdp/spark-2/examples/jars/spark-examples* 2> /dev/null | tail -1`
+    if [ -n "$sparkexjar" ]; then
+        jars="$sparkexjar"
+    else
+        jars="/afs/cern.ch/user/v/valya/public/spark/spark-examples-1.6.0-cdh5.15.1-hadoop2.6.0-cdh5.15.1.jar"
+    fi
     conf="$conf --packages com.databricks:spark-avro_2.11:4.0.0"
 else
     echo "Using spark 1.X"
