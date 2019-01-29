@@ -45,7 +45,7 @@ hadoop fs -ls $pdir/$year/$month/$day 2>&1 1>& /dev/null
 if [ $? -eq 0 ]; then
     idir=$pdir/$year/$month/$day
     fout="$odir/dataset-${year}${month}${day}.csv"
-    hadoop fs -cat $idir/part-00000 2>/dev/null | head -1 > $fout 2> $log
+    hadoop fs -cat $idir/part-00000* 2>/dev/null | head -1 > $fout 2> $log
     header=`cat $fout`
     hadoop fs -cat $idir/part-* 2>/dev/null | grep -v $header | sed -e "s,\",,g" >> $fout 2>> $log
 else
