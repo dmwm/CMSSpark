@@ -29,7 +29,7 @@ from pyspark.sql import Row
 from pyspark.sql import SQLContext
 from pyspark.sql import DataFrame
 from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField, StringType, BooleanType, LongType
-from pyspark.sql.functions import split, col
+from pyspark.sql.functions import split, col, udf
 
 class SparkLogger(object):
     "Control Spark Logger"
@@ -389,6 +389,8 @@ def cmssw_tables(ctx, sqlContext,
             .withColumn("READ_VECTOR_COUNT_AVERAGE", jdf["READ_VECTOR_COUNT_AVERAGE"].cast(DoubleType()))\
             .withColumn("READ_VECTOR_COUNT_SIGMA", jdf["READ_VECTOR_COUNT_SIGMA"].cast(DoubleType()))
     df = sqlContext.createDataFrame(rdd, schema=schema_cmssw())
+    fix_lfn = udf(lambda z: z.replace('file:', ''), StringType())
+    df = df.withColumn("FILE_LFN", fix_lfn("FILE_LFN"))
     df.registerTempTable('cmssw_df')
     tables = {'cmssw_df': df}
     return tables
