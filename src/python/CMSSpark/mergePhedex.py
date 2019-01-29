@@ -53,7 +53,7 @@ def update(rdict, giddict, line):
     date = int(date)
     size = int(size)
     rdate = int(rdate)
-    if gid == "null":
+    if gid == "null" or git == '':
         gid = "-1"
     gid = int(gid)
     key = (site, dataset, rdate, gid)
