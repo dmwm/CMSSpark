@@ -85,7 +85,7 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
             'count(distinct(UserId)) AS distinct_users',
             '\"crab\" AS stream',
             '%s AS timestamp' % unix_date,
-            'first(tier_from_site_name(SiteName)) AS site_tier',
+            'first_value(tier_from_site_name(SiteName)) AS site_tier',
             'SUM(WrapCPU) AS cpu_time']
 
     # Build a query with "cols" columns
@@ -105,13 +105,13 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
              "JOIN f_b_s_df ON f_b_s_df.file_name = jm_df.FileName " \
              % ','.join(cols)
     cols = ['dn', 'dataset_name', 'site_name', 'app',
-            'first(uid) as uid', 'first(stream) as stream', 'first(timestamp) as timestamp',
+            'uid', 'stream', 'timestamp',
             'count(dataset_name) AS nacc',
             'count(dn) AS distinct_users',
-            'first(tier_from_site_name(site_name)) AS site_tier',
+            'tier_from_site_name(site_name) AS site_tier',
             'SUM(cpu) AS cpu_time',
             'SUM(wc) AS wc_time']
-    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
+    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app, uid, stream, site_tier, timestamp" \
             % (','.join(cols), query)
 
     result = run_query(query, sql_context, verbose)
@@ -168,7 +168,7 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
             'count(distinct(eos_df.user_dn)) AS distinct_users',
             '\"eos\" as stream',
             '%s AS timestamp' % unix_date,
-            'first(tier_from_site_name(site_name)) AS site_tier',
+            'first_value(tier_from_site_name(site_name)) AS site_tier',
             '-1 AS cpu_time']
 
     # Build a query with "cols" columns
@@ -188,12 +188,12 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
              "JOIN f_b_s_df ON f_b_s_df.file_name = eos_df.file_lfn " \
              % ','.join(cols)
     cols = ['dn', 'dataset_name', 'site_name', 'app',
-            'first(uid) as uid', 'first(stream) as stream', 'first(timestamp) as timestamp',
+            'uid', 'stream', 'timestamp',
             'count(dataset_name) AS nacc',
             'count(dn) AS distinct_users',
-            'first(tier_from_site_name(site_name)) AS site_tier',
+            'tier_from_site_name(site_name) AS site_tier',
             '-1 AS cpu_time', '-1 AS wc_time']
-    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
+    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app, uid, stream, site_tier, timestamp" \
             % (','.join(cols), query)
 
     result = run_query(query, sql_context, verbose)
@@ -251,7 +251,7 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
             'count(distinct(aaa_df.user_dn)) AS distinct_users',
             '\"aaa\" as stream',
             '%s AS timestamp' % unix_date,
-            'first(tier_from_site_name(src_experiment_site)) AS site_tier',
+            'first_value(tier_from_site_name(src_experiment_site)) AS site_tier',
             '-1 AS cpu_time']
 
     # Build a query with "cols" columns
@@ -271,12 +271,12 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
              "JOIN f_b_s_df ON f_b_s_df.file_name = aaa_df.file_lfn " \
              % ','.join(cols)
     cols = ['dn', 'dataset_name', 'site_name', 'app',
-            'first(uid) as uid', 'first(stream) as stream', 'first(timestamp) as timestamp',
+            'uid', 'stream', 'timestamp',
             'count(dataset_name) AS nacc',
             'count(dn) AS distinct_users',
-            'first(tier_from_site_name(site_name)) AS site_tier',
+            'tier_from_site_name(site_name) AS site_tier',
             '-1 AS cpu_time', '-1 AS wc_time']
-    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
+    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app, uid, stream, site_tier, timestamp" \
             % (','.join(cols), query)
 
     result = run_query(query, sql_context, verbose)
@@ -333,7 +333,7 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
             'count(distinct(USER_DN)) AS distinct_users',
             '\"cmssw\" as stream',
             '%s AS timestamp' % unix_date,
-            'first(tier_from_site_name(cmssw_df.SITE_NAME)) AS site_tier',
+            'first_value(tier_from_site_name(cmssw_df.SITE_NAME)) AS site_tier',
             '-1 AS cpu_time']
 
     # Build a query with "cols" columns
@@ -353,12 +353,12 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
              "JOIN f_b_s_df ON f_b_s_df.file_name = cmssw_df.FILE_LFN " \
              % ','.join(cols)
     cols = ['dn', 'dataset_name', 'site_name', 'app',
-            'first(uid) as uid', 'first(stream) as stream', 'first(timestamp) as timestamp',
+            'uid', 'stream', 'timestamp',
             'count(dataset_name) AS nacc',
             'count(dn) AS distinct_users',
-            'first(tier_from_site_name(site_name)) AS site_tier',
+            'tier_from_site_name(site_name) AS site_tier',
             '-1 AS cpu_time', '-1 AS wc_time']
-    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app" \
+    query = "SELECT %s FROM (%s) QUERY1 GROUP BY dn, dataset_name, site_name, app, uid, stream, site_tier, timestamp" \
             % (','.join(cols), query)
 
     result = run_query(query, sql_context, verbose)
@@ -467,7 +467,7 @@ def parse_app(app):
     return app
 
 def dn2uuid(dn):
-    "Convert useri DN to UID, we take first 16 digits of the int base 16 of the dn hash"
+    "Convert user DN to UID, we take first 16 digits of the int base 16 of the dn hash"
     return int(hashlib.sha1(parse_dn(dn)).hexdigest(), 16) % (10**16)
 
 def tier_from_site_name(s):
@@ -498,6 +498,8 @@ def main():
 
     start_time = time.time()
     verbose = opts.verbose
+    # VK: turn verbose output for debugging purposes
+    verbose = 1
     yarn = opts.yarn
     inst = opts.inst
     date = opts.date
@@ -521,7 +523,11 @@ def main():
     dbs_tables(sql_context, inst=inst, verbose=verbose, tables=['fdf', 'bdf', 'ddf'])
 
     # Initialize PhEDEx table to be used in file_block_site table
-    phedex_tables(sql_context, verbose=verbose)
+    if date:
+        ddate = '%s-%s-%s' % (date[:4], date[4:6], date[6:8])
+        phedex_tables(sql_context, verbose=verbose, fromdate=ddate, todate=ddate)
+    else:
+        phedex_tables(sql_context, verbose=verbose)
 
     # Register clean_site_name to be used with SQL queries
     sql_context.udf.register("clean_site_name", clean_site_name)
