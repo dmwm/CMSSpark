@@ -194,10 +194,13 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
             out = '%s/%s/%s/%s/%s' % (fout, col, year, month, day)
             print("output: %s" % out)
             odf = unionAll(store[col])
-            print("%s rows: %s" % (col, odf.count()))
-            print_rows(odf, col, verbose=1)
-            odf.write.format("com.databricks.spark.csv")\
-                    .option("header", "true").save(out)
+            try:
+                print("%s rows: %s" % (col, odf.count()))
+                print_rows(odf, col, verbose=1)
+                odf.write.format("com.databricks.spark.csv")\
+                        .option("header", "true").save(out)
+            except Exception as exp:
+                print("FAIL to write %s, exception %s" % (out, str(exp)))
 
     ctx.stop()
 
