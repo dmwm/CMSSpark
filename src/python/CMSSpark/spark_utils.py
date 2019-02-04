@@ -582,7 +582,7 @@ def eos_tables(sqlContext,
         edf.printSchema()
     data = edf.data
 #    eos_df = edf.select(data.getField("eos.path").alias("file_lfn"), data.getField("eos.sec.info").alias("user_dn"), data.getField("eos.sec.app").alias("application"), data.getField("eos.sec.host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
-    eos_df = edf.select(data.getField("eos_path").alias("file_lfn"), data.getField("sec_info").alias("user_dn"), data.getField("eos_app").alias("application"), data.getField("eos_host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
+    eos_df = edf.select(data.getField("eos_path").alias("file_lfn"), data.getField("sec_info").alias("user_dn"), data.getField("sec_app").alias("application"), data.getField("eos_host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
     eos_df.registerTempTable('eos_df')
     if verbose:
         eos_df.printSchema()
