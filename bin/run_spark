@@ -13,13 +13,18 @@ fi
 
 # find out where CMSSpark is installed on a system
 droot=`python -c "import CMSSpark; print '/'.join(CMSSpark.__file__.split('/')[:-1])"`
-cmsspark=$droot/$1
+if [ -f $1 ]; then
+    cmsspark=$1
+else
+    cmsspark=$droot/$1
+fi
 
 # enable simple secret to run in non-yarn mode
 conf=""
 hostname=`hostname -s`
 if [ "$hostname" != "vocms092" ]; then
-conf="--conf spark.authenticate.secret=cmsspark --conf spark.yarn.security.tokens.hive.enabled=false --conf spark.driver.port=5001 --conf spark.blockManager.port=5101 --conf spark.ui.port=5201"
+#conf="--conf spark.authenticate.secret=cmsspark --conf spark.yarn.security.tokens.hive.enabled=false --conf spark.driver.port=5001 --conf spark.blockManager.port=5101 --conf spark.ui.port=5201"
+conf="--conf spark.authenticate.secret=cmsspark --conf spark.yarn.security.credentials.hive.enabled=false --conf spark.driver.port=5001 --conf spark.blockManager.port=5101 --conf spark.ui.port=5201"
 fi
 
 # look if we requested to show full log output, to disable spark output
@@ -118,6 +123,7 @@ if [ -n "$yarn" ]; then
     # Temp solution to have a wrapper for python27 on spark cluster
     # once CERN IT will resolve python version we can remove PYSPARK_PYTHON
     echo "YARN execution: $conf"
+    echo "conf=$conf cmsspark=$cmsspark args=$args cvmfs=$cvmfs"
     if [ "$cvmfs" == "true" ]; then
         spark-submit $jars \
             --master yarn \
@@ -141,6 +147,7 @@ else
     # Modify with local[*] to use all the available cores in the node
     #   optionally increase driver memory with --driver-memory 2G (default 1G)
     echo "LOCAL (NO-YARN) execution"
+    echo "conf=$conf cmsspark=$cmsspark args=$args cvmfs=$cvmfs"
     if [ "$cvmfs" == "true" ]; then
         spark-submit $jars \
             --executor-memory $((`nproc`/4))G \
