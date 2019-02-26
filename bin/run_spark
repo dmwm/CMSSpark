@@ -48,9 +48,21 @@ fi
 # we can specify in jar files as following (before Spark 2.0):
 # --packages com.databricks:spark-csv_2.11:1.6.0
 
+# check if we're on lxplus7
+lxplus7=`cat /etc/redhat-release  | grep 7`
+lxplus7_setup=""
+if [ -n "$lxplus7" ] && [ -n "`hostname -s | grep ^lxplus`" ]; then
+    if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_94/x86_64-centos7-gcc7-opt/setup.sh ] && \
+        [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ]; then
+        source /cvmfs/sft.cern.ch/lcg/views/LCG_94/x86_64-centos7-gcc7-opt/setup.sh
+        source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
+        lxplus7_setup="true"
+    fi
+fi
+
 # set avro jars
 spark2=`spark-submit --version 2>&1 | grep "version 2"`
-if [ -n "$spark2" ]; then
+if [ -n "$spark2" ] || [ -f $lxplus7_spark ]; then
     echo "Using spark 2.X"
     sparkexjar=`ls /usr/hdp/spark/jars/spark-examples* /usr/hdp/spark-2/examples/jars/spark-examples* 2> /dev/null | tail -1`
     if [ -n "$sparkexjar" ]; then
@@ -94,13 +106,15 @@ yarn=`echo $args | grep -- "--yarn"`
 # https://cern.service-now.com/service-portal/article.do?n=KB0005361
 cvmfs=""
 ctest=`echo $args | grep -- "--cvmfs"`
-if [ -n "`hostname -s | grep ^lxplus`" ] || [ -n "$ctest" ]; then
-    if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh ] && \
-       [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ]; then
-        echo "Enable CVMFS ..."
-        source /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh
-        source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
-        cvmfs="true"
+if [ -z "$lxplus7_setup" ]; then
+    if [ -n "`hostname -s | grep ^lxplus`" ] || [ -n "$ctest" ]; then
+        if [ -f /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh ] && \
+           [ -f /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh ]; then
+            echo "Enable CVMFS ..."
+            source /cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/setup.sh
+            source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-setconf.sh analytix
+            cvmfs="true"
+        fi
     fi
 fi
 # source proper environemnt for it-hadoop-client machines
