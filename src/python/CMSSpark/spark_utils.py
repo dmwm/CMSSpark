@@ -580,10 +580,26 @@ def eos_tables(sqlContext,
     edf = sqlContext.read.json(hpath)
     if verbose:
         edf.printSchema()
-    data = edf.data
-#    eos_df = edf.select(data.getField("eos.path").alias("file_lfn"), data.getField("eos.sec.info").alias("user_dn"), data.getField("eos.sec.app").alias("application"), data.getField("eos.sec.host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
-    eos_df = edf.select(data.getField("eos_path").alias("file_lfn"), data.getField("sec_info").alias("user_dn"), data.getField("sec_app").alias("application"), data.getField("eos_host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
+    
+    edf = edf.selectExpr("metadata.timestamp", "data.*")
+    
+    # At this moment, json files can have one of two known schemas. In order to read several days we need to be able to work with both of them. 
+    # eos_df = edf.select(data.getField("eos.path").alias("file_lfn"), data.getField("eos.sec.info").alias("user_dn"), data.getField("eos.sec.app").alias("application"), data.getField("eos.sec.host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
+    # eos_df = edf.select(eos_path, data.getField("sec_info").alias("user_dn"), data.getField("sec_app").alias("application"), data.getField("eos_host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
+    # We use the first relevant field to determine the current situation, if both columns exists, it means we read files with both schemas and now we need to combine them. 
+    eos_df = None
+    if 'eos_path' in edf.columns and 'eos.path' in edf.columns:
+        eos_df = edf.selectExpr('nvl(eos_path,`eos.path`) as file_lfn', 'nvl(sec_info,`eos.sec.info`) as user_dn', 'nvl(sec_app,`eos.sec.app`) as application', 'nvl(eos_host,`eos.sec.host`) as host', 'nvl(csize,`eos.csize`) as csize', 'timestamp'  )
+    elif 'eos.path' in edf.columns:
+        eos_df = edf.selectExpr('`eos.path` as file_lfn', '`eos.sec.info` as user_dn', '`eos.sec.app` as application', '`eos.sec.host` as host', '`eos.csize` as csize', 'timestamp')
+    elif 'eos_path' in edf.columns:
+        eos_df = edf.selectExpr('eos_path as file_lfn', 'sec_info as user_dn', 'sec_app as application', 'sec_host as host','csize', 'timestamp')
+    else:
+        raise Exception("Its not a known format")
+        
+    eos_df=eos_df.withColumn('csize', eos_df.csize.cast('long'))    
     eos_df.registerTempTable('eos_df')
+    
     if verbose:
         eos_df.printSchema()
         records = eos_df.take(1) # take function will return list of records
