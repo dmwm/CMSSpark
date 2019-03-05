@@ -589,11 +589,11 @@ def eos_tables(sqlContext,
     # We use the first relevant field to determine the current situation, if both columns exists, it means we read files with both schemas and now we need to combine them. 
     eos_df = None
     if 'eos_path' in edf.columns and 'eos.path' in edf.columns:
-        eos_df = edf.selectExpr('nvl(eos_path,`eos.path`) as file_lfn', 'nvl(sec_info,`eos.sec.info`) as user_dn', 'nvl(sec_app,`eos.sec.app`) as application', 'nvl(eos_host,`eos.sec.host`) as host', 'timestamp'  )
+        eos_df = edf.selectExpr('nvl(eos_path,`eos.path`) as file_lfn', 'nvl(sec_info,`eos.sec.info`) as user_dn', 'nvl(sec_app,`eos.sec.app`) as application', 'nvl(eos_host,`eos.sec.host`) as host', 'nvl(csize,`eos.csize`) as csize', 'timestamp'  )
     elif 'eos.path' in edf.columns:
-        eos_df = edf.selectExpr('`eos.path` as file_lfn', '`eos.sec.info` as user_dn', '`eos.sec.app` as application', '`eos.sec.host` as host', 'timestamp')
+        eos_df = edf.selectExpr('`eos.path` as file_lfn', '`eos.sec.info` as user_dn', '`eos.sec.app` as application', '`eos.sec.host` as host', '`eos.csize` as csize', 'timestamp')
     elif 'eos_path' in edf.columns:
-        eos_df = edf.selectExpr('eos_path as file_lfn', 'sec_info as user_dn', 'sec_app as application', 'sec_host as host', 'timestamp')
+        eos_df = edf.selectExpr('eos_path as file_lfn', 'sec_info as user_dn', 'sec_app as application', 'sec_host as host','csize', 'timestamp')
     else:
         raise Exception("Its not a known format")
         
