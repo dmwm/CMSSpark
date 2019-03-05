@@ -597,7 +597,7 @@ def eos_tables(sqlContext,
     else:
         raise Exception("Its not a known format")
         
-        
+    eos_df=eos_df.withColumn('csize', eos_df.csize.cast('long'))    
     eos_df.registerTempTable('eos_df')
     
     if verbose:
