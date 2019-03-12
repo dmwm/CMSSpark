@@ -532,13 +532,29 @@ def schema_empty_aaa():
         StructField("file_lfn", StringType(), True),
     ])
 
+
 def schema_empty_eos():
     """
-    src_experiment_site: string (nullable = true)
+    |-- file_lfn: string (nullable = true)
+    |-- user_dn: string (nullable = true)
+    |-- application: string (nullable = true)
+    |-- host: string (nullable = true)
+    |-- csize: long (nullable = true)
+    |-- rb: long (nullable = true)
+    |-- wb: long (nullable = true)
+    |-- rt: long (nullable = true)
+    |-- wt: long (nullable = true)
+    |-- timestamp: long (nullable = true)
     """
     return StructType([
         StructField("file_lfn", StringType(), True),
         StructField("user_dn", StringType(), True),
         StructField("host", StringType(), True),
+        StructField("application", StringType(), True),
+        StructField("csize", IntegerType(), True),
+        StructField("rb", IntegerType(), True),
+        StructField("wb", IntegerType(), True),
+        StructField("rt", IntegerType(), True),
+        StructField("wt", IntegerType(), True),
+        StructField("timestamp", LongType(), True),
     ])
-
