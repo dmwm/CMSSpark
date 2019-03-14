@@ -548,6 +548,8 @@ def eos_tables(sqlContext,
     Parse EOS HDFS records. This data set comes from EOS servers at CERN. Data
     is send directly by the EOS team, reading the EOS logs and sending them
     into the MONIT infrastructure.
+    
+    Use https://twiki.cern.ch/twiki/bin/view/ITAnalyticsWorkingGroup/EosFileAccessLogs as data dictionary. 
 
     Example of EOS JSON record on HDFS
     {"data":"\"log=9e7436fe-1d8e-11e7-ba07-a0369f1fbf0c&path=/store/mc/PhaseISpring17GS/MinBias_TuneCUETP8M1_13TeV-pythia8/GEN-SIM/90X_upgrade2017_realistic_v20-v1/50000/72C78841-2110-E711-867F-F832E4CC4D39.root&ruid=8959&rgid=1399&td=nobody.693038:472@fu-c2e05-24-03-daq2fus1v0--cms&host=p05798818q44165.cern.ch&lid=1048850&fid=553521212&fsid=18722&ots=1491788403&otms=918&cts=1491789688&ctms=225&rb=19186114&rb_min=104&rb_max=524288&rb_sigma=239596.05&wb=0&wb_min=0&wb_max=0&wb_sigma=0.00&sfwdb=7576183815&sbwdb=6313410471&sxlfwdb=7575971197&sxlbwdb=6313300667&nrc=72&nwc=0&nfwds=24&nbwds=10&nxlfwds=12&nxlbwds=4&rt=9130.44&wt=0.00&osize=3850577700&csize=3850577700&sec.prot=gsi&sec.name=cmsprd&sec.host=cms-ucsrv-c2f46-32-07.cern.ch&sec.vorg=&sec.grps=&sec.role=&sec.info=/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=amaltaro/CN=718748/CN=Alan Malta Rodrigues&sec.app=\"","metadata":{"host":"eoscms-srv-m1.cern.ch","kafka_timestamp":1491789692305,"partition":"14","path":"cms","producer":"eos","timestamp":1491789689562,"topic":"eos_logs","type":"reports","type_prefix":"logs"}}
@@ -589,15 +591,47 @@ def eos_tables(sqlContext,
     # We use the first relevant field to determine the current situation, if both columns exists, it means we read files with both schemas and now we need to combine them. 
     eos_df = None
     if 'eos_path' in edf.columns and 'eos.path' in edf.columns:
-        eos_df = edf.selectExpr('nvl(eos_path,`eos.path`) as file_lfn', 'nvl(sec_info,`eos.sec.info`) as user_dn', 'nvl(sec_app,`eos.sec.app`) as application', 'nvl(eos_host,`eos.sec.host`) as host', 'nvl(csize,`eos.csize`) as csize', 'timestamp'  )
+        eos_df = edf.selectExpr('nvl(eos_path,`eos.path`) as file_lfn', 
+                                'nvl(sec_info,`eos.sec.info`) as user_dn', 
+                                'nvl(sec_app,`eos.sec.app`) as application', 
+                                'nvl(eos_host,`eos.sec.host`) as host', 
+                                'nvl(csize,`eos.csize`) as csize','nvl(rb,`eos.rb`) as rb',
+                                'nvl(wb,`eos.wb`) as wb',
+                                'nvl(rt,`eos.rt`) as rt',
+                                'nvl(wt,`eos.wt`) as wt',
+                                'timestamp'  )
     elif 'eos.path' in edf.columns:
-        eos_df = edf.selectExpr('`eos.path` as file_lfn', '`eos.sec.info` as user_dn', '`eos.sec.app` as application', '`eos.sec.host` as host', '`eos.csize` as csize', 'timestamp')
+        eos_df = edf.selectExpr('`eos.path` as file_lfn', 
+                                '`eos.sec.info` as user_dn',
+                                '`eos.sec.app` as application',
+                                '`eos.sec.host` as host',
+                                '`eos.csize` as csize',
+                                '`eos.rb` as rb',
+                                '`eos.wb` as wb',
+                                '`eos.rt` as rt',
+                                '`eos.wt` as wt', 
+                                'timestamp')
     elif 'eos_path' in edf.columns:
-        eos_df = edf.selectExpr('eos_path as file_lfn', 'sec_info as user_dn', 'sec_app as application', 'sec_host as host','csize', 'timestamp')
+        eos_df = edf.selectExpr('eos_path as file_lfn',
+                                'sec_info as user_dn',
+                                'sec_app as application',
+                                'sec_host as host',
+                                'csize',
+                                'rb',
+                                'wb', 
+                                'rt', 
+                                'wt',
+                                'timestamp')
     else:
         raise Exception("Its not a known format")
-        
-    eos_df=eos_df.withColumn('csize', eos_df.csize.cast('long'))    
+    
+    _long_fields = ['csize',
+                    'rb', 
+                    'wb',
+                    'rt', 
+                    'wt']
+    for _lf in _long_fields:
+        eos_df=eos_df.withColumn(_lf, eos_df[_lf].cast('long'))    
     eos_df.registerTempTable('eos_df')
     
     if verbose:
