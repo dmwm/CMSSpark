@@ -34,6 +34,7 @@ def generate_parquet(date, hdir='hdfs:///project/monitoring/archive/eos/logs/rep
     """
     if spark is None:
         spark=get_spark_session(True, False)
+    spark.conf.set('spark.sql.session.timeZone', 'UTC')
     tables = eos_tables(spark, date=date, verbose=verbose)
     df = tables['eos_df']
     df = df.withColumn('day',date_format(from_unixtime(df.timestamp/1000),'yyyyMMdd'))
@@ -133,6 +134,11 @@ def run_report_totals(ctx, period, outputdir, only_csv):
 @click.argument('period', nargs=2, type=str)
 @click.pass_context
 def get_filenames_per_day(ctx, period, outputdir, appfilter):
+    """
+    generate a csv file with filenames/day/app
+    This is a costly operation, It should be modified either to save to hdfs (or to a database directly) 
+    or to only be used with filters (small time periods or with an specified app).
+    """
     _datasets_filenames = generate_dataset_file_days(period=period, app_filter=appfilter, verbose=ctx.obj['VERBOSE'], spark=ctx.obj['SPARK'])
     _datasets_filenames.to_csv(os.path.join(outputdir, 'fillenames_{}.csv.gz'.format(period)),compression='gzip')
 
