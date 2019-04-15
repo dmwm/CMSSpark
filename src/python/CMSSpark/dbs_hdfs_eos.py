@@ -34,33 +34,45 @@ def generate_parquet(date, hdir='hdfs:///project/monitoring/archive/eos/logs/rep
     """
     if spark is None:
         spark=get_spark_session(True, False)
-    spark.conf.set('spark.sql.session.timeZone', 'UTC')
+   # spark.conf.set('spark.sql.session.timeZone', 'UTC') 
     tables = eos_tables(spark, date=date, verbose=verbose)
     df = tables['eos_df']
-    df = df.withColumn('day',date_format(from_unixtime(df.timestamp/1000),'yyyyMMdd'))
-    df.write.partitionBy('day').mode(mode).parquet(parquetLocation)
+    #Repartition by day will make this process slower
+    #But reduce the number of files written and improve query time,
+    df.repartition('day').write.partitionBy('day').mode(mode).parquet(parquetLocation)
 
 
-def generate_dataset_totals_pandasdf(period=('20190101','20190131'), parquetLocation='hdfs:///cms/users/carizapo/full.parquet', spark=None, verbose=False):
+def generate_dataset_totals_pandasdf(period=('20190101','20190131'), isUserCMS=False, parquetLocation='hdfs:///cms/users/carizapo/full.parquet', spark=None, verbose=False):
     if spark is None:
         spark=get_spark_session(True, False)
-    df = spark.read.parquet(parquetLocation).filter('day between {} AND {}'.format(*period))
+    eos_df = spark.read.parquet(parquetLocation).filter('day between {} AND {}'.format(*period))
+    eos_df = eos_df.groupby('session', 'file_lfn','application','user','user_dn', 'day').agg({'rt':'sum',
+                                                                                          'rb':'sum',
+                                                                                          'wb':'sum',
+                                                                                          'wt':'sum',
+                                                                                          'rb_max':'max',
+                                                                                          'timestamp':'max'
+                                                                                         })
+    eos_df =eos_df.selectExpr(*[x if '(' not in x else '`{}` as {}'.format(x, x.replace('max(','').replace('sum(','').replace(')','')) for x in eos_df.columns]).cache()
     df.registerTempTable('eos_df')
     tables = dbs_tables(spark, tables=['ddf','fdf'])
     if verbose:
         print(tables)
     grouped = spark.sql(
-        """
-        select d_dataset,
-        count(timestamp) as nevents,
-        mean(csize) as avg_size,
-        sum(rb) as total_rb,
-        sum(wb) as total_wb,
-        sum(rt) as total_rt,
-        sum(wt) as total_wt
-        from eos_df join fdf on file_lfn = concat('/eos/cms',f_logical_file_name) join ddf on d_dataset_id = f_dataset_id
-        group by d_dataset
-        """)
+    """
+    select d_dataset, 
+           day,
+           application,
+           count(distinct(session)) as nevents,
+           sum(rb)/(1024*1024) as total_rb,
+           sum(wb)/(1024*1024) as total_wb,
+           sum(rt)/1000 as total_rt, 
+           sum(wt)/1000 as total_wt
+    from eos_df left join fdf on file_lfn = concat('/eos/cms',f_logical_file_name) left join ddf on d_dataset_id = f_dataset_id
+    where user {} like 'cms%' -- THIS IS EQUIVALENT TO isUserCMS  IN THE OLD QUERY
+    group by d_dataset,  day, application
+    """.format('' if isUserCMS else 'NOT'))
+    grouped = grouped.cache()
     _datasets_totals = grouped.toPandas()
     return _datasets_totals
 
