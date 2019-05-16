@@ -19,7 +19,7 @@ def get_spark_session(yarn=True, verbose=False):
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
-def generate_parquet(date, hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms', parquetLocation='hdfs:///cms/users/carizapo/full.parquet', spark=None, mode='append', verbose=False):
+def generate_parquet(date, hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms', parquetLocation='hdfs:///cms/users/carizapo/eos.parquet', spark=None, mode='append', verbose=False):
     """
     Creates or append to the given parquet file.
     Args:
@@ -42,7 +42,7 @@ def generate_parquet(date, hdir='hdfs:///project/monitoring/archive/eos/logs/rep
     df.repartition('day').write.partitionBy('day').mode(mode).parquet(parquetLocation)
 
 
-def generate_dataset_totals_pandasdf(period=('20190101','20190131'), isUserCMS=False, parquetLocation='hdfs:///cms/users/carizapo/full.parquet', spark=None, verbose=False):
+def generate_dataset_totals_pandasdf(period=('20190101','20190131'), isUserCMS=False, parquetLocation='hdfs:///cms/users/carizapo/eos.parquet', spark=None, verbose=False):
     if spark is None:
         spark=get_spark_session(True, False)
     eos_df = spark.read.parquet(parquetLocation).filter('day between {} AND {}'.format(*period))
@@ -77,7 +77,7 @@ def generate_dataset_totals_pandasdf(period=('20190101','20190131'), isUserCMS=F
     return _datasets_totals
 
 
-def generate_dataset_file_days(period=('20190101','20190131'), app_filter=None, parquetLocation='hdfs:///cms/users/carizapo/full.parquet', spark=None, verbose=False):
+def generate_dataset_file_days(period=('20190101','20190131'), app_filter=None, parquetLocation='hdfs:///cms/users/carizapo/eos.parquet', spark=None, verbose=False):
     if spark is None:
         spark=get_spark_session(True, False)
     df = spark.read.parquet(parquetLocation).filter('day between {} AND {}'.format(*period))
@@ -104,11 +104,13 @@ def generate_dataset_file_days(period=('20190101','20190131'), app_filter=None, 
 
 
 @click.group()
-@click.option('--verbose', default=False)
+@click.option('--verbose', default=False, is_flag=True)
+@click.option('--parquetLocation', default='hdfs:///cms/users/carizapo/eos.parquet')
 @click.pass_context
-def cli(ctx, verbose):
+def cli(ctx, verbose, parquetlocation):
     ctx.obj['VERBOSE'] = verbose
     ctx.obj['SPARK'] = get_spark_session()
+    ctx.obj['PARQUET_LOCATION'] = parquetlocation
     pass
 
 
@@ -117,7 +119,7 @@ def cli(ctx, verbose):
 @click.argument('date')
 @click.pass_context
 def run_update(ctx, date, mode):
-    generate_parquet(date,mode=mode, spark=ctx.obj['SPARK'])
+    generate_parquet(date,mode=mode, spark=ctx.obj['SPARK'],parquetLocation=ctx.obj['PARQUET_LOCATION'])
 
 @cli.command()
 @click.option('--outputDir', default='.', help='local output directory')
@@ -125,7 +127,10 @@ def run_update(ctx, date, mode):
 @click.argument('period', nargs=2, type=str)
 @click.pass_context
 def run_report_totals(ctx, period, outputdir, only_csv):
-    _datasets_totals = generate_dataset_totals_pandasdf(period=period, verbose=ctx.obj['VERBOSE'], spark=ctx.obj['SPARK'])
+    _datasets_totals = generate_dataset_totals_pandasdf(period=period,
+                                                                                   verbose=ctx.obj['VERBOSE'],
+                                                                                   spark=ctx.obj['SPARK'],
+                                                                                   parquetLocation=ctx.obj['PARQUET_LOCATION'] )
     _datasets_totals.to_csv(os.path.join(outputdir, 'dataset_totals.csv'))
     if not only_csv:
         _format = 'pdf'
@@ -151,7 +156,11 @@ def get_filenames_per_day(ctx, period, outputdir, appfilter):
     This is a costly operation, It should be modified either to save to hdfs (or to a database directly) 
     or to only be used with filters (small time periods or with an specified app).
     """
-    _datasets_filenames = generate_dataset_file_days(period=period, app_filter=appfilter, verbose=ctx.obj['VERBOSE'], spark=ctx.obj['SPARK'])
+    _datasets_filenames = generate_dataset_file_days(period=period, 
+                                                                               app_filter=appfilter, 
+                                                                               verbose=ctx.obj['VERBOSE'], 
+                                                                               spark=ctx.obj['SPARK'],
+                                                                               parquetLocation=ctx.obj['PARQUET_LOCATION'])
     _datasets_filenames.to_csv(os.path.join(outputdir, 'fillenames_{}.csv.gz'.format(period)),compression='gzip')
 
 if __name__ == '__main__':
