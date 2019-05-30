@@ -20,7 +20,7 @@ def schema_processing_eras():
     DBS PROCESSING_ERAS table schema
 
     PROCESSING_ERA_ID NOT NULL NUMBER(38)
-    PROCESSING_ERA_NAME NOT NULL VARCHAR2(120)
+    PROCESSING_VERSION NOT NULL NUMBER(38)
     CREATION_DATE NOT NULL INTEGER
     CREATE_BY NOT NULL VARCHAR2(500)
     DESCRIPTION NOT NULL VARCHAR2(40)
@@ -29,7 +29,7 @@ def schema_processing_eras():
     """
     return StructType([
             StructField("processing_era_id", IntegerType(), True),
-            StructField("processing_version", StringType(), True),
+            StructField("processing_version", DoubleType(), True),
             StructField("creation_date", IntegerType(), True),
             StructField("create_by", StringType(), True),
             StructField("description", StringType(), True)
