@@ -14,6 +14,7 @@ import time
 import logging
 import json
 from datetime import datetime as dt
+from datetime import timedelta
 from subprocess import Popen, PIPE
 from functools import reduce
 
@@ -30,7 +31,7 @@ from pyspark.sql import Row
 from pyspark.sql import SQLContext
 from pyspark.sql import DataFrame
 from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField, StringType, BooleanType, LongType
-from pyspark.sql.functions import split, col, udf, regexp_extract
+from pyspark.sql.functions import split, col, udf, regexp_extract, date_format, from_unixtime
 
 class SparkLogger(object):
     "Control Spark Logger"
@@ -77,6 +78,20 @@ def files(path, verbose=0):
     else:
         fnames = [f.strip() for f in pipe.stdout.readlines() if f.find('part') != -1]
     return fnames
+
+
+def glob_files(sc, url,verbose):
+    """
+    Return a list of files. It uses the jvm gateway. 
+    This function should be prefered to files when using glob expressions.
+    """
+    URI = sc._gateway.jvm.java.net.URI
+    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    fs = FileSystem.get(URI("hdfs:///"), sc._jsc.hadoopConfiguration())
+    l = fs.globStatus(Path(url))
+    return [f.getPath().toString() for f in l]
+
 
 def avro_files(path, verbose=0):
     "Return list of files for given HDFS path"
@@ -568,18 +583,18 @@ def eos_tables(sqlContext,
         if start_date:
             if not end_date:
                 end_date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
-            _sd = datetime.strptime(start_date,"%Y/%m/%d")
-            _ed = datetime.strptime(end_date,"%Y/%m/%d")
+            _sd = dt.strptime(start_date,"%Y/%m/%d")
+            _ed = dt.strptime(end_date,"%Y/%m/%d")
             dates = ','.join([(_sd + timedelta(days=x)).strftime("%Y/%m/%d") for x in xrange(0,(_ed-_sd).days+1)])
             date = '{{{}}}'.format(dates) 
         else:
             # by default we read yesterdate data
             date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
 
-    hpath = '%s/%s' % (hdir, date)
+    hpath = '%s/%s/part*' % (hdir, date)
     cols = ['data', 'metadata.timestamp']
 
-    files_in_hpath = files(hpath, verbose)
+    files_in_hpath = glob_files( sqlContext.sparkContext, hpath, verbose)
 
     if len(files_in_hpath) == 0:
         eos_df = sqlContext.createDataFrame([], schema=schema_empty_eos())
@@ -588,7 +603,7 @@ def eos_tables(sqlContext,
         return tables
     
     # in Spark 2.X and 2019 we have different record
-    edf = sqlContext.read.json(hdir+'/'+date)
+    edf = sqlContext.read.option("basePath", hdir).option("samplingRatio", 0.1).json(hdir+'/'+date)
     f_data = 'data as raw' if str(edf.schema['data'].dataType) == 'StringType' else 'data.raw'
     edf = edf.selectExpr(f_data,'metadata.timestamp').cache()
       
