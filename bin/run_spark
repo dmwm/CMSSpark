@@ -142,6 +142,7 @@ if [ -n "$yarn" ]; then
         spark-submit $jars \
             --master yarn \
             --executor-memory 5g \
+            --driver-memory 4g \
             --conf spark.pyspark.python=/cvmfs/sft.cern.ch/lcg/views/LCG_93/x86_64-centos7-gcc62-opt/bin/python \
             --conf spark.driver.extraClassPath=$mapreduce \
             --conf spark.executorEnv.LD_LIBRARY_PATH=$LD_LIBRARY_PATH \

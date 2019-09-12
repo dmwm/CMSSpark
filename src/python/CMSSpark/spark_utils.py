@@ -593,8 +593,16 @@ def eos_tables(sqlContext,
 
     hpath = '%s/%s/part*' % (hdir, date)
     cols = ['data', 'metadata.timestamp']
-
-    files_in_hpath = glob_files( sqlContext.sparkContext, hpath, verbose)
+    # sqlContex can be either a SQLContext instance (for older spark/code) 
+    # or a SparkSession for the newer(post spark 2.2) code. In most cases it works similar, 
+    # but to get the SparkContext we need to threat it different:
+    files_in_hpath = glob_files(
+        sqlContext.sparkSession.sparkContext
+        if isinstance(sqlContext, SQLContext)
+        else sqlContext.sparkContext,
+        hpath,
+        verbose,
+    )
 
     if len(files_in_hpath) == 0:
         eos_df = sqlContext.createDataFrame([], schema=schema_empty_eos())
@@ -603,7 +611,10 @@ def eos_tables(sqlContext,
         return tables
     
     # in Spark 2.X and 2019 we have different record
-    edf = sqlContext.read.option("basePath", hdir).option("samplingRatio", 0.1).json(hdir+'/'+date)
+    # Sampling ratio, if there is more than one file we can take the 10%,
+    # but if there is only one file it is probable that it have less than 10 records 
+    # (making the samplig size 0, which make the process fail)
+    edf = sqlContext.read.option("basePath", hdir).option("samplingRatio", 0.1 if len(files_in_hpath)>1 else 1).json(hdir+'/'+date)
     f_data = 'data as raw' if str(edf.schema['data'].dataType) == 'StringType' else 'data.raw'
     edf = edf.selectExpr(f_data,'metadata.timestamp').cache()
       
