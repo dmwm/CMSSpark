@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import time
+import logging
 import json
 from datetime import datetime as dt
 from subprocess import Popen, PIPE
@@ -261,14 +262,14 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', inst='GLOBAL', verbos
              'rvpath':apath(dbsdir, 'RELEASE_VERSIONS'),
              'flpath':apath(dbsdir, 'FILE_LUMIS'),
              'dapath':apath(dbsdir, 'DATASET_ACCESS_TYPES')}
-    print("Use the following data on HDFS")
+    logging.info("Use the following data on HDFS")
     dbs_tables = {} # final dict of tables we'll load
     for key, val in paths.items():
         if tables:
             if key in tables:
-                print(val)
+                logging.info(val)
         else:
-            print(val)
+            logging.info(val)
 
     # define DBS tables
     if not tables or 'daf' in tables:
