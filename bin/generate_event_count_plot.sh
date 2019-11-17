@@ -40,7 +40,7 @@ then
 fi
 # Check if CMSSpark is in the python path, 
 # otherwise add it assuming the script is in the default location
-if ! python -c "import CMSSpark" 2>/dev/null
+if ! python -c "import CMSSpark.dbs_event_count_plot" 2>/dev/null
 then
     export PYTHONPATH="$SCRIPT_DIR/../src/python:$PYTHONPATH"
 fi
