@@ -10,7 +10,7 @@ The event count plot application is part of [CMSSpark]( https://github.com/dmwm/
 
 ## How to create the Event Count Plots
 
-In a LXPLUS-like environment, you can use the  [generate_event_count_plot.sh](../bin/generate_event_count_plot.sh) script, which will take care of set up the environment and execute the python script. Any parameter you pass to this script will be pass to the python script. 
+In a LXPLUS-like environment, you can use the  [generate_event_count_plot.sh](../../bin/generate_event_count_plot.sh) script, which will take care of set up the environment and execute the python script. Any parameter you pass to this script will be pass to the python script. 
 
 Valid parameters:
 
@@ -57,7 +57,7 @@ This will create an event count plot for [2018/01/01, 2018/12/31] for the given 
 
 ### cronjob (acronjob)
 
-The `../bin/cron_genCRSGplots.sh` have been created to generate the yearly plots. It will accept two positional parameters, the base output folder and the image output format. Any additional parameter will be added to the python script call. 
+The [cron_genCRSGplots.sh](../../bin/cron_genCRSGplots.sh) have been created to generate the yearly plots. It will accept two positional parameters, the base output folder and the image output format. Any additional parameter will be added to the python script call. 
 
 To add it as a `acron` job you need to run `acrontab -e` and add an entry like this:
 
