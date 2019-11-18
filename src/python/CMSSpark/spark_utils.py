@@ -14,6 +14,7 @@ import time
 import logging
 import json
 from datetime import datetime as dt
+from datetime import timedelta
 from subprocess import Popen, PIPE
 from functools import reduce
 
@@ -30,7 +31,7 @@ from pyspark.sql import Row
 from pyspark.sql import SQLContext
 from pyspark.sql import DataFrame
 from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField, StringType, BooleanType, LongType
-from pyspark.sql.functions import split, col, udf
+from pyspark.sql.functions import split, col, udf, regexp_extract, date_format, from_unixtime
 
 class SparkLogger(object):
     "Control Spark Logger"
@@ -77,6 +78,20 @@ def files(path, verbose=0):
     else:
         fnames = [f.strip() for f in pipe.stdout.readlines() if f.find('part') != -1]
     return fnames
+
+
+def glob_files(sc, url,verbose):
+    """
+    Return a list of files. It uses the jvm gateway. 
+    This function should be prefered to files when using glob expressions.
+    """
+    URI = sc._gateway.jvm.java.net.URI
+    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    fs = FileSystem.get(URI("hdfs:///"), sc._jsc.hadoopConfiguration())
+    l = fs.globStatus(Path(url))
+    return [f.getPath().toString() for f in l]
+
 
 def avro_files(path, verbose=0):
     "Return list of files for given HDFS path"
@@ -137,8 +152,8 @@ def file_list(basedir, fromdate=None, todate=None):
         print("### fromdate", fromdate)
         print("### todate", todate)
         print("### error", str(err))
-        raise ValueError("Unparsable date parameters. Date should be specified in form: YYYY-mm-dd")		
- 		
+        raise ValueError("Unparsable date parameters. Date should be specified in form: YYYY-mm-dd") 
+
     pattern = re.compile(r"(\d{4}-\d{2}-\d{2})")
 
     dirdate_dic = {}
@@ -157,7 +172,7 @@ def file_list(basedir, fromdate=None, todate=None):
         raise Exception("Unable to find fromdate=%s are on HDFS %s" % (o_fromdate, basedir))
     if  not to_match:
         raise Exception("Unable to find todate=%s are on HDFS %s" % (o_todate, basedir))
-    return [k for k, v in dirdate_dic.items() if v >= fromdate and v <= todate]		
+    return [k for k, v in dirdate_dic.items() if v >= fromdate and v <= todate]
 
 def print_rows(df, dfname, verbose, head=5):
     "Helper function to print rows from a given dataframe"
@@ -544,7 +559,7 @@ def aaa_tables_enr(sqlContext,
 
 def eos_tables(sqlContext,
         hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms',
-        date=None, verbose=False):
+        date=None, start_date=None, end_date=None, verbose=False):
     """
     Parse EOS HDFS records. This data set comes from EOS servers at CERN. Data
     is send directly by the EOS team, reading the EOS logs and sending them
@@ -565,13 +580,29 @@ def eos_tables(sqlContext,
     :returns: a dictionary with eos Spark DataFrame
     """
     if  not date:
-        # by default we read yesterdate data
-        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+        if start_date:
+            if not end_date:
+                end_date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+            _sd = dt.strptime(start_date,"%Y/%m/%d")
+            _ed = dt.strptime(end_date,"%Y/%m/%d")
+            dates = ','.join([(_sd + timedelta(days=x)).strftime("%Y/%m/%d") for x in xrange(0,(_ed-_sd).days+1)])
+            date = '{{{}}}'.format(dates) 
+        else:
+            # by default we read yesterdate data
+            date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
 
-    hpath = '%s/%s' % (hdir, date)
+    hpath = '%s/%s/part*' % (hdir, date)
     cols = ['data', 'metadata.timestamp']
-
-    files_in_hpath = files(hpath, verbose)
+    # sqlContex can be either a SQLContext instance (for older spark/code) 
+    # or a SparkSession for the newer(post spark 2.2) code. In most cases it works similar, 
+    # but to get the SparkContext we need to threat it different:
+    files_in_hpath = glob_files(
+        sqlContext.sparkSession.sparkContext
+        if isinstance(sqlContext, SQLContext)
+        else sqlContext.sparkContext,
+        hpath,
+        verbose,
+    )
 
     if len(files_in_hpath) == 0:
         eos_df = sqlContext.createDataFrame([], schema=schema_empty_eos())
@@ -580,59 +611,31 @@ def eos_tables(sqlContext,
         return tables
     
     # in Spark 2.X and 2019 we have different record
-    edf = sqlContext.read.json(hpath)
-    if verbose:
-        edf.printSchema()
-    
-    edf = edf.selectExpr("metadata.timestamp", "data.*")
+    # Sampling ratio, if there is more than one file we can take the 10%,
+    # but if there is only one file it is probable that it have less than 10 records 
+    # (making the samplig size 0, which make the process fail)
+    edf = sqlContext.read.option("basePath", hdir).option("samplingRatio", 0.1 if len(files_in_hpath)>1 else 1).json(hdir+'/'+date)
+    f_data = 'data as raw' if str(edf.schema['data'].dataType) == 'StringType' else 'data.raw'
+    edf = edf.selectExpr(f_data,'metadata.timestamp').cache()
+      
     
     # At this moment, json files can have one of two known schemas. In order to read several days we need to be able to work with both of them. 
     # eos_df = edf.select(data.getField("eos.path").alias("file_lfn"), data.getField("eos.sec.info").alias("user_dn"), data.getField("eos.sec.app").alias("application"), data.getField("eos.sec.host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
     # eos_df = edf.select(eos_path, data.getField("sec_info").alias("user_dn"), data.getField("sec_app").alias("application"), data.getField("eos_host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
-    # We use the first relevant field to determine the current situation, if both columns exists, it means we read files with both schemas and now we need to combine them. 
-    eos_df = None
-    if 'eos_path' in edf.columns and 'eos.path' in edf.columns:
-        eos_df = edf.selectExpr('nvl(eos_path,`eos.path`) as file_lfn', 
-                                'nvl(sec_info,`eos.sec.info`) as user_dn', 
-                                'nvl(sec_app,`eos.sec.app`) as application', 
-                                'nvl(eos_host,`eos.sec.host`) as host', 
-                                'nvl(csize,`eos.csize`) as csize','nvl(rb,`eos.rb`) as rb',
-                                'nvl(wb,`eos.wb`) as wb',
-                                'nvl(rt,`eos.rt`) as rt',
-                                'nvl(wt,`eos.wt`) as wt',
-                                'timestamp'  )
-    elif 'eos.path' in edf.columns:
-        eos_df = edf.selectExpr('`eos.path` as file_lfn', 
-                                '`eos.sec.info` as user_dn',
-                                '`eos.sec.app` as application',
-                                '`eos.sec.host` as host',
-                                '`eos.csize` as csize',
-                                '`eos.rb` as rb',
-                                '`eos.wb` as wb',
-                                '`eos.rt` as rt',
-                                '`eos.wt` as wt', 
-                                'timestamp')
-    elif 'eos_path' in edf.columns:
-        eos_df = edf.selectExpr('eos_path as file_lfn',
-                                'sec_info as user_dn',
-                                'sec_app as application',
-                                'sec_host as host',
-                                'csize',
-                                'rb',
-                                'wb', 
-                                'rt', 
-                                'wt',
-                                'timestamp')
-    else:
-        raise Exception("Its not a known format")
-    
-    _long_fields = ['csize',
-                    'rb', 
-                    'wb',
-                    'rt', 
-                    'wt']
-    for _lf in _long_fields:
-        eos_df=eos_df.withColumn(_lf, eos_df[_lf].cast('long'))    
+    # We can use the raw field because it doesn't change on time  
+    eos_df = edf\
+         .withColumn('rb_max', regexp_extract(edf.raw,'&rb_max=([^&\']*)',1).cast('long'))\
+         .withColumn('session', regexp_extract(edf.raw,'&td=([^&\']*)',1))\
+         .withColumn('file_lfn', regexp_extract(edf.raw,'&path=([^&]*)',1))\
+         .withColumn('application', regexp_extract(edf.raw,'&sec.app=([^&\']*)',1))\
+         .withColumn('rt', regexp_extract(edf.raw,'&rt=([^&\']*)',1).cast('long'))\
+         .withColumn('wt', regexp_extract(edf.raw,'&wt=([^&\']*)',1).cast('long'))\
+         .withColumn('rb', regexp_extract(edf.raw,'&rb=([^&\']*)',1).cast('long'))\
+         .withColumn('wb', regexp_extract(edf.raw,'&wb=([^&\']*)',1).cast('long'))\
+         .withColumn('cts', regexp_extract(edf.raw,'&cts=([^&\']*)',1).cast('long'))\
+         .withColumn('user', regexp_extract(edf.raw,'&sec.name=([^&\']*)',1))\
+         .withColumn('user_dn', regexp_extract(edf.raw,'&sec.info=([^&\']*)',1))\
+         .withColumn('day', date_format(from_unixtime(edf.timestamp/1000),'yyyyMMdd')).cache()
     eos_df.registerTempTable('eos_df')
     
     if verbose:
