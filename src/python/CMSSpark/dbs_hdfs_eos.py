@@ -52,15 +52,13 @@ def generate_parquet(
     # spark.conf.set('spark.sql.session.timeZone', 'UTC')
     tables = eos_tables(spark, date=date, verbose=verbose, hdir=hdir)
     df = tables["eos_df"]
-    if mode == 'overwrite':
+    if mode == "overwrite":
         # This will make that the overwrite affect only specific partitions
-        # otherwise it will delete the existing dataset and create a new one. 
-        spark.conf.set("spark.sql.sources.partitionOverwriteMode","dynamic")
+        # otherwise it will delete the existing dataset and create a new one.
+        spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
     # Repartition by day will make this process slower
     # But reduce the number of files written and improve query time,
-    df.repartition("day").write.partitionBy("day").mode(mode).parquet(
-        parquetLocation
-    )
+    df.repartition("day").write.partitionBy("day").mode(mode).parquet(parquetLocation)
 
 
 def generate_dataset_totals_pandasdf(
@@ -76,8 +74,10 @@ def generate_dataset_totals_pandasdf(
     """
     if spark is None:
         spark = get_spark_session(True, False)
-    eos_df = spark.read.parquet(parquetLocation).filter(
-        "day between {} AND {}".format(*period)
+    eos_df = (
+        spark.read.option("basePath", parquetLocation)
+        .parquet(parquetLocation)
+        .filter("day between {} AND {}".format(*period))
     )
     eos_df = eos_df.groupby(
         "session", "file_lfn", "application", "user", "user_dn", "day"
@@ -174,9 +174,7 @@ def generate_dataset_file_days(
 @click.group()
 @click.option("--verbose", default=False, is_flag=True)
 @click.option(
-    "--parquetLocation",
-    default=DEFAULT_PARQUET_LOCATION,
-    envvar="PARQUET_LOCATION",
+    "--parquetLocation", default=DEFAULT_PARQUET_LOCATION, envvar="PARQUET_LOCATION",
 )
 @click.pass_context
 def cli(ctx, verbose, parquetlocation):
@@ -274,8 +272,9 @@ def get_filenames_per_day(ctx, period, outputdir, appfilter):
         spark=ctx.obj["SPARK"],
         parquetLocation=ctx.obj["PARQUET_LOCATION"],
     )
+    os.makedirs(outputdir, exist_ok=True)
     _datasets_filenames.to_csv(
-        os.path.join(outputdir, "fillenames_{}.csv.gz".format(period)),
+        os.path.join(outputdir, "fillenames_{start}_{end}.csv.gz".format(start=period[0], end=period[1])),
         compression="gzip",
     )
 
