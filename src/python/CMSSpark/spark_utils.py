@@ -633,6 +633,7 @@ def eos_tables(sqlContext,
          .withColumn('rb', regexp_extract(edf.raw,'&rb=([^&\']*)',1).cast('long'))\
          .withColumn('wb', regexp_extract(edf.raw,'&wb=([^&\']*)',1).cast('long'))\
          .withColumn('cts', regexp_extract(edf.raw,'&cts=([^&\']*)',1).cast('long'))\
+         .withColumn('csize', regexp_extract(edf.raw,'&csize=([^&\']*)',1).cast('long'))\
          .withColumn('user', regexp_extract(edf.raw,'&sec.name=([^&\']*)',1))\
          .withColumn('user_dn', regexp_extract(edf.raw,'&sec.info=([^&\']*)',1))\
          .withColumn('day', date_format(from_unixtime(edf.timestamp/1000),'yyyyMMdd')).cache()

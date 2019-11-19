@@ -549,12 +549,15 @@ def schema_empty_eos():
     return StructType([
         StructField("file_lfn", StringType(), True),
         StructField("user_dn", StringType(), True),
+        StructField("session", StringType(), True),
         StructField("host", StringType(), True),
         StructField("application", StringType(), True),
         StructField("csize", IntegerType(), True),
         StructField("rb", IntegerType(), True),
+        StructField("rb_max", IntegerType(), True),
         StructField("wb", IntegerType(), True),
         StructField("rt", IntegerType(), True),
         StructField("wt", IntegerType(), True),
         StructField("timestamp", LongType(), True),
+        StructField("day", LongType(), True),
     ])
