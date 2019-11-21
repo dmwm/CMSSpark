@@ -614,9 +614,9 @@ def eos_tables(sqlContext,
     # Sampling ratio, if there is more than one file we can take the 10%,
     # but if there is only one file it is probable that it have less than 10 records 
     # (making the samplig size 0, which make the process fail)
-    edf = sqlContext.read.option("basePath", hdir).option("samplingRatio", 0.1 if len(files_in_hpath)>1 else 1).json(hdir+'/'+date)
+    edf = sqlContext.read.option("basePath", hdir).option("samplingRatio", 0.1 if len(files_in_hpath)>1 else 1).json(files_in_hpath)
     f_data = 'data as raw' if str(edf.schema['data'].dataType) == 'StringType' else 'data.raw'
-    edf = edf.selectExpr(f_data,'metadata.timestamp').cache()
+    edf = edf.selectExpr(f_data,'metadata.timestamp')
       
     
     # At this moment, json files can have one of two known schemas. In order to read several days we need to be able to work with both of them. 
@@ -636,8 +636,7 @@ def eos_tables(sqlContext,
          .withColumn('csize', regexp_extract(edf.raw,'&csize=([^&\']*)',1).cast('long'))\
          .withColumn('user', regexp_extract(edf.raw,'&sec.name=([^&\']*)',1))\
          .withColumn('user_dn', regexp_extract(edf.raw,'&sec.info=([^&\']*)',1))\
-         .withColumn('day', date_format(from_unixtime(edf.timestamp/1000),'yyyyMMdd')).cache()
-    eos_df.registerTempTable('eos_df')
+         .withColumn('day', date_format(from_unixtime(edf.timestamp/1000),'yyyyMMdd'))
     
     if verbose:
         eos_df.printSchema()
