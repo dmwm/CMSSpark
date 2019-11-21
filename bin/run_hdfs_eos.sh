@@ -26,5 +26,5 @@ then
 fi
 spark-submit  --master yarn \
 --conf spark.driver.extraClassPath='/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar' \
---conf spark.executor.memory=4g --conf spark.executor.instances=60 --conf spark.driver.memory=2g \
+--conf spark.executor.memory=4g --conf spark.executor.instances=60 --conf spark.executor.cores=4 --conf spark.driver.memory=4g \
 "$currentDir/../src/python/CMSSpark/dbs_hdfs_eos.py" "$@"
