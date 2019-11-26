@@ -12,8 +12,9 @@ We use condor data in HDFS to generate statistics about data use in CRAB. We use
 
 And produce a dataset with: 
 
-- Dataset
-- CRAB_DataBlock
+- Datatier, generated from the datablock name. 
+- PrimaryDataset (CMSPrimaryPrimaryDataset)
+- Dataset, generated from the datablock name. 
 - max(RecordTime)
 - min(RecordTime)
   job_count: count of distinct completed or removed jobs. 
