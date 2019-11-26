@@ -115,7 +115,7 @@ def get_crab_popularity_ds(
 ):
     """
     Query the hdfs data and returns a pandas dataframe with:
-    Dataset, CRAB_DataBlock, job_count, workflow_count, ChirpCMSSWReadBytes
+    Datatier, Dataset, CMSPrimaryPrimaryDataset, job_count, workflow_count, ChirpCMSSWReadBytes
     args:
         - start_date datetime Start of the query period (RecordTime)
         - end_date datetime End of the query period
@@ -141,10 +141,12 @@ def get_crab_popularity_ds(
         )
         .repartition("CRAB_DataBlock")
         .drop_duplicates(["GlobalJobId"])
-        .withColumnRenamed("CMSPrimaryPrimaryDataset", "Dataset")
+        .withColumnRenamed("CMSPrimaryPrimaryDataset", "PrimaryDataset")
+        .withColumn("Dataset", regexp_extract("CRAB_DataBlock","^(.*)/([^/]*)#.*$",1))
+        .withColumn("Datatier", regexp_extract("CRAB_DataBlock","^(.*)/([^/]*)#.*$",2))
     )
     dfs_crabdb = (
-        dfs_crabdb.groupBy("Dataset", "CRAB_DataBlock")
+        dfs_crabdb.groupBy("Datatier","PrimaryDataset","Dataset")
         .agg(
             _max(col("RecordTime")),
             _min(col("RecordTime")),
@@ -154,13 +156,15 @@ def get_crab_popularity_ds(
         )
         .withColumnRenamed("count(1)", "job_count")
         .withColumnRenamed("count(DISTINCT CRAB_Workflow)", "workflow_count")
+        .withColumnRenamed("sum(ChirpCMSSWReadBytes)", "ChirpCMSSWReadBytes")
+        .na.fill("Unknown",["Datatier","PrimaryDataset","Dataset"])
     )
     return dfs_crabdb.toPandas()
 
 
 def generate_top_datasets_plot(pdf, output_folder, filename):
     datablocks_pd = (
-        pdf.groupby("CRAB_DataBlock")
+        pdf.groupby("Dataset")
         .agg(
             {
                 "job_count": "sum",
@@ -174,7 +178,7 @@ def generate_top_datasets_plot(pdf, output_folder, filename):
     _dims = (14, 8.5)
     fig, ax = plt.subplots(figsize=_dims)
     plot = sns.barplot(
-        data=datablocks_pd[:20], x="job_count", y="CRAB_DataBlock"
+        data=datablocks_pd[:20], x="job_count", y="Dataset"
     )
     fig.savefig(
         os.path.join(output_folder, f"{filename}_top_jc.png"),
