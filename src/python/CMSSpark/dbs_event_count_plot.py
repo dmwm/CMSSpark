@@ -14,6 +14,7 @@ CMSSpark/src/notebooks folder.
 """
 import os
 import argparse
+import json
 import logging
 from datetime import timedelta, date, datetime
 from dateutil.relativedelta import relativedelta
@@ -99,6 +100,16 @@ It prints the path of the created image in std output.
             help="output format for the plots",
         )
         self.parser.add_argument(
+            "--colors_file",
+            action="store",
+            default=None,
+            type=argparse.FileType("r"),
+            help="""A json file either with a list of colors (strings), 
+            or with a mapping of label and color. 
+            If the file is not valid, or is not provided,
+            a default palette will be generated.""",
+        )
+        self.parser.add_argument(
             "--tiers",
             action="store",
             nargs="*",
@@ -165,7 +176,7 @@ It prints the path of the created image in std output.
         )
 
 
-def plot_tiers_month(data):
+def plot_tiers_month(data, colors_file=None):
     """
     Create a stacked bar plot of events by data tier/month.
     args:
@@ -183,7 +194,6 @@ def plot_tiers_month(data):
     )
     logger.debug(months.dtypes)
     tiers = data_by_month_tier.data_tier_name.unique()
-    colors = sns.color_palette("hls", len(tiers))
     totals = (
         data_by_month_tier[["data_tier_name", "nevents"]]
         .groupby("data_tier_name")
@@ -204,6 +214,24 @@ def plot_tiers_month(data):
     plt.title(
         f"Event count plot from {data_by_month_tier.month.min()} to {data_by_month_tier.month.max()}"
     )
+    _default_colors = sns.color_palette("husl", len(tiers))
+    try:
+        colors = _default_colors if not colors_file else json.load(colors_file)
+        logger.info("colors before replacements %s", colors)
+        if isinstance(colors, dict):
+            _c_r = {label_replacements[k]: colors.get(k) for k in label_replacements}
+            colors = [_c_r[k] for k in pivot_df.columns]
+        logger.info("colors after replacements %s", colors)
+    except (json.JSONDecodeError, KeyError) as err:
+        # If the file is not a valid json,
+        # or the keys doesn't correspond to the tiernames,
+        # use the random palette.
+        logger.error(
+            "There was a problem while reading the colors file. %s, %s",
+            colors_file,
+            err,
+        )
+        colors = _default_colors
     plt.xlabel("Month")
     plt.ylabel("Event count")
     pivot_df.plot.bar(stacked=True, color=colors, ax=plot_ax)
@@ -330,9 +358,10 @@ def event_count_plot(
     tiers,
     remove_patterns,
     skims,
-    generate_csv,
-    only_valid_files,
-    verbose,
+    colors_file=None,
+    generate_csv=False,
+    only_valid_files=False,
+    verbose=False,
 ):
     """
     args:
@@ -365,7 +394,7 @@ def event_count_plot(
     if generate_csv:
         csv_filename = f"event_count_{start_date_f}-{end_date_f}.csv"
         event_count_pdf.to_csv(os.path.join(output_folder, csv_filename))
-    events_fig = plot_tiers_month(event_count_pdf)
+    events_fig = plot_tiers_month(event_count_pdf, colors_file)
     image_path = os.path.join(output_folder, image_filename)
     events_fig.savefig(image_path, format=output_format)
     return os.path.abspath(image_path)
@@ -387,7 +416,6 @@ def main():
         _end_date = datetime.strptime(f"{opts.end_month}/01", "%Y/%m/01")
         _start_date = _end_date - relativedelta(months=11)
         opts.start_month = _start_date.strftime("%Y/%m")
-
     start_date = f"{opts.start_month}/01"
     # The query to the data exclude the last day,
     # so we will query to the first day of the next month
@@ -403,9 +431,10 @@ def main():
         opts.tiers,
         opts.remove,
         opts.skims,
-        opts.generate_csv,
-        opts.only_valid_files,
-        opts.verbose,
+        colors_file=opts.colors_file,
+        generate_csv=opts.generate_csv,
+        only_valid_files=opts.only_valid_files,
+        verbose=opts.verbose,
     )
     print(filename)
 
