@@ -8,6 +8,8 @@ The result is an application that produces the event count by tier/month plot fo
 
 The event count plot application is part of [CMSSpark]( https://github.com/dmwm/CMSSpark ). Just install or update the CMSSpark python package or clone the repository and add `CMSSpark/src/python` to the python path.
 
+*Note*: Remember, to run spark jobs in the CERN Hadoop infrastructure you need to have your [account authorized]( https://hadoop-user-guide.web.cern.ch/hadoop-user-guide/getstart/access.html ).
+
 ## How to create the Event Count Plots
 
 In a LXPLUS-like environment, you can use the  [generate_event_count_plot.sh](../../bin/generate_event_count_plot.sh) script, which will take care of set up the environment and execute the python script. Any parameter you pass to this script will be pass to the python script. 
@@ -40,6 +42,11 @@ Valid parameters:
                         sensitive. Datasets which match the given skims will
                         not be counted as part of the tier, but in a separated
                         group named <tier>/<skim>.
+  --colors_file COLORS_FILE
+                        A json file either with a list of colors (strings), 
+                        or with a mapping of label and color. 
+                        If the file is not valid, or is not provided,
+                        a default palette will be generated. 
   --generate_csv        Create also a csv file with the plot data
   --only_valid_files    Only consider valid files, default False
   --verbose             Prints additional logging info
@@ -54,6 +61,36 @@ bin/generate_event_count_plot.sh --tiers "RAW" "RECO" "AOD" "RAW-RECO" "USER" "M
 This will create an event count plot for [2018/01/01, 2018/12/31] for the given tiers, excluding datasets which match the remove patterns and considering apart the datasets that match the skims patterns.  
 
  ![img](./img/event_count_201801-201812.png) 
+
+Using a "colors_file" you can customize your plot. An example of the content of this file is:
+
+```json
+{
+	"AOD": "tab:blue",
+	"MINIAOD": "tab:orange",
+	"NANOAOD": "tab:green",
+	"RAW-RECO": "tab:red",
+	"RECO": "tab:purple",
+	"USER": "tab:brown",
+	"AOD/PromptReco": "tab:pink",
+	"RAW-RECO/PromptReco": "tab:gray",
+	"USER/PromptReco": "tab:olive",
+	"RAW": "tab:cyan",
+	"GEN": "#a6cee3",
+	"GEN-SIM": "#1f78b4",
+	"GEN-RAW": "#b2df8a",
+	"GEN-SIM-RECO": "#33a02c",
+	"AODSIM": "#fb9a99",
+	"MINIAODSIM": "#e31a1c",
+	"RAWAODSIM": "#fdbf6f",
+	"NANOAODSIM": "#ff7f00",
+	"GEN-SIM-DIGI-RAW": "#cab2d6",
+	"GEN-SIM-RAW": "#6a3d9a",
+	"GEN-SIM-DIGI-RECO": "#ffff99"
+}
+```
+
+
 
 ### cronjob (acronjob)
 
