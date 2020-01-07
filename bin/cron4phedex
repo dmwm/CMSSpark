@@ -60,8 +60,9 @@ function func() {
     if [ $status -ne 0 ]; then
         local msg="`date`, `hostname`, cron4phedex completed with status=$status, error in $cmd, see log at $log"
         if [ -f /data/cms/bin/amtool ];
+            local expire=`date -d '+1 hour' --rfc-3339=ns | tr ' ' 'T'`
             /data/cms/bin/amtool alert add cron4phedex \
-                severity=monitoring \
+                severity=monitoring --end=$expire \
                 --annotation=summary="$msg" \
                 --alertmanager.url=http://cms-monitoring.cern.ch:9093
         else
