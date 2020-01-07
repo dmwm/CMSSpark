@@ -28,5 +28,23 @@ export PATH=$wdir:$wdir/bin:$PATH
 cmd="$wdir/bin/run_dbs_events.sh $odir"
 msg="Error while executing $cmd on $USER@`hostname` log at $log"
 set -e
-trap "echo \"$msg\" | mail -s \"Cron alert run_dbs_events.sh\" \"$addr\"" ERR
+#trap "echo \"$msg\" | mail -s \"Cron alert run_dbs_events.sh\" \"$addr\"" ERR
+# Call func function on exit
+trap func exit
+# Declare the function
+function func() {
+    local status=$?
+    if [ $status -ne 0 ]; then
+        local msg="`date`, `hostname`, cron4dbs_events completed with status=$status, error in $cmd, see log at $log"
+        if [ -f /data/cms/bin/amtool ];
+            /data/cms/bin/amtool alert add cron4dbs_events \
+                severity=monitoring \
+                --annotation=summary="$msg" \
+                --alertmanager.url=http://cms-monitoring.cern.ch:9093
+        else
+            echo "$msg" | mail -s "Cron alert cron4dbs_events" "$addr"
+        fi
+    fi
+}
+
 $cmd >> $log 2>&1
