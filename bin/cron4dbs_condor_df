@@ -51,3 +51,22 @@ if [ $? -eq 0 ]; then
 else
     echo "HDFS area $pdir/$year/$month/$day does not exist ..." >> $log
 fi
+set -e
+# Call func function on exit
+trap func exit
+# Declare the function
+function func() {
+    local status=$?
+    if [ $status -ne 0 ]; then
+        local msg="`date`, $USER@`hostname`, cron4dbs_condor_df completed with status=$status"
+        if [ -f /data/cms/bin/amtool ];
+            /data/cms/bin/amtool alert add cron4dbs_condor_df \
+                severity=monitoring \
+                --annotation=summary="$msg" \
+                --alertmanager.url=http://cms-monitoring.cern.ch:9093
+        else
+            echo $msg
+            echo "$msg" | mail -s "Cron alert cron4dbs_condor_df" "$addr"
+        fi
+    fi
+}
