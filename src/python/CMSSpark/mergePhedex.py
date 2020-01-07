@@ -18,6 +18,8 @@ import time
 import argparse
 import subprocess
 
+from CMSSpark.utils import fopen
+
 class OptionParser():
     def __init__(self):
         "User based option parser"
@@ -130,7 +132,7 @@ def process(idir, dates, fout):
                     if 'part-' not in ifile:
                         continue
                     iname = os.path.join(path, ifile)
-                    with open(iname) as istream:
+                    with fopen(iname) as istream:
                         while True:
                             line = istream.readline().replace('\n', '')
                             if not line:

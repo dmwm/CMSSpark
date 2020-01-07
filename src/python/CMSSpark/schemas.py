@@ -20,7 +20,7 @@ def schema_processing_eras():
     DBS PROCESSING_ERAS table schema
 
     PROCESSING_ERA_ID NOT NULL NUMBER(38)
-    PROCESSING_ERA_NAME NOT NULL VARCHAR2(120)
+    PROCESSING_VERSION NOT NULL NUMBER(38)
     CREATION_DATE NOT NULL INTEGER
     CREATE_BY NOT NULL VARCHAR2(500)
     DESCRIPTION NOT NULL VARCHAR2(40)
@@ -29,7 +29,7 @@ def schema_processing_eras():
     """
     return StructType([
             StructField("processing_era_id", IntegerType(), True),
-            StructField("processing_version", StringType(), True),
+            StructField("processing_version", DoubleType(), True),
             StructField("creation_date", IntegerType(), True),
             StructField("create_by", StringType(), True),
             StructField("description", StringType(), True)
@@ -549,12 +549,15 @@ def schema_empty_eos():
     return StructType([
         StructField("file_lfn", StringType(), True),
         StructField("user_dn", StringType(), True),
+        StructField("session", StringType(), True),
         StructField("host", StringType(), True),
         StructField("application", StringType(), True),
         StructField("csize", IntegerType(), True),
         StructField("rb", IntegerType(), True),
+        StructField("rb_max", IntegerType(), True),
         StructField("wb", IntegerType(), True),
         StructField("rt", IntegerType(), True),
         StructField("wt", IntegerType(), True),
         StructField("timestamp", LongType(), True),
+        StructField("day", LongType(), True),
     ])
