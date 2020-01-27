@@ -35,12 +35,17 @@ trap func exit
 function func() {
     local status=$?
     if [ $status -ne 0 ]; then
-        local msg="`date`, `hostname`, cron4dbs_events completed with status=$status, error in $cmd, see log at $log"
+        local msg="cron4dbs_events completed with non zero status"
         if [ -f /data/cms/bin/amtool ]; then
             local expire=`date -d '+1 hour' --rfc-3339=ns | tr ' ' 'T'`
             /data/cms/bin/amtool alert add cron4dbs_events \
                 severity=monitoring --end=$expire \
                 --annotation=summary="$msg" \
+                --annotation=date="`date`" \
+                --annotation=hostname="`hostname`" \
+                --annotation=status="$status" \
+                --annotation=command="$cmd" \
+                --annotation=log="$log" \
                 --alertmanager.url=http://cms-monitoring.cern.ch:30093
         else
             echo "$msg" | mail -s "Cron alert cron4dbs_events" "$addr"
