@@ -164,7 +164,12 @@ def generate_plot(pdf, by, output_folder, filename):
     sorted_pd = pdf.sort_values(group_field, ascending=False)
     _dims = (14, 8.5)
     fig, ax = plt.subplots(figsize=_dims)
-    plot = sns.barplot(data=sorted_pd, x=group_field, y="count(DISTINCT CRAB_UserHN)")
+    plot = sns.barplot(
+        data=sorted_pd,
+        x=group_field,
+        y="count(DISTINCT CRAB_UserHN)",
+        color="tab:blue",
+    )
     fig.savefig(
         os.path.join(output_folder, f"{filename}.png"), bbox_inches="tight",
     )
@@ -187,6 +192,10 @@ def generate_plot(pdf, by, output_folder, filename):
 )
 @click.option("--output_folder", default="./output", help="local output directory")
 def main(start_date, end_date, output_folder, by="month", generate_plots=False):
+    """
+        This script will generate a dataset with the number of unique users of CRAB
+        either by month or by weekofyear.
+    """
     cp_pdf = get_crab_unique_users(start_date, end_date, by)
     os.makedirs(output_folder, exist_ok=True)
     filename = f"UniqueUsersBy_{by}_{start_date.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
