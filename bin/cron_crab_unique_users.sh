@@ -1,5 +1,21 @@
 #!/bin/bash
-OUTPUT_DIR="${1:-./output}"
+# This script is intended to be used as cron job. 
+# For this reason it will use sensible defaults 
+# for the required parameters.
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]
+then
+cat <<EOF
+ Usage: cron_crab_unique_users.sh <OUTPUT_DIR> <START_DATE> <END_DATE>
+   - if OUTPUT_DIR is not specified, $HOME/output_crab_uu will be used.
+   - if not END_DATE is specified, it will use the first day of the current month. 
+   - if there is not START_DATE and END_DATE it will cover a 1 year period,
+     ending in the first day of the current month (without including it)
+ This script will generate two plots and two datasets, one with monthly values 
+ and other with weekly values. 
+EOF
+exit 0
+fi
+OUTPUT_DIR="${1:-$HOME/output_crab_uu}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 END_DATE="${3:-$(date +%Y-%m-01)}"

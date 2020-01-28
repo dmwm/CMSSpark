@@ -1,10 +1,13 @@
 #!/bin/bash
+# This script set up the environment and run the condor_crab_unique_users.py
+# Run with --help to see usage instructions. 
 # With this environment, It works in lxplus7, it can requiere modifications to run elsewhere.
+# See https://github.com/dmwm/CMSSpark/blob/master/doc/scripts/CRAB_UniqueUsers_script.md
+# for mor details. 
 source /cvmfs/sft.cern.ch/lcg/views/LCG_96python3/x86_64-centos7-gcc8-opt/setup.sh
 source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-swan-setconf.sh analytix
 currentDir=$(
-  cd $(dirname "$0")
-  pwd
+  cd "$(dirname "$0")" && pwd
 )
 #In lxplus, when running with acrontab, we need to set the java home
 # to a jvm with avanced encryption enabled. 
@@ -18,7 +21,6 @@ then
     (>&2 echo "This script requires a java version with AES enabled") 
     exit 1
 fi
-export PYTHONPATH=$PYTHONPATH:"$currentDir/../src/python"
 if ! klist -s
 then
     echo "There is not valid ticket yet"
@@ -26,5 +28,5 @@ then
 fi
 spark-submit  --master yarn \
 --conf spark.driver.extraClassPath='/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar' \
---conf spark.executor.memory=4g --conf spark.executor.instances=60 --conf spark.executor.cores=4 --conf spark.driver.memory=4g \
+--conf spark.executor.memory=8g --conf spark.executor.instances=60 --conf spark.executor.cores=4 --conf spark.driver.memory=4g \
 "$currentDir/../src/python/CMSSpark/condor_crab_unique_users.py" "$@"
