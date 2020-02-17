@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Author: Christian Ariza <christian.ariza AT gmail [DOT] com>
 """
-Generate datasets and plots for CRAB unique users count
+Generate datasets and plots for HS06 core hours
 either by week of year or by month for a given calendar year.
 """
 import os
@@ -37,7 +37,7 @@ def get_spark_session(yarn=True, verbose=False):
     """
         Get or create the spark context and session.
     """
-    sc = SparkContext(appName="cms-crab-unique-users")
+    sc = SparkContext(appName="cms-hs06corehrs_plot")
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
@@ -72,7 +72,7 @@ def _get_candidate_files(start_date, end_date, spark, base=_BASE_PATH):
     return candidate_files
 
 
-def _get_crab_condor_schema():
+def _get_hs06_condor_schema():
     """
     Define the subset of the condor schema that we will use
     in this application.
@@ -85,7 +85,7 @@ def _get_crab_condor_schema():
                     [
                         StructField("GlobalJobId", StringType(), nullable=False),
                         StructField("RecordTime", LongType(), nullable=False),
-                        StructField("CRAB_UserHN", StringType(), nullable=True),
+                        StructField("HS06CpuTimeHr", DoubleType(), nullable=True),
                         StructField("Status", StringType(), nullable=True),
                         StructField("Site", StringType(), nullable=True),
                         StructField("Type", StringType(), nullable=True),
@@ -97,7 +97,7 @@ def _get_crab_condor_schema():
     return schema
 
 
-def get_crab_unique_users(
+def get_hs06CpuTImeHr(
     start_date,
     end_date,
     by="month",
@@ -108,7 +108,7 @@ def get_crab_unique_users(
 ):
     """
     Query the hdfs data and returns a pandas dataframe with:
-    year, [weekofyear/month], count(DISTINCT CRAB_UserHN)
+    year, [weekofyear/month], sum(HS06CpuTimeHr)
     args:
         - start_date datetime Start of the query period (RecordTime)
         - end_date datetime End of the query period
@@ -123,28 +123,26 @@ def get_crab_unique_users(
         spark.read.option("basePath", base)
         .json(
             _get_candidate_files(start_date, end_date, spark, base=base),
-            schema=_get_crab_condor_schema(),
+            schema=_get_hs06_condor_schema(),
         )
         .select("data.*")
         .filter(
             f"""Status='Completed'
-              AND Type='analysis'
-              AND Site rlike '{include_re}'
-              AND NOT Site rlike '{exclude_re}'
-              AND RecordTime>={start}
-              AND RecordTime<{end}
-              """
+                  AND Site rlike '{include_re}' 
+                  AND NOT Site rlike '{exclude_re}'
+                  AND RecordTime>={start}
+                  AND RecordTime<{end}
+                  """
         )
         .withColumn("RecordDate", from_unixtime(col("RecordTime") / 1000))
-        .withColumn(
-            by, month("RecordDate") if by == "month" else weekofyear("RecordDate")
-        )
+        .withColumn("weekofyear", weekofyear("RecordDate"))
+        .withColumn("month", month("RecordDate"))
         .withColumn("year", year("RecordDate"))
     )
     grouped_sdf = (
-        dfs_raw.dropDuplicates(["GlobalJobId"])
-        .groupBy(["year", by])
-        .agg(countDistinct("CRAB_UserHN"))
+        dfs_raw.drop_duplicates(["GlobalJobId"])
+        .groupby(["year", by])
+        .agg({"HS06CpuTimeHr": "sum"})
     )
     return grouped_sdf.toPandas()
 
@@ -153,7 +151,7 @@ def generate_plot(pdf, by, output_folder, filename):
     """
     Generates and save in the output_folder a bar plot
     for the given dataset. The dataset must include year,
-    either a month or a weekofyear, and count(DISTINCT CRAB_UserHN).
+    either a month or a weekofyear, and sum(HS06 kdays).
     If the year is the same for all the records, only the month/weekofyear
     will be used in the labels, otherwise it will show year-month or
     year-weekofyear.
@@ -161,12 +159,11 @@ def generate_plot(pdf, by, output_folder, filename):
     group_field = by if pdf.year.nunique() == 1 else "period"
     if group_field == "period":
         pdf["period"] = pdf.year.astype(str) + "-" + pdf[by].astype(str).str.zfill(2)
-    sorted_pd = pdf.sort_values(group_field, ascending=True)
+    sorted_pd = pdf.sort_values(group_field)
     _dims = (18, 8.5)
     fig, ax = plt.subplots(figsize=_dims)
-    plot = sns.barplot(
-        data=sorted_pd, x=group_field, y="count(DISTINCT CRAB_UserHN)", color="tab:blue"
-    )
+    plot = sns.barplot(data=sorted_pd, x=group_field, y="HS06 kdays", color="tab:blue")
+    fig.text(0.1, -0.08, filename, fontsize=10)
     fig.savefig(os.path.join(output_folder, f"{filename}.png"), bbox_inches="tight")
 
 
@@ -178,6 +175,7 @@ def generate_plot(pdf, by, output_folder, filename):
     default="month",
     type=click.Choice(_VALID_BY),
     help="Either weekofyear or month",
+    show_default=True,
 )
 @click.option(
     "--include_re",
@@ -205,17 +203,18 @@ def main(
     by="month",
     generate_plots=False,
     include_re=".*",
-    exclude_re="^$",
+    exclude_re=".*",
 ):
     """
         This script will generate a dataset with the number of unique users of CRAB
         either by month or by weekofyear.
     """
-    cp_pdf = get_crab_unique_users(
+    cp_pdf = get_hs06CpuTImeHr(
         start_date, end_date, by, include_re=include_re, exclude_re=exclude_re
     )
+    cp_pdf["HS06 kdays"] = cp_pdf["sum(HS06CpuTimeHr)"] / 24000.0
     os.makedirs(output_folder, exist_ok=True)
-    filename = f"UniqueUsersBy_{by}_{start_date.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
+    filename = f"HS06CpuTimeHr_{by}_{start_date.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
     cp_pdf.to_csv(os.path.join(output_folder, f"{filename}.csv"))
     if generate_plots:
         generate_plot(cp_pdf, by, output_folder, filename)
