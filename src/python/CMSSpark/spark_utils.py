@@ -95,7 +95,7 @@ def glob_files(sc, url,verbose):
 
 def avro_files(path, verbose=0):
     "Return list of files for given HDFS path"
-    hpath = "hadoop fs -ls %s | awk '{print $8}'" % path
+    hpath = "hadoop fs -ls %s/*.avro | awk '{print $8}'" % path
     if  verbose:
         print("### Avro files area: %s" % hpath)
     if sys.version_info[0] < 3:
@@ -106,7 +106,7 @@ def avro_files(path, verbose=0):
     if sys.version_info[0] < 3:
         fnames = [f for f in pipe.stdout.read().split('\n') if f.endswith('avro')]
     else:
-        fnames = [f.strip() for f in pipe.stdout.readlines() if f.endswith('avro')]
+        fnames = [f.strip() for f in pipe.stdout.readlines() if f.endswith('avro\n')]
     return fnames
 
 def unionAll(dfs, cols=None):
@@ -452,14 +452,18 @@ def avro_rdd(ctx, sqlContext, hdir, date=None, verbose=None):
     """
 
     if  date == None:
-        date = time.strftime("year=%Y/month=%-m/day=%d", time.gmtime(time.time()-60*60*24))
+        date = time.strftime("year=%Y/month=%-m/day=%-d", time.gmtime(time.time()-60*60*24))
+        path = '%s/%s' % (hdir, date)
+    elif len(str(date)) == 8: # YYYYMMDD
+        ddd = dt.strptime(str(date), "%Y%m%d")
+        date = time.strftime("year=%Y/month=%-m/day=%-d", ddd.utctimetuple())
         path = '%s/%s' % (hdir, date)
     else:
         path = hdir
         if  date:
             path = '%s/%s' % (hdir, date)
 
-    print("### hdir", path)
+    print("### hdir", path, type(path))
     if  isinstance(path, list):
         afiles = path
     else:
