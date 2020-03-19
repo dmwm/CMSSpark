@@ -13,7 +13,7 @@ me=$(dirname "$0")
 wdir=`echo $me | sed -e "s,/bin,,g"`
 mkdir -p $wdir/logs
 log=$wdir/logs/agg-`date +%Y%m%d`.log
-export PYTHONPATH=$wdir/src/python:$PYTHONPATH
+export PYTHONPATH=$wdir/src/python:$PYTHONPATH:/data/cms/CMSMonitoring/src/python
 export PATH=$wdir/bin:$PATH
 cmd="$wdir/bin/run_aggregation $wdir/etc/conf.json"
 msg="Error while executing $cmd on $USER@`hostname` log at $log"
