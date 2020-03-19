@@ -2,9 +2,10 @@
 #-*- coding: utf-8 -*-
 #pylint: disable=
 """
-File       : convert_cmssw.py
+File       : avro2json.py
 Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
-Description: 
+Description: convert avro file to json on HDFS. Here is usage example
+run_spark avro2json.py --yarn --date "20200102" --verbose --fout /cms/tmp/cmssw/
 """
 
 # system modules
@@ -38,8 +39,6 @@ class OptionParser():
         self.parser.add_argument("--verbose", action="store_true",
             dest="verbose", default=False, help="verbose output")
 
-#[{u'USER_DN': u'/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=amaltaro/CN=718748/CN=Alan Malta Rodrigues/CN=1968084961/CN=1153133833/CN=2121994674/CN=1843002439', u'FILE_SIZE': u'0', u'READ_VECTOR_COUNT_SIGMA': u'10.4623', u'CLIENT_HOST': u'hammer-a123', u'READ_SINGLE_AVERAGE': u'74414.3', u'SERVER_DOMAIN': u'unknown', u'END_DATE': 1577919600000, u'START_TIME': u'1577921926', u'READ_BYTES_AT_CLOSE': u'2241128612', u'SERVER_HOST': u'unknown', u'READ_VECTOR_OPERATIONS': u'195', u'READ_VECTOR_AVERAGE': u'10838900', u'READ_SINGLE_OPERATIONS': u'1714', u'SITE_NAME': u'T2_US_Purdue', u'INSERT_DATE': 1577923511000, u'READ_VECTOR_COUNT_AVERAGE': u'9.46154', u'CLIENT_DOMAIN': u'unknown', u'READ_VECTOR_SIGMA': u'7081840', u'END_TIME': u'1577923200', u'START_DATE': 1577918326000, u'READ_VECTOR_BYTES': u'2113582443', u'READ_SINGLE_BYTES': u'127546169', u'APP_INFO': None, u'FILE_LFN': u'../cmsRun3/RAWSIMoutput.root', u'READ_BYTES': u'2241128612', u'READ_SINGLE_SIGMA': u'271279', u'FALLBACK': u'-', u'UNIQUE_ID': u'AFB0B1C9-30EA-8E4F-A4F3-88B6BCB5D84E-0'}]
-
 def transform(rec):
     xdf = {}
     for key, val in rec.items():
@@ -60,7 +59,10 @@ def transform(rec):
 
 def convert(ctx, sqlContext, date, fin, fout, verbose):
     "Helper function to convert fin (avro) to fout (json)"
-    pdf = cmssw_tables(ctx, sqlContext, date=date)
+    if fin:
+        pdf = cmssw_tables(ctx, sqlContext, hdir=fin, date=date)
+    else:
+        pdf = cmssw_tables(ctx, sqlContext, date=date)
     xdf = pdf['cmssw_df']
     if verbose:
         records = xdf.take(1)
