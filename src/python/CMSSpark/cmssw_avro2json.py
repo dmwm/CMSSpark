@@ -2,10 +2,10 @@
 #-*- coding: utf-8 -*-
 #pylint: disable=
 """
-File       : avro2json.py
+File       : cmssw_avro2json.py
 Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
 Description: convert avro file to json on HDFS. Here is usage example
-run_spark avro2json.py --yarn --date "20200102" --verbose --fout /cms/tmp/cmssw/
+run_spark cmssw_avro2json.py --yarn --date "20200102" --verbose --fout /cms/tmp/cmssw/
 """
 
 # system modules
