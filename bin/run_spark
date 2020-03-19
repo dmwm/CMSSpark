@@ -12,7 +12,7 @@ if [ "$#" -eq 0 ]; then
 fi
 
 # find out where CMSSpark is installed on a system
-droot=`python -c "import CMSSpark; print '/'.join(CMSSpark.__file__.split('/')[:-1])"`
+droot=`python -c "import CMSSpark; print('/'.join(CMSSpark.__file__.split('/')[:-1]))"`
 if [ -f $1 ]; then
     cmsspark=$1
 else
@@ -25,6 +25,8 @@ hostname=`hostname -s`
 if [ "$hostname" != "vocms092" ]; then
 #conf="--conf spark.authenticate.secret=cmsspark --conf spark.yarn.security.tokens.hive.enabled=false --conf spark.driver.port=5001 --conf spark.blockManager.port=5101 --conf spark.ui.port=5201"
 conf="--conf spark.authenticate.secret=cmsspark --conf spark.yarn.security.credentials.hive.enabled=false --conf spark.driver.port=5001 --conf spark.blockManager.port=5101 --conf spark.ui.port=5201"
+else
+conf="$conf --py-files /data/cms/CMSMonitoring/src/python/CMSMonitoring.zip"
 fi
 
 # look if we requested to show full log output, to disable spark output
