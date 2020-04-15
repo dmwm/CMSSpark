@@ -25,6 +25,7 @@ from CMSSpark.schemas import schema_files, schema_mod_configs, schema_out_config
 from CMSSpark.schemas import schema_rel_versions, schema_file_lumis, schema_phedex
 from CMSSpark.schemas import schema_phedex_summary, schema_data_tiers
 from CMSSpark.schemas import schema_jm, schema_cmssw, schema_asodb, schema_empty_aaa, schema_empty_eos
+from CMSSpark.schemas import schema_cmspop_json
 
 from pyspark import SparkContext, StorageLevel
 from pyspark.sql import Row
@@ -367,48 +368,45 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', inst='GLOBAL', verbos
 
     return dbs_tables
 
-def cmssw_tables(ctx, sqlContext,
-        hdir='hdfs:///project/awg/cms/cmssw-popularity/avro-snappy', date=None, verbose=None):
+def cmssw_tables(
+    ctx,
+    spark,
+    hdir="hdfs:///project/monitoring/archive/cmssw_pop/raw/metric/",
+    date=None,
+    verbose=None,
+):
     """
-    Parse CMSSW HDFS records, comes from
-    https://gitlab.cern.ch/awg/awg-ETL-crons/blob/master/sqoop/cmssw-popularity.sh
-
-    Example of CMSSW record on HDFS
-    {"UNIQUE_ID":"08F8DD3A-0FFE-E611-B710-BC305B3909F1-1","FILE_LFN":"/s.root",
-    "FILE_SIZE":"3865077537","CLIENT_DOMAIN":"in2p3.fr","CLIENT_HOST":"sbgwn141",
-    "SERVER_DOMAIN":"in2p3.fr","SERVER_HOST":"sbgse20","SITE_NAME":"T2_FR_IPHC",
-    "READ_BYTES_AT_CLOSE":"438385807","READ_BYTES":"438385807",
-    "READ_SINGLE_BYTES":"8913451","READ_SINGLE_OPERATIONS":"19",
-    "READ_SINGLE_AVERAGE":"469129","READ_SINGLE_SIGMA":"1956390","READ_VECTOR_BYTES":"429472356",
-    "READ_VECTOR_OPERATIONS":"58","READ_VECTOR_AVERAGE":"7404700","READ_VECTOR_SIGMA":"6672770",
-    "READ_VECTOR_COUNT_AVERAGE":"37.4138","READ_VECTOR_COUNT_SIGMA":"35.242","FALLBACK":"-",
-    "USER_DN":"/DC=1846615186/CN=2041527197","APP_INFO":"3809_https://glidein.cern.ch/3809/DSm:4b_0",
-    "START_TIME":"1488325657","END_TIME":"1488326400","START_DATE":1488322057000,
-    "END_DATE":1488322800000,"INSERT_DATE":1488323999000}
-
-    :returns: a dictionary with CMSSW Spark DataFrame
+       Parse cmssw popularity data from HDFS. 
     """
-    rdd = avro_rdd(ctx, sqlContext, hdir, date, verbose)
+    # For backward compatibility
+    if hdir == "hdfs:///project/awg/cms/cmssw-popularity/avro-snappy":
+        hdir = "hdfs:///project/monitoring/archive/cmssw_pop/raw/metric/"
+        logging.warning(
+            f"Deprecated: for backward compability {hdir}"
+            " will be used instead of "
+            "hdfs:///project/awg/cms/cmssw-popularity/avro-snappy"
+        )
+    if date == None:
+        date = time.strftime("%Y/%-m/%-d", time.gmtime(time.time() - 60 * 60 * 24))
+        path = "%s/%s" % (hdir, date)
+    elif len(str(date)) == 8:  # YYYYMMDD
+        ddd = dt.strptime(str(date), "%Y%m%d")
+        date = time.strftime("%Y/%-m/%-d", ddd.utctimetuple())
+        path = "%s/%s" % (hdir, date)
+    else:
+        path = hdir
+        if date:
+            path = "%s/%s" % (hdir, date)
+    df = (
+        spark.read.option("basePath", hdir)
+        .json(path, schema=schema_cmspop_json())
+        .select("data.*")
+    )
 
-    # create new spark DataFrame
-    jdf = sqlContext.createDataFrame(rdd, schema=schema_cmssw())
-    df = jdf.withColumn("READ_BYTES", jdf["READ_BYTES"].cast(LongType()))\
-            .withColumn("READ_BYTES_AT_CLOSE", jdf["READ_BYTES_AT_CLOSE"].cast(LongType()))\
-            .withColumn("READ_SINGLE_BYTES", jdf["READ_SINGLE_BYTES"].cast(LongType()))\
-            .withColumn("READ_SINGLE_OPERATIONS", jdf["READ_SINGLE_OPERATIONS"].cast(DoubleType()))\
-            .withColumn("READ_SINGLE_AVERAGE", jdf["READ_SINGLE_AVERAGE"].cast(DoubleType()))\
-            .withColumn("READ_SINGLE_SIGMA", jdf["READ_SINGLE_SIGMA"].cast(DoubleType()))\
-            .withColumn("READ_VECTOR_BYTES", jdf["READ_VECTOR_BYTES"].cast(LongType()))\
-            .withColumn("READ_VECTOR_OPERATIONS", jdf["READ_VECTOR_OPERATIONS"].cast(DoubleType()))\
-            .withColumn("READ_VECTOR_AVERAGE", jdf["READ_VECTOR_AVERAGE"].cast(DoubleType()))\
-            .withColumn("READ_VECTOR_SIGMA", jdf["READ_VECTOR_SIGMA"].cast(DoubleType()))\
-            .withColumn("READ_VECTOR_COUNT_AVERAGE", jdf["READ_VECTOR_COUNT_AVERAGE"].cast(DoubleType()))\
-            .withColumn("READ_VECTOR_COUNT_SIGMA", jdf["READ_VECTOR_COUNT_SIGMA"].cast(DoubleType()))
-    df = sqlContext.createDataFrame(rdd, schema=schema_cmssw())
-    fix_lfn = udf(lambda z: z.replace('file:', ''), StringType())
-    df = df.withColumn("FILE_LFN", fix_lfn("FILE_LFN"))
-    df.registerTempTable('cmssw_df')
-    tables = {'cmssw_df': df}
+    df = df.select(*[c.upper() for c in df.columns])
+    df = df.withColumn("FILE_LFN", regexp_replace("FILE_LFN", "file:", ""))
+    df.registerTempTable("cmssw_df")
+    tables = {"cmssw_df": df}
     return tables
 
 def jm_tables(ctx, sqlContext,

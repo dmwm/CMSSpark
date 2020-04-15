@@ -561,3 +561,64 @@ def schema_empty_eos():
         StructField("timestamp", LongType(), True),
         StructField("day", LongType(), True),
     ])
+    
+def schema_cmspop_json():
+    return StructType(
+        [
+            StructField(
+                "data",
+                StructType(
+                    [
+                        StructField("app_info", StringType(), True),
+                        StructField("client_domain", StringType(), True),
+                        StructField("client_host", StringType(), True),
+                        StructField("end_date", StringType(), True),
+                        StructField("end_time", LongType(), True),
+                        StructField("fallback", BooleanType(), True),
+                        StructField("file_lfn", StringType(), True),
+                        StructField("file_size", LongType(), True),
+                        StructField("insert_date", StringType(), True),
+                        StructField("read_bytes", LongType(), True),
+                        StructField("read_bytes_at_close", LongType(), True),
+                        StructField("read_single_average", DoubleType(), True),
+                        StructField("read_single_bytes", LongType(), True),
+                        StructField("read_single_operations", LongType(), True),
+                        StructField("read_single_sigma", DoubleType(), True),
+                        StructField("read_vector_average", DoubleType(), True),
+                        StructField("read_vector_bytes", LongType(), True),
+                        StructField("read_vector_count_average", DoubleType(), True),
+                        StructField("read_vector_count_sigma", DoubleType(), True),
+                        StructField("read_vector_operations", LongType(), True),
+                        StructField("read_vector_sigma", DoubleType(), True),
+                        StructField("server_domain", StringType(), True),
+                        StructField("server_host", StringType(), True),
+                        StructField("site_name", StringType(), True),
+                        StructField("start_date", StringType(), True),
+                        StructField("start_time", LongType(), True),
+                        StructField("unique_id", StringType(), True),
+                        StructField("user_dn", StringType(), True),
+                    ]
+                ),
+                True,
+            ),
+            StructField(
+                "metadata",
+                StructType(
+                    [
+                        StructField("_id", StringType(), True),
+                        StructField("hostname", StringType(), True),
+                        StructField("kafka_timestamp", LongType(), True),
+                        StructField("partition", StringType(), True),
+                        StructField("producer", StringType(), True),
+                        StructField("timestamp", LongType(), True),
+                        StructField("topic", StringType(), True),
+                        StructField("type", StringType(), True),
+                        StructField("type_prefix", StringType(), True),
+                        StructField("version", StringType(), True),
+                    ]
+                ),
+                True,
+            ),
+        ]
+    )
+
