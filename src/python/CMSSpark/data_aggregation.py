@@ -306,7 +306,7 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
     unix_date = short_date_to_unix(short_date_string(date))
 
     # Convert date
-    date = long_date_string(date)
+    date = short_date_string(date)
 
     # Create CMSSW tables in sql_context
     cmssw_df = cmssw_tables(ctx, sql_context, date=date, verbose=verbose)

@@ -32,7 +32,7 @@ from pyspark.sql import Row
 from pyspark.sql import SQLContext
 from pyspark.sql import DataFrame
 from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField, StringType, BooleanType, LongType
-from pyspark.sql.functions import split, col, udf, regexp_extract, date_format, from_unixtime
+from pyspark.sql.functions import split, col, udf, regexp_extract, date_format, from_unixtime, regexp_replace
 
 class SparkLogger(object):
     "Control Spark Logger"
@@ -382,8 +382,8 @@ def cmssw_tables(
     if hdir == "hdfs:///project/awg/cms/cmssw-popularity/avro-snappy":
         hdir = "hdfs:///project/monitoring/archive/cmssw_pop/raw/metric/"
         logging.warning(
-            f"Deprecated: for backward compability {hdir}"
-            " will be used instead of "
+            "Deprecated: for backward compability {}".format(hdir) +
+            " will be used instead of " +
             "hdfs:///project/awg/cms/cmssw-popularity/avro-snappy"
         )
     if date == None:
