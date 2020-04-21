@@ -574,7 +574,7 @@ def schema_cmspop_json():
                         StructField("client_host", StringType(), True),
                         StructField("end_date", StringType(), True),
                         StructField("end_time", LongType(), True),
-                        StructField("fallback", BooleanType(), True),
+                        StructField("fallback", StringType(), True),
                         StructField("file_lfn", StringType(), True),
                         StructField("file_size", LongType(), True),
                         StructField("insert_date", StringType(), True),
