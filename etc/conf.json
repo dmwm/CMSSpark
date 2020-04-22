@@ -4,7 +4,7 @@
     "credentials" : "/data/cms/CMSSpark/acronjob/amq_broker.json",
     "keytab" : "/data/cms/etc/agg.keytab",
     "aaa_dir" : "/project/monitoring/archive/xrootd/enr/gled",
-    "cmssw_dir" : "/project/awg/cms/cmssw-popularity/avro-snappy",
+    "cmssw_dir" : "hdfs:///project/monitoring/archive/cmssw_pop/raw/metric",
     "eos_dir" : "/project/monitoring/archive/eos/logs/reports/cms",
     "jm_dir" : "/project/awg/cms/jm-data-popularity/avro-snappy"
 }

@@ -97,7 +97,7 @@ else
     echo "construct date"
     aaa_date=$(last_non_temp_short_date $aaa_dir)
     eos_date=$(last_non_temp_short_date $eos_dir)
-    cmssw_date=$(last_non_temp_long_date $cmssw_dir)
+    cmssw_date=$(last_non_temp_short_date $cmssw_dir)
     jm_date=$(last_non_temp_long_date $jm_dir)
     min_date=`echo "$aaa_date $eos_date $cmssw_date $jm_date" | tr ' ' '\n' | sort | head -1`
     log "AAA date $aaa_date"
