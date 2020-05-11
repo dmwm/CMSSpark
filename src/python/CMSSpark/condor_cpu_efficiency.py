@@ -281,7 +281,8 @@ def generate_cpu_eff_site(
     group_type_map = {
         "production": ["Workflow", "WMAgent_RequestName"],
         "analysis": ["Workflow"],
-        "test": ["Wokflow"],
+        "test": ["Workflow"],
+        "folding@home": ["Workflow"],
     }
     group_by_col = group_type_map[cms_type]
     spark = get_spark_session()
