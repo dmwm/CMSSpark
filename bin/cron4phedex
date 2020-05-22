@@ -47,8 +47,8 @@ log=$wdir/logs/phedex-`date +%Y%m%d`.log
 export PYTHONPATH=$wdir/src/python:$PYTHONPATH
 export PATH=$wdir/bin:$PATH
 cmd="$wdir/bin/run_spark phedex.py --yarn --fout=$odir --date=$date"
-#echo "Will execute ..."
-#echo $cmd
+echo "Will execute ..."
+echo $cmd
 msg="Error while executing $cmd on $USER@`hostname` log at $log"
 set -e
 #trap "echo \"$msg\" | mail -s \"Cron alert run_spark phedex\" \"$addr\"" ERR
@@ -62,7 +62,7 @@ function func() {
         if [ -f /data/cms/bin/amtool ]; then
             local expire=`date -d '+1 hour' --rfc-3339=ns | tr ' ' 'T'`
             /data/cms/bin/amtool alert add cron4phedex \
-                severity=monitoring --end=$expire \
+                severity=monitoring -tag=cronjob --end=$expire \
                 --annotation=summary="$msg" \
                 --annotation=date="`date`" \
                 --annotation=hostname="`hostname`" \
