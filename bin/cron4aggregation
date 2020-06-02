@@ -29,7 +29,8 @@ function func() {
         if [ -f /data/cms/bin/amtool ]; then
             local expire=`date -d '+1 hour' --rfc-3339=ns | tr ' ' 'T'`
             /data/cms/bin/amtool alert add cron4aggregation \
-                severity=monitoring -tag=cronjob --end=$expire\
+                alertname=cron4aggregation severity=medium tag=cronjob alert=amtool \
+                --end=$expire\
                 --annotation=summary="$msg" \
                 --annotation=date="`date`" \
                 --annotation=hostname="`hostname`" \
