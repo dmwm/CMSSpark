@@ -72,7 +72,7 @@ if [ -n "$spark2" ] || [ -f $lxplus7_spark ]; then
     else
         jars="/afs/cern.ch/user/v/valya/public/spark/spark-examples-1.6.0-cdh5.15.1-hadoop2.6.0-cdh5.15.1.jar"
     fi
-    conf="$conf --packages com.databricks:spark-avro_2.11:4.0.0"
+    conf="$conf --packages org.apache.spark:spark-avro_2.11:2.4.3"
 else
     echo "Using spark 1.X"
     csvjar=/afs/cern.ch/user/v/valya/public/spark/spark-csv-assembly-1.4.0.jar
