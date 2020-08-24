@@ -9,7 +9,6 @@ addr=vkuznet@gmail.com
 # for Spark 2.X
 export PATH=$PATH:/usr/hdp/hadoop/bin
 export HADOOP_CONF_DIR=/etc/hadoop/conf
-export JAVA_HOME=/
 conf=$1
 keytab=`cat $conf | python -c "import sys, json; print json.load(sys.stdin)['keytab']"`
 principal=`klist -k "$keytab" | tail -1 | awk '{print $2}'`
