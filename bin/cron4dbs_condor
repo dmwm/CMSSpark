@@ -8,6 +8,7 @@ addr=vkuznet@gmail.com
 # DO NOT EDIT BELOW THIS LINE
 # for Spark 2.X
 export PATH=$PATH:/usr/hdp/hadoop/bin
+export JAVA_HOME=/
 
 # find out which date we should use to run the script
 year=`date +'%Y'`

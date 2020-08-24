@@ -18,6 +18,9 @@ odir=$1
 #fi
 #klist -k "$keytab" 2>&1 1>& /dev/null
 
+# environemnt for JAVA
+export JAVA_HOME=/
+
 # setup to run the script
 me=$(dirname "$0")
 wdir=`echo $me | sed -e "s,/bin,,g"`
