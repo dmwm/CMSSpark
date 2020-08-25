@@ -55,9 +55,13 @@ def update(rdict, giddict, line):
     date = int(date)
     size = int(size)
     rdate = int(rdate)
-    if gid == "null" or gid == '':
-        gid = "-1"
-    gid = int(gid)
+    try:
+	gid = int(gid)
+    except ValueError:
+        if gid and gid != "null":
+            #log if it is an unexpected value
+            print("gid: '{}'".format(gid))
+        gid = -1
     key = (site, dataset, rdate, gid)
     keyGid = (site, dataset, rdate)
 
