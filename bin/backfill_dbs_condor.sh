@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -l
 # This script check if a file for each date exists and, if not, it creates it. 
 # This script requieres a hadoop environment. 
 
