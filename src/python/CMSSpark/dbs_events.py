@@ -39,10 +39,12 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None, inst='G
     fdf = tables['fdf']
 
     # join tables
-    cols = ['d_dataset','d_dataset_id', 'd_creation_date', 'b_block_id','b_file_count','f_block_id','f_file_id','f_dataset_id','f_event_count','f_file_size']
+    cols = ['d_dataset','d_dataset_id', 'd_creation_date', 'b_block_id','b_file_count','f_block_id','f_file_id','f_dataset_id','f_event_count','f_file_size','f_is_file_valid']
 
-    # join tables and select valid files
-    stmt = 'SELECT %s FROM ddf JOIN bdf on ddf.d_dataset_id = bdf.b_dataset_id JOIN fdf on bdf.b_block_id=fdf.f_block_id WHERE fdf.f_is_file_valid = 1' % ','.join(cols)
+    # join tables and select files
+    # ideally this would select only valid files in valid data sets. However currently it appears that all data sets are valid
+    stmt = 'SELECT %s FROM ddf JOIN bdf on ddf.d_dataset_id = bdf.b_dataset_id JOIN fdf on bdf.b_block_id=fdf.f_block_id' % ','.join(cols)
+
     print(stmt)
     joins = sqlContext.sql(stmt)
 
@@ -52,20 +54,13 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None, inst='G
     # construct aggregation
     fjoin = joins\
             .groupBy(['d_dataset', 'd_creation_date'])\
-            .agg({'f_file_id':'count', 'f_event_count':'sum', 'f_file_size':'sum'})\
+            .agg({'f_file_id':'count', 'f_event_count':'sum', 'f_file_size':'sum', 'f_is_file_valid':'sum'})\
             .withColumnRenamed('d_dataset', 'dataset')\
             .withColumnRenamed('count(f_file_id)', 'nfiles')\
             .withColumnRenamed('sum(f_event_count)', 'nevents')\
             .withColumnRenamed('sum(f_file_size)', 'size')\
-            .withColumnRenamed('d_creation_date', 'creation_date')
-#    fjoin = joins\
-#            .groupBy(['d_dataset', 'd_creation_date'])\
-#            .agg({'b_file_count':'sum', 'f_event_count':'sum', 'f_file_size':'sum'})\
-#            .withColumnRenamed('d_dataset', 'dataset')\
-#            .withColumnRenamed('sum(b_file_count)', 'nfiles')\
-#            .withColumnRenamed('sum(f_event_count)', 'nevents')\
-#            .withColumnRenamed('sum(f_file_size)', 'size')\
-#            .withColumnRenamed('d_creation_date', 'creation_date')
+            .withColumnRenamed('d_creation_date', 'creation_date')\
+            .withColumnRenamed('sum(f_is_file_valid)','nfiles_valid')
 
     # keep table around
     fjoin.persist(StorageLevel.MEMORY_AND_DISK)
