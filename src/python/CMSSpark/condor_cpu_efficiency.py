@@ -149,9 +149,9 @@ def _generate_main_page(selected_pd, start_date, end_date, workflow_column=None,
         _fc = '<a class="selname">' + filter_column + "</a>"
         if filter_column.name == "WMAgent_RequestName":
             _fc += (
-                '<br/><a href="https://cms-unified.web.cern.ch/cms-unified/logmapping/'
+                '<br/><a href="https://cms-unified.web.cern.ch/cms-unified/report/'
                 + filter_column
-                + '/">logs</a>'
+                + '">logs</a>'
             )
         selected_pd[filter_column.name] = _fc
     html = format_df(selected_pd).to_html(escape=False, index=False)
