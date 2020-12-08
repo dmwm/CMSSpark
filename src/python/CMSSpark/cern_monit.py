@@ -57,6 +57,7 @@ def send2monit(data):
 #            if  not idx:
 #                print("### row", row, type(row))
             doc = json.loads(row)
+            doc["rec_tsmp"] = int(time.time())*1000
             hid = doc.get("hash", 1)
             arr.append(amq.make_notification(doc, hid))
         amq.send(arr)
