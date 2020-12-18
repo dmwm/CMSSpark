@@ -2,6 +2,11 @@
 
 In order to use the EOS HDFS data to generate data popularity data, we create an intermediate data source in parquet format. This script generates that intermediate dataset and allow us to query it to generate the report by application/dataset and by file/dataset. 
 
+The script does the following steps:
+- reads json.gz files from HDFS (path: ```hdfs:///project/monitoring/archive/eos/logs/reports/cms/YYYY/MM/DD``` before 2020, and ```hdfs:///project/monitoring/archive/eos-report/logs/cms/YYYY/MM/DD``` after 2020), written by the EOS CERN-IT group;
+- creates an intermediate parquet file at ```hdfs///cms/eos/full.parquet```, uniforming the different schemas in the input files (different schemas have been used at different times, due to historical reasons). The parquet file contains therefore data for all days and it's the base for creating the periodic reports;
+- create reports from parquet, in csv and png form.
+
 ## How to run it
 
 You can run any command with the --help option to get a description of subcomands/parameters. 
