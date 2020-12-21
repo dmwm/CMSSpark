@@ -24,7 +24,6 @@ def get_spark_session(yarn=True, verbose=False):
     """
         Get or create the spark context and session.
     """
-    verbose=True  
     sc = spark_context("cms-eos-dataset", yarn, verbose)
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
