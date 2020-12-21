@@ -560,7 +560,8 @@ def aaa_tables_enr(sqlContext,
     return tables
 
 def eos_tables(sqlContext,
-        hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms',
+#        hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms', #before 2020
+        hdir='hdfs:///project/monitoring/archive/eos-report/logs/cms', #after 2020
         date=None, start_date=None, end_date=None, verbose=False):
     """
     Parse EOS HDFS records. This data set comes from EOS servers at CERN. Data
@@ -617,28 +618,55 @@ def eos_tables(sqlContext,
     # but if there is only one file it is probable that it have less than 10 records 
     # (making the samplig size 0, which make the process fail)
     edf = sqlContext.read.option("basePath", hdir).option("samplingRatio", 0.1 if len(files_in_hpath)>1 else 1).json(files_in_hpath)
-    f_data = 'data as raw' if str(edf.schema['data'].dataType) == 'StringType' else 'data.raw'
-    edf = edf.selectExpr(f_data,'metadata.timestamp')
-      
+
+    #select columns
+    edf = edf.selectExpr\
+       ('metadata.timestamp', \
+        'data.rb_max', \
+        'data.td', \
+        'data.path', \
+        'data.`sec.app`', \
+        'data.rt', \
+        'data.wt', \
+        'data.rb', \
+        'data.wb', \
+        'data.cts', \
+        'data.csize', \
+        'data.`sec.name`', \
+        'data.`sec.info`') 
+
+    # backward compatibility: 
+    # path -> file_lfn, sec.name -> user, sec.info -> user_dn, td -> session, sec.app -> application
+    # add day based on timestamp
+    eos_df = edf.withColumnRenamed("path", "file_lfn")\
+        .withColumnRenamed("sec.name", "user") \
+        .withColumnRenamed("sec.info", "user_dn") \
+        .withColumnRenamed("sec.app", "application") \
+        .withColumnRenamed("td", "session") \
+        .withColumn('day', date_format(from_unixtime(edf.timestamp/1000),'yyyyMMdd')) 
+
+# OLD ---before 2020
+#    f_data = 'data as raw' if str(edf.schema['data'].dataType) == 'StringType' else 'data.raw'
+#    edf = edf.selectExpr(f_data,'metadata.timestamp')
     
     # At this moment, json files can have one of two known schemas. In order to read several days we need to be able to work with both of them. 
     # eos_df = edf.select(data.getField("eos.path").alias("file_lfn"), data.getField("eos.sec.info").alias("user_dn"), data.getField("eos.sec.app").alias("application"), data.getField("eos.sec.host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
     # eos_df = edf.select(eos_path, data.getField("sec_info").alias("user_dn"), data.getField("sec_app").alias("application"), data.getField("eos_host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
     # We can use the raw field because it doesn't change on time  
-    eos_df = edf\
-         .withColumn('rb_max', regexp_extract(edf.raw,'&rb_max=([^&\']*)',1).cast('long'))\
-         .withColumn('session', regexp_extract(edf.raw,'&td=([^&\']*)',1))\
-         .withColumn('file_lfn', regexp_extract(edf.raw,'&path=([^&]*)',1))\
-         .withColumn('application', regexp_extract(edf.raw,'&sec.app=([^&\']*)',1))\
-         .withColumn('rt', regexp_extract(edf.raw,'&rt=([^&\']*)',1).cast('long'))\
-         .withColumn('wt', regexp_extract(edf.raw,'&wt=([^&\']*)',1).cast('long'))\
-         .withColumn('rb', regexp_extract(edf.raw,'&rb=([^&\']*)',1).cast('long'))\
-         .withColumn('wb', regexp_extract(edf.raw,'&wb=([^&\']*)',1).cast('long'))\
-         .withColumn('cts', regexp_extract(edf.raw,'&cts=([^&\']*)',1).cast('long'))\
-         .withColumn('csize', regexp_extract(edf.raw,'&csize=([^&\']*)',1).cast('long'))\
-         .withColumn('user', regexp_extract(edf.raw,'&sec.name=([^&\']*)',1))\
-         .withColumn('user_dn', regexp_extract(edf.raw,'&sec.info=([^&\']*)',1))\
-         .withColumn('day', date_format(from_unixtime(edf.timestamp/1000),'yyyyMMdd'))
+ #   eos_df = edf\
+ #        .withColumn('rb_max', regexp_extract(edf.raw,'&rb_max=([^&\']*)',1).cast('long'))\
+ #        .withColumn('session', regexp_extract(edf.raw,'&td=([^&\']*)',1))\
+ #        .withColumn('file_lfn', regexp_extract(edf.raw,'&path=([^&]*)',1))\
+ #        .withColumn('application', regexp_extract(edf.raw,'&sec.app=([^&\']*)',1))\
+ #        .withColumn('rt', regexp_extract(edf.raw,'&rt=([^&\']*)',1).cast('long'))\
+ #        .withColumn('wt', regexp_extract(edf.raw,'&wt=([^&\']*)',1).cast('long'))\
+ #        .withColumn('rb', regexp_extract(edf.raw,'&rb=([^&\']*)',1).cast('long'))\
+ #        .withColumn('wb', regexp_extract(edf.raw,'&wb=([^&\']*)',1).cast('long'))\
+ #        .withColumn('cts', regexp_extract(edf.raw,'&cts=([^&\']*)',1).cast('long'))\
+ #        .withColumn('csize', regexp_extract(edf.raw,'&csize=([^&\']*)',1).cast('long'))\
+ #        .withColumn('user', regexp_extract(edf.raw,'&sec.name=([^&\']*)',1))\
+ #        .withColumn('user_dn', regexp_extract(edf.raw,'&sec.info=([^&\']*)',1))\
+ #        .withColumn('day', date_format(from_unixtime(edf.timestamp/1000),'yyyyMMdd'))
     
     if verbose:
         eos_df.printSchema()
