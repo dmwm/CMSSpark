@@ -87,7 +87,7 @@ The generated intermediate parquet dataset will be partitioned by day and will h
 
 ## Requirements
 
-This script uses EOS reports data from the ``analytix` cluster. They should be available at `hdfs:///project/monitoring/archive/eos/logs/reports/cms`
+This script uses EOS reports data from the `analytix` cluster. They should be available at `hdfs:///project/monitoring/archive/eos/logs/reports/cms`
 
 ### How to run the script without LCG release environment
 
