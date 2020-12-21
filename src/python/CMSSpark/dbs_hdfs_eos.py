@@ -24,13 +24,15 @@ def get_spark_session(yarn=True, verbose=False):
     """
         Get or create the spark context and session.
     """
+    verbose=True  
     sc = spark_context("cms-eos-dataset", yarn, verbose)
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def generate_parquet(
     date,
-    hdir="hdfs:///project/monitoring/archive/eos/logs/reports/cms",
+#    hdir="hdfs:///project/monitoring/archive/eos/logs/reports/cms", #before 2020
+    hdir="hdfs:///project/monitoring/archive/eos-report/logs/cms", #after 2020
     parquetLocation=DEFAULT_PARQUET_LOCATION,
     spark=None,
     mode="append",
@@ -68,7 +70,7 @@ def generate_parquet(
 
 
 def generate_dataset_totals_pandasdf(
-    period=("20190101", "20190131"),
+    period=("20200101", "20200131"),
     isUserCMS=False,
     parquetLocation=DEFAULT_PARQUET_LOCATION,
     spark=None,
