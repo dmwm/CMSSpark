@@ -253,6 +253,7 @@ def _generate_main_page(selected_pd, start_date, end_date, workflow_column=None,
     "--max_eff", default=70, help="Max efficiency to be included in the report",
 )
 @click.option("--output_folder", default="./www/cpu_eff", help="local output directory")
+@click.option("--offset_days", default=3, help="Offset to end_date")
 def generate_cpu_eff_site(
     start_date=None,
     end_date=None,
@@ -260,19 +261,20 @@ def generate_cpu_eff_site(
     min_eff=5,
     max_eff=70,
     output_folder="./www/cpu_eff",
+    offset_days=3,
 ):
     """
     """
-    _yesterday = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
+    _offset_days = datetime.combine(date.today() - timedelta(days=offset_days), datetime.min.time())
     if not (start_date or end_date):
-        # defaults to the last 30 days`
-
-        end_date = _yesterday
+        # defaults to the last 30 days with 3 days offset.
+        # Default: (today-33days to today-3days)
+        end_date = _offset_days
         start_date = end_date - timedelta(days=_DEFAULT_DAYS)
     elif not start_date:
         start_date = end_date - timedelta(days=_DEFAULT_DAYS)
     elif not end_date:
-        end_date = min(start_date + timedelta(days=_DEFAULT_DAYS), _yesterday)
+        end_date = min(start_date + timedelta(days=_DEFAULT_DAYS), _offset_days)
     if start_date > end_date:
         raise ValueError(
             f"start date ({start_date}) should be earlier than end date({end_date})"
