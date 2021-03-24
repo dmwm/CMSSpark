@@ -7,15 +7,19 @@ then
 cat <<EOF
  Usage: cron_hpc_at_cms.sh <OUTPUT_DIR> <START_DATE> <END_DATE>
    - if OUTPUT_DIR is not specified, $HOME/output_hpc_at_cms will be used.
+   - Valid START_DATE and END_DATE formats are: "%Y/%m/%d", "%Y-%m-%d" and "%Y%m%d"
    - if not END_DATE is specified, it will use the first day of the current month. 
    - if there is not START_DATE and END_DATE it will cover a 1 year period,
      ending in the first day of the current month (without including it)
 EOF
 exit 0
 fi
+
 OUTPUT_DIR="${1:-$HOME/output_hpc_at_cms}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Validation of dates are performed by python script
+# Valid date formats: "%Y/%m/%d", "%Y-%m-%d" and "%Y%m%d"
 END_DATE="${3:-$(date +%Y-%m-01)}"
 START_DATE="${2:-$(date -d "$END_DATE -1 year" +%Y-%m-01)}"
 
