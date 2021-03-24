@@ -13,19 +13,25 @@ currentDir=$(
 # to a jvm with avanced encryption enabled. 
 # see https://cern.service-now.com/service-portal/view-request.do?n=RQF1380598 
 
-if [ -e "/usr/lib/jvm/java-1.8.0" ]
+# Check JAVA_HOME is set
+if [ ! -z "$JAVA_HOME" ]
 then
-export JAVA_HOME="/usr/lib/jvm/java-1.8.0"
-elif ! (java -XX:+PrintFlagsFinal -version 2>/dev/null |grep -E -q 'UseAES\s*=\s*true')
-then
-    (>&2 echo "This script requires a java version with AES enabled") 
-    exit 1
+    if [ -e "/usr/lib/jvm/java-1.8.0" ]
+    then
+        export JAVA_HOME="/usr/lib/jvm/java-1.8.0"
+    elif ! (java -XX:+PrintFlagsFinal -version 2>/dev/null | grep -E -q 'UseAES\s*=\s*true')
+    then
+        (>&2 echo "This script requires a java version with AES enabled") 
+        exit 1
+    fi
 fi
+
 if ! klist -s
 then
     echo "There is not valid ticket yet"
     kinit
 fi
+
 spark-submit  --master yarn \
 --conf spark.driver.extraClassPath='/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar' \
 --conf spark.executor.memory=8g --conf spark.executor.instances=60 --conf spark.executor.cores=4 --conf spark.driver.memory=4g \
