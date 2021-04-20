@@ -169,6 +169,13 @@ It prints the path of the created image in std output.
             default=False,
         )
         self.parser.add_argument(
+            "--attributes",
+            action="store",
+            dest="attributes",
+            help="matplotlib rc params file (JSON format)",
+            default=None,
+        )
+        self.parser.add_argument(
             "--verbose",
             action="store_true",
             help="Prints additional logging info",
@@ -176,7 +183,7 @@ It prints the path of the created image in std output.
         )
 
 
-def plot_tiers_month(data, colors_file=None):
+def plot_tiers_month(data, colors_file=None, attributes=None):
     """
     Create a stacked bar plot of events by data tier/month.
     args:
@@ -234,6 +241,11 @@ def plot_tiers_month(data, colors_file=None):
         colors = _default_colors
     plt.xlabel("Month")
     plt.ylabel("Event count")
+    # set matplotlib rcParams based on provided attributes for the plot
+    # https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.rc
+    if attributes:
+        for key, kwds in attributes:
+            matplotlib.rc(key, **kwds)
     pivot_df.plot.bar(stacked=True, color=colors, ax=plot_ax)
     return fig
 
@@ -361,6 +373,7 @@ def event_count_plot(
     colors_file=None,
     generate_csv=False,
     only_valid_files=False,
+    attributes=None,
     verbose=False,
 ):
     """
@@ -394,7 +407,7 @@ def event_count_plot(
     if generate_csv:
         csv_filename = f"event_count_{start_date_f}-{end_date_f}.csv"
         event_count_pdf.to_csv(os.path.join(output_folder, csv_filename))
-    events_fig = plot_tiers_month(event_count_pdf, colors_file)
+    events_fig = plot_tiers_month(event_count_pdf, colors_file, attributes)
     image_path = os.path.join(output_folder, image_filename)
     events_fig.savefig(image_path, format=output_format)
     return os.path.abspath(image_path)
@@ -423,19 +436,30 @@ def main():
         months=1
     )
     end_date = _end_date.strftime("%Y/%m/%d")
-    filename = event_count_plot(
-        start_date,
-        end_date,
-        opts.output_folder,
-        opts.output_format,
-        opts.tiers,
-        opts.remove,
-        opts.skims,
-        colors_file=opts.colors_file,
-        generate_csv=opts.generate_csv,
-        only_valid_files=opts.only_valid_files,
-        verbose=opts.verbose,
-    )
+    # load rc param attributes from a given file
+    attributes = None
+    if opts.attributes:
+        with open(opts.attributes, 'r') as istream:
+            attributes = json.load(istream)
+    # always generate pdf by default in addition to given output format
+    output_formats = ["pdf"]
+    if opts.output_format != "pdf":
+        output_formats.append(opts.output_format)
+    for output_format in output_formats:
+        filename = event_count_plot(
+            start_date,
+            end_date,
+            opts.output_folder,
+            output_format,
+            opts.tiers,
+            opts.remove,
+            opts.skims,
+            colors_file=opts.colors_file,
+            generate_csv=opts.generate_csv,
+            only_valid_files=opts.only_valid_files,
+            attributes=attributes,
+            verbose=opts.verbose,
+        )
     print(filename)
 
 
