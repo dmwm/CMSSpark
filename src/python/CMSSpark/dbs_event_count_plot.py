@@ -244,9 +244,9 @@ def plot_tiers_month(data, colors_file=None, attributes=None):
     # set matplotlib rcParams based on provided attributes for the plot
     # https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.rc
     if attributes:
-        for key, kwds in attributes:
+        for key, kwds in attributes.items():
             matplotlib.rc(key, **kwds)
-    pivot_df.plot.bar(stacked=True, color=colors, ax=plot_ax)
+    pivot_df.plot.bar(stacked=True, color=colors, ax=plot_ax).legend(loc='center left',bbox_to_anchor=(1.0, 0.5))
     return fig
 
 
@@ -409,7 +409,7 @@ def event_count_plot(
         event_count_pdf.to_csv(os.path.join(output_folder, csv_filename))
     events_fig = plot_tiers_month(event_count_pdf, colors_file, attributes)
     image_path = os.path.join(output_folder, image_filename)
-    events_fig.savefig(image_path, format=output_format)
+    events_fig.savefig(image_path, format=output_format, bbox_inches='tight')
     return os.path.abspath(image_path)
 
 
