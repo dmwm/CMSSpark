@@ -167,6 +167,8 @@ def generate_plot(pdf, by, output_folder, filename):
     plot = sns.barplot(
         data=sorted_pd, x=group_field, y="count(DISTINCT CRAB_UserHN)", color="tab:blue"
     )
+    if group_field == "period":
+        plot.set_xticklabels(plot.get_xticklabels(), rotation=30)
     fig.savefig(os.path.join(output_folder, f"{filename}.png"), bbox_inches="tight")
 
 
