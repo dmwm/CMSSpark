@@ -18,7 +18,7 @@ BASE_OUTPUT_FOLDER="${1:-./output}"
 OUTPUT_FORMAT="${2:-png}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ADDITIONAL_PARAMS="${@:3}"
-
+ATTRIBUTES_FILE="$SCRIPT_DIR/../etc/event_count_attributes.json"
 
 function gen_plot() {
     PREFIX=${1:-"F9"}
@@ -31,7 +31,7 @@ function gen_plot() {
     REMOVE_VAR="${PREFIX}_REMOVE"
     REMOVE_EXPAND="${REMOVE_VAR}[@]"
     REMOVE_PAR=$([[ -v "$REMOVE_VAR" ]]&&echo "--remove ${!REMOVE_EXPAND}"||echo "")
-    IMAGE=$(/bin/bash "$SCRIPT_DIR/generate_event_count_plot.sh" --output_folder "$BASE_OUTPUT_FOLDER/$PREFIX" --output_format "$OUTPUT_FORMAT" $TIERS_PAR $SKIMS_PAR $REMOVE_PAR $ADDITIONAL_PARAMS)
+    IMAGE=$(/bin/bash "$SCRIPT_DIR/generate_event_count_plot.sh" --attributes $ATTRIBUTES_FILE --output_folder "$BASE_OUTPUT_FOLDER/$PREFIX" --output_format "$OUTPUT_FORMAT" $TIERS_PAR $SKIMS_PAR $REMOVE_PAR $ADDITIONAL_PARAMS)
     echo "$IMAGE"
     ln -sf "$IMAGE" "$BASE_OUTPUT_FOLDER/$PREFIX/event_count_latest.$OUTPUT_FORMAT" 
 }
