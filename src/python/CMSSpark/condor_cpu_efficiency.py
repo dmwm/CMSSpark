@@ -35,6 +35,28 @@ _VALID_TYPES = ["analysis", "production", "folding@home", "test"]
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 _DEFAULT_HDFS_FOLDER = "/project/monitoring/archive/condor/raw/metric"
 
+# Kibana links should be as below to be able to use pandas df functionalities 
+kibana_by_wf_base_link_1 = (
+    '''<a target="_blank" title="First click can be SSO redirection. ''' +
+    '''If so, please click 2nd time" href="https://es-cms.cern.ch/kibana/app/kibana#/discover?_g=''' +
+    '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}T00:00:00.000Z',to:'{END_DAY}''' +
+    '''T00:00:00.000Z'))&_a=(columns:!(RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site,RequestMemory,''' +
+    '''RequestMemory_Eval),index:'cms-20*',interval:auto,query:(language:lucene,query:'Status:Completed''' +
+    '''%20AND%20JobFailed:0%20AND%20Workflow:%22'''
+)  # + Workflow
+kibana_by_wf_base_link_2 = '''%22'),sort:!(RecordTime,desc))">@Kibana</a>'''
+kibana_by_site_base_link_1 = (
+    '''<a target="_blank" title="First click can be SSO redirection. ''' +
+    '''If so, please click 2nd time" href="https://es-cms.cern.ch/kibana/app/kibana#/discover?_g=''' +
+    '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}T00:00:00.000Z',to:'{END_DAY}''' +
+    '''T00:00:00.000Z'))&_a=(columns:!(RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site''' +
+    ''',RequestMemory,RequestMemory_Eval),index:'cms-20*',interval:auto,query:(language:lucene,''' +
+    '''query:'Status:Completed%20AND%20JobFailed:0%20AND%20WMAgent_RequestName:%22'''
+)  # + WMAgent_RequestName
+kibana_by_site_base_link_2 = '''%22%20AND%20Workflow:%22'''  # + Workflow
+kibana_by_site_base_link_3 = '''%22%20AND%20Site:%22'''  # + Site
+kibana_by_site_base_link_4 = '''%22'),sort:!(RecordTime,desc))">@Kibana</a>'''
+
 
 def get_spark_session(yarn=True, verbose=False):
     """
@@ -141,9 +163,13 @@ def _generate_main_page(selected_pd, start_date, end_date, workflow_column=None,
         + '</a><br><a target="_blank" href="https://cms-pdmv.cern.ch/mcm/requests?prepid='
         + workflow_column
         + '">McM</a> '
-        '<a target="_blank" href="https://dmytro.web.cern.ch/dmytro/cmsprodmon/workflows.php?prep_id=task_'
+          '<a target="_blank" href="https://dmytro.web.cern.ch/dmytro/cmsprodmon/workflows.php?prep_id=task_'
         + workflow_column
-        + '">PMon</a>'
+        + '">PMon</a> '
+        + kibana_by_wf_base_link_1.format(START_DAY=start_date.strftime('%Y-%m-%d'),
+                                          END_DAY=end_date.strftime('%Y-%m-%d'))
+        + workflow_column
+        + kibana_by_wf_base_link_2
     )
     if not is_wf:
         _fc = '<a class="selname">' + filter_column + "</a>"
@@ -291,20 +317,20 @@ def generate_cpu_eff_site(
     schema = _get_schema()
     raw_df = (
         spark.read.option("basePath", _DEFAULT_HDFS_FOLDER)
-        .json(
+            .json(
             get_candidate_files(start_date, end_date, spark, base=_DEFAULT_HDFS_FOLDER),
             schema=schema,
         )
-        .select("data.*")
-        .filter(
+            .select("data.*")
+            .filter(
             f"""Status='Completed'
           AND JobFailed=0
-          AND RecordTime >= {start_date.timestamp()*1000}
-          AND RecordTime < {end_date.timestamp()*1000}
+          AND RecordTime >= {start_date.timestamp() * 1000}
+          AND RecordTime < {end_date.timestamp() * 1000}
           AND Type =  '{cms_type}'
           """
         )
-        .drop_duplicates(["GlobalJobId"])
+            .drop_duplicates(["GlobalJobId"])
     )
     raw_df = (
         raw_df.withColumn(
@@ -361,6 +387,16 @@ def generate_cpu_eff_site(
             + ".tar.gz'>logs</a>"
         )
         site_wf.drop(columns="schedd")
+        site_wf["@Kibana"] = (
+            kibana_by_site_base_link_1.format(START_DAY=start_date.strftime('%Y-%m-%d'),
+                                              END_DAY=end_date.strftime('%Y-%m-%d'))
+            + site_wf["WMAgent_RequestName"]
+            + kibana_by_site_base_link_2
+            + site_wf["Workflow"]
+            + kibana_by_site_base_link_3
+            + site_wf["Site"]
+            + kibana_by_site_base_link_4
+        )
     site_wf = site_wf.set_index([*group_by_col, "Site"]).sort_index()
     # Create one file per worflow, so we don't have a big file collapsing the browser.
     _folder = f"{output_folder}/wfbysite"
@@ -382,3 +418,4 @@ def generate_cpu_eff_site(
 
 if __name__ == "__main__":
     generate_cpu_eff_site()
+
