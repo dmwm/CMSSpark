@@ -15,6 +15,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     DoubleType,
+    IntegerType,
 )
 
 from pyspark.sql.functions import (
@@ -35,27 +36,35 @@ _VALID_TYPES = ["analysis", "production", "folding@home", "test"]
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 _DEFAULT_HDFS_FOLDER = "/project/monitoring/archive/condor/raw/metric"
 
-# Kibana links should be as below to be able to use pandas df functionalities 
+# Kibana links should be as below to be able to use pandas df functionalities
+# by_workflow
 kibana_by_wf_base_link_1 = (
     '''<a target="_blank" title="First click can be SSO redirection. ''' +
     '''If so, please click 2nd time" href="https://es-cms.cern.ch/kibana/app/kibana#/discover?_g=''' +
     '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}T00:00:00.000Z',to:'{END_DAY}''' +
     '''T00:00:00.000Z'))&_a=(columns:!(RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site,RequestMemory,''' +
-    '''RequestMemory_Eval),index:'cms-20*',interval:auto,query:(language:lucene,query:'Status:Completed''' +
-    '''%20AND%20JobFailed:0%20AND%20Workflow:%22'''
-)  # + Workflow
-kibana_by_wf_base_link_2 = '''%22'),sort:!(RecordTime,desc))">@Kibana</a>'''
+    '''RequestMemory_Eval,CpuEffOutlier),index:'cms-20*',interval:auto,query:(language:lucene,query:'CpuEffOutlier:'''
+)
+# + CpuEffOutlier
+kibana_by_wf_base_link_2 = '''%20AND%20Status:Completed%20AND%20JobFailed:0%20AND%20Workflow:%22'''
+# + Workflow
+kibana_by_wf_base_link_3 = '''%22'),sort:!(RecordTime,desc))">@Kibana</a>'''
+
+# by_site
 kibana_by_site_base_link_1 = (
     '''<a target="_blank" title="First click can be SSO redirection. ''' +
     '''If so, please click 2nd time" href="https://es-cms.cern.ch/kibana/app/kibana#/discover?_g=''' +
     '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}T00:00:00.000Z',to:'{END_DAY}''' +
     '''T00:00:00.000Z'))&_a=(columns:!(RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site''' +
-    ''',RequestMemory,RequestMemory_Eval),index:'cms-20*',interval:auto,query:(language:lucene,''' +
-    '''query:'Status:Completed%20AND%20JobFailed:0%20AND%20WMAgent_RequestName:%22'''
-)  # + WMAgent_RequestName
-kibana_by_site_base_link_2 = '''%22%20AND%20Workflow:%22'''  # + Workflow
-kibana_by_site_base_link_3 = '''%22%20AND%20Site:%22'''  # + Site
-kibana_by_site_base_link_4 = '''%22'),sort:!(RecordTime,desc))">@Kibana</a>'''
+    ''',RequestMemory,RequestMemory_Eval,CpuEffOutlier),index:'cms-20*',interval:auto,query:(language:lucene,''' +
+    '''query:'CpuEffOutlier:'''
+)
+# + CpuEffOutlier
+kibana_by_site_base_link_2 = '''%20AND%20Status:Completed%20AND%20JobFailed:0%20AND%20WMAgent_RequestName:%22'''
+# + WMAgent_RequestName
+kibana_by_site_base_link_3 = '''%22%20AND%20Workflow:%22'''  # + Workflow
+kibana_by_site_base_link_4 = '''%22%20AND%20Site:%22'''  # + Site
+kibana_by_site_base_link_5 = '''%22'),sort:!(RecordTime,desc))">@Kibana</a>'''
 
 
 def get_spark_session(yarn=True, verbose=False):
@@ -142,6 +151,7 @@ def _get_schema():
                         StructField("CpuTimeHr", DoubleType(), nullable=True),
                         StructField("RequestCpus", DoubleType(), nullable=True),
                         StructField("CpuEff", DoubleType(), nullable=True),
+                        StructField("CpuEffOutlier", IntegerType(), nullable=True),
                     ]
                 ),
             ),
@@ -149,7 +159,7 @@ def _get_schema():
     )
 
 
-def _generate_main_page(selected_pd, start_date, end_date, workflow_column=None, filter_column=None):
+def _generate_main_page(selected_pd, start_date, end_date, workflow_column=None, filter_column=None, cpu_eff_outlier=0):
     """
     """
     workflow_column = (
@@ -168,8 +178,10 @@ def _generate_main_page(selected_pd, start_date, end_date, workflow_column=None,
         + '">PMon</a> '
         + kibana_by_wf_base_link_1.format(START_DAY=start_date.strftime('%Y-%m-%d'),
                                           END_DAY=end_date.strftime('%Y-%m-%d'))
-        + workflow_column
+        + str(cpu_eff_outlier)
         + kibana_by_wf_base_link_2
+        + workflow_column
+        + kibana_by_wf_base_link_3
     )
     if not is_wf:
         _fc = '<a class="selname">' + filter_column + "</a>"
@@ -272,22 +284,16 @@ def _generate_main_page(selected_pd, start_date, end_date, workflow_column=None,
     type=click.Choice(_VALID_TYPES),
     help=f"Workflow type to query {_VALID_TYPES}",
 )
-@click.option(
-    "--min_eff", default=5, help="Minimum efficiency to be included in the report",
-)
-@click.option(
-    "--max_eff", default=70, help="Max efficiency to be included in the report",
-)
 @click.option("--output_folder", default="./www/cpu_eff", help="local output directory")
 @click.option("--offset_days", default=3, help="Offset to end_date")
+@click.option("--cpu_eff_outlier", default=0, help="Filter by CpuEffOutlier")
 def generate_cpu_eff_site(
     start_date=None,
     end_date=None,
     cms_type="production",
-    min_eff=5,
-    max_eff=70,
     output_folder="./www/cpu_eff",
     offset_days=3,
+    cpu_eff_outlier=0,
 ):
     """
     """
@@ -317,20 +323,20 @@ def generate_cpu_eff_site(
     schema = _get_schema()
     raw_df = (
         spark.read.option("basePath", _DEFAULT_HDFS_FOLDER)
-            .json(
+        .json(
             get_candidate_files(start_date, end_date, spark, base=_DEFAULT_HDFS_FOLDER),
             schema=schema,
-        )
-            .select("data.*")
-            .filter(
+        ).select("data.*")
+        .filter(
             f"""Status='Completed'
           AND JobFailed=0
           AND RecordTime >= {start_date.timestamp() * 1000}
           AND RecordTime < {end_date.timestamp() * 1000}
           AND Type =  '{cms_type}'
+          AND CpuEffOutlier = '{cpu_eff_outlier}'
           """
         )
-            .drop_duplicates(["GlobalJobId"])
+        .drop_duplicates(["GlobalJobId"])
     )
     raw_df = (
         raw_df.withColumn(
@@ -355,10 +361,7 @@ def generate_cpu_eff_site(
         first("ScheddName").alias("schedd"),
         first("WMAgent_JobID").alias("wmagent_jobid"),
     )
-    select_expr = f"""wf_cpueff BETWEEN {min_eff}
-                      AND {max_eff}
-                      AND wf_wallclockhr > 100
-                  """
+    select_expr = f"""wf_wallclockhr > 100"""
 
     selected_df = grouped_wf.where(select_expr)
     selected_pd = selected_df.toPandas()
@@ -368,7 +371,7 @@ def generate_cpu_eff_site(
         if group_by_col[-1] == "Workflow"
         else selected_pd[group_by_col[-1]].copy()
     )
-    main_page = _generate_main_page(selected_pd, start_date, end_date, workflow_column, filter_column)
+    main_page = _generate_main_page(selected_pd, start_date, end_date, workflow_column, filter_column, cpu_eff_outlier)
     os.makedirs(output_folder, exist_ok=True)
     with open(f"{output_folder}/CPU_Efficiency_Table.html", "w") as ofile:
         ofile.write(main_page)
@@ -390,12 +393,14 @@ def generate_cpu_eff_site(
         site_wf["@Kibana"] = (
             kibana_by_site_base_link_1.format(START_DAY=start_date.strftime('%Y-%m-%d'),
                                               END_DAY=end_date.strftime('%Y-%m-%d'))
-            + site_wf["WMAgent_RequestName"]
+            + str(cpu_eff_outlier)
             + kibana_by_site_base_link_2
-            + site_wf["Workflow"]
+            + site_wf["WMAgent_RequestName"]
             + kibana_by_site_base_link_3
-            + site_wf["Site"]
+            + site_wf["Workflow"]
             + kibana_by_site_base_link_4
+            + site_wf["Site"]
+            + kibana_by_site_base_link_5
         )
     site_wf = site_wf.set_index([*group_by_col, "Site"]).sort_index()
     # Create one file per worflow, so we don't have a big file collapsing the browser.
