@@ -84,7 +84,6 @@ def format_df(df):
     df = df.rename(
         columns={
             "wf_cpueff": "CPU_eff",
-            "mean_cpueff": "mean_CPU_eff",
             "wf_cpus": "CPUs",
             "wf_cputimehr": "CPU_time_hr",
             "wf_wallclockhr": "Wall_time_hr",
@@ -92,11 +91,28 @@ def format_df(df):
     )
 
     df["CPU_eff"] = df["CPU_eff"].map("{:,.1f}%".format)
-    df["mean_CPU_eff"] = df["mean_CPU_eff"].map("{:,.1f}%".format)
     df["CPUs"] = df["CPUs"].map(int)
     df["CPU_time_hr"] = df["CPU_time_hr"].map(int)
     df["Wall_time_hr"] = df["Wall_time_hr"].map(int)
     return df
+
+
+def get_tiers_html(grouped_tiers):
+    """
+    Arrange tiers html
+    """
+    grouped_tiers = grouped_tiers.sort_values("Tier")
+    pd.set_option("display.max_colwidth", -1)  # never cut long columns
+    pd.options.display.float_format = "{:,.2f}".format  # only 2 decimals
+    grouped_tiers["tier_cpueff"] = grouped_tiers["tier_cpueff"].map("{:,.1f}%".format)
+    grouped_tiers["tier_cpus"] = grouped_tiers["tier_cpus"].map(int)
+    grouped_tiers["tier_cputimehr"] = grouped_tiers["tier_cputimehr"].map(int)
+    grouped_tiers["tier_wallclockhr"] = grouped_tiers["tier_wallclockhr"].map(int)
+    html_tiers = grouped_tiers.to_html(escape=False, index=False)
+    html_tiers = html_tiers.replace('table border="1" class="dataframe"',
+                                    'table id="dataframe-tiers" class="display compact" style="width:100%;"')
+    html_tiers = html_tiers.replace('style="text-align: right;"', "")
+    return html_tiers
 
 
 def get_candidate_files(
@@ -146,6 +162,7 @@ def _get_schema():
                         StructField("JobFailed", LongType(), nullable=False),
                         StructField("Status", StringType(), nullable=True),
                         StructField("Site", StringType(), nullable=True),
+                        StructField("Tier", StringType(), nullable=True),
                         StructField("Type", StringType(), nullable=True),
                         StructField("WallClockHr", DoubleType(), nullable=False),
                         StructField("CpuTimeHr", DoubleType(), nullable=True),
@@ -159,8 +176,19 @@ def _get_schema():
     )
 
 
-def _generate_main_page(selected_pd, start_date, end_date, workflow_column=None, filter_column=None, cpu_eff_outlier=0):
-    """
+def _generate_main_page(selected_pd,
+                        grouped_tiers,
+                        start_date,
+                        end_date,
+                        workflow_column=None,
+                        filter_column=None,
+                        cpu_eff_outlier=0):
+    """Create HTML page
+
+    Header
+    Tiers table
+    WF table with Site table selection
+    Footer
     """
     workflow_column = (
         workflow_column if workflow_column is not None else pd["Workflow"].copy()
@@ -213,17 +241,36 @@ def _generate_main_page(selected_pd, start_date, end_date, workflow_column=None,
     table td {{
     word-break: break-all;
     }}
+    #dataframe-tiers table {{
+      font-family: arial, sans-serif;
+      border-collapse: collapse;
+      width: 100%;
+    }}
+    #dataframe-tiers td, th {{
+      border: 1px solid #dddddd;
+      text-align: left;
+      padding: 8px;
+    }}
+    #dataframe-tiers tr:nth-child(even) {{
+      background-color: #dddddd;
+    }}
     </style>
     </head>
     <body>
     <h2>Dump of CMSSW Workflows and Their efficiencies
     from {start_date.strftime("%A %d. %B %Y")} to {end_date.strftime("%A %d. %B %Y")}</h2>
      <ul>
-      <li><b>mean_CPU_eff</b>: avg_cpu_time / (avg_wall_clock_time * n_cores)</li>
-      <li><b>CPU_eff</b>: avg( cpu_time / (wall_clock_time * n_cores) )</li>
+      <li><b>CPU_eff</b>: (100 * _sum("CpuTimeHr") / _sum("CoreTime") )</li>
     </ul>
-    <div class="container" style="display:block; width:100%">
+    <div class="tiers" style="display:block;">
     """
+    # > Tiers table
+    html_middle = (
+        '''
+        </div>
+        <div class="container" style="display:block; width:100%">
+    ''')
+    # > WF table
     html_footer = (
         '''
     </div>
@@ -272,7 +319,8 @@ def _generate_main_page(selected_pd, start_date, end_date, workflow_column=None,
         });
     </script></body></html>"""
     )
-    return html_header + html + html_footer
+    html_tiers = get_tiers_html(grouped_tiers)
+    return html_header + html_tiers + html_middle + html + html_footer
 
 
 @click.command()
@@ -345,15 +393,20 @@ def generate_cpu_eff_site(
         ).withColumn("CoreTime", col("WallClockHr") * col("RequestCpus"))
     ).cache()
 
+    grouped_tiers = raw_df.groupby("Tier", "Type", "CpuEffOutlier").agg(
+        (100 * _sum("CpuTimeHr") / _sum("CoreTime")).alias("tier_cpueff"),
+        _sum("RequestCpus").alias("tier_cpus"),
+        _sum("CpuTimeHr").alias("tier_cputimehr"),
+        _sum("WallClockHr").alias("tier_wallclockhr"),
+    ).toPandas()
+
     grouped_wf = raw_df.groupby(*group_by_col, "Type").agg(
-        mean("CpuEff").alias("mean_cpueff"),
         (100 * _sum("CpuTimeHr") / _sum("CoreTime")).alias("wf_cpueff"),
         _sum("RequestCpus").alias("wf_cpus"),
         _sum("CpuTimeHr").alias("wf_cputimehr"),
         _sum("WallClockHr").alias("wf_wallclockhr"),
     )
     grouped_site_wf = raw_df.groupby(*group_by_col, "Site").agg(
-        mean("CpuEff").alias("mean_cpueff"),
         (100 * _sum("CpuTimeHr") / _sum("CoreTime")).alias("wf_site_cpueff"),
         _sum("RequestCpus").alias("wf_cpus"),
         _sum("CpuTimeHr").alias("wf_site_cputimehr"),
@@ -371,7 +424,8 @@ def generate_cpu_eff_site(
         if group_by_col[-1] == "Workflow"
         else selected_pd[group_by_col[-1]].copy()
     )
-    main_page = _generate_main_page(selected_pd, start_date, end_date, workflow_column, filter_column, cpu_eff_outlier)
+    main_page = _generate_main_page(selected_pd, grouped_tiers, start_date, end_date, workflow_column, filter_column,
+                                    cpu_eff_outlier)
     os.makedirs(output_folder, exist_ok=True)
     with open(f"{output_folder}/CPU_Efficiency_Table.html", "w") as ofile:
         ofile.write(main_page)
