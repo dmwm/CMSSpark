@@ -6,6 +6,7 @@ Generate a static site with information about workflows/requests
 cpu efficiency for the workflows/request matching the parameters.
 """
 import os
+import time
 from datetime import datetime, date, timedelta
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
@@ -29,6 +30,7 @@ from pyspark.sql.functions import (
     first,
 )
 import pandas as pd
+import numpy as np
 import click
 
 _DEFAULT_DAYS = 30
@@ -41,23 +43,24 @@ _DEFAULT_HDFS_FOLDER = "/project/monitoring/archive/condor/raw/metric"
 kibana_by_wf_base_link_1 = (
     '''<a target="_blank" title="First click can be SSO redirection. ''' +
     '''If so, please click 2nd time" href="https://es-cms.cern.ch/kibana/app/kibana#/discover?_g=''' +
-    '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}T00:00:00.000Z',to:'{END_DAY}''' +
-    '''T00:00:00.000Z'))&_a=(columns:!(RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site,RequestMemory,''' +
-    '''RequestMemory_Eval,CpuEffOutlier),index:'cms-20*',interval:auto,query:(language:lucene,query:'CpuEffOutlier:'''
+    '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}',to:'{END_DAY}'))&_a=(columns:!(''' +
+    '''RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site,RequestMemory,RequestMemory_Eval,CpuEffOutlier,Tier''' +
+    '''),index:'cms-20*',interval:auto,query:(language:lucene,query:'Tier:%2FT1%7CT2%2F%20AND%20CpuEffOutlier:'''
 )
 # + CpuEffOutlier
 kibana_by_wf_base_link_2 = '''%20AND%20Status:Completed%20AND%20JobFailed:0%20AND%20Workflow:%22'''
 # + Workflow
-kibana_by_wf_base_link_3 = '''%22'),sort:!(RecordTime,desc))">@Kibana</a>'''
+kibana_by_wf_base_link_3 = '''%22%20AND%20WMAgent_RequestName:%22'''
+# + WMAgent_RequestName
+kibana_by_wf_base_link_4 = '''%22'),sort:!(RecordTime,desc))">@Kibana_t1t2</a>'''
 
 # by_site
 kibana_by_site_base_link_1 = (
     '''<a target="_blank" title="First click can be SSO redirection. ''' +
     '''If so, please click 2nd time" href="https://es-cms.cern.ch/kibana/app/kibana#/discover?_g=''' +
-    '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}T00:00:00.000Z',to:'{END_DAY}''' +
-    '''T00:00:00.000Z'))&_a=(columns:!(RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site''' +
-    ''',RequestMemory,RequestMemory_Eval,CpuEffOutlier),index:'cms-20*',interval:auto,query:(language:lucene,''' +
-    '''query:'CpuEffOutlier:'''
+    '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}',to:'{END_DAY}'))&_a=(columns:!(''' +
+    '''RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site,RequestMemory,RequestMemory_Eval,CpuEffOutlier''' +
+    '''),index:'cms-20*',interval:auto,query:(language:lucene,query:'CpuEffOutlier:'''
 )
 # + CpuEffOutlier
 kibana_by_site_base_link_2 = '''%20AND%20Status:Completed%20AND%20JobFailed:0%20AND%20WMAgent_RequestName:%22'''
@@ -87,6 +90,9 @@ def format_df(df):
             "wf_cpus": "CPUs",
             "wf_cputimehr": "CPU_time_hr",
             "wf_wallclockhr": "Wall_time_hr",
+            "wf_cpueff_t1_t2": "CPU_eff_T1T2",
+            "wf_cputimehr_t1_t2": "CPU_time_hr_T1T2",
+            "wf_wallclockhr_t1_t2": "Wall_time_hr_T1T2"
         }
     )
 
@@ -94,6 +100,9 @@ def format_df(df):
     df["CPUs"] = df["CPUs"].map(int)
     df["CPU_time_hr"] = df["CPU_time_hr"].map(int)
     df["Wall_time_hr"] = df["Wall_time_hr"].map(int)
+    df["CPU_eff_T1T2"] = df["CPU_eff_T1T2"].apply(lambda x: "-" if np.isnan(x) else "{:,.1f}%".format(x))
+    df["CPU_time_hr_T1T2"] = df["CPU_time_hr_T1T2"].apply(lambda x: "-" if np.isnan(x) else int(x))
+    df["Wall_time_hr_T1T2"] = df["Wall_time_hr_T1T2"].apply(lambda x: "-" if np.isnan(x) else int(x))
     return df
 
 
@@ -204,12 +213,16 @@ def _generate_main_page(selected_pd,
           '<a target="_blank" href="https://dmytro.web.cern.ch/dmytro/cmsprodmon/workflows.php?prep_id=task_'
         + workflow_column
         + '">PMon</a> '
-        + kibana_by_wf_base_link_1.format(START_DAY=start_date.strftime('%Y-%m-%d'),
-                                          END_DAY=end_date.strftime('%Y-%m-%d'))
+        + kibana_by_wf_base_link_1.format(START_DAY=(start_date + timedelta(seconds=time.altzone))
+                                          .strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                                          END_DAY=(end_date + timedelta(seconds=time.altzone))
+                                          .strftime('%Y-%m-%dT%H:%M:%S.000Z'))
         + str(cpu_eff_outlier)
         + kibana_by_wf_base_link_2
         + workflow_column
         + kibana_by_wf_base_link_3
+        + selected_pd["WMAgent_RequestName"]
+        + kibana_by_wf_base_link_4
     )
     if not is_wf:
         _fc = '<a class="selname">' + filter_column + "</a>"
@@ -238,6 +251,12 @@ def _generate_main_page(selected_pd,
     <head>
     <link rel="stylesheet" href="https://cdn.datatables.net/1.10.20/css/jquery.dataTables.min.css">
     <style>
+    .dataTables_filter input {{
+      border: 7px solid Tomato;
+      width: 400px;
+      font-size: 16px;
+      font-weight: bold;
+    }}
     table td {{
     word-break: break-all;
     }}
@@ -260,7 +279,24 @@ def _generate_main_page(selected_pd,
     <h2>Dump of CMSSW Workflows and Their efficiencies
     from {start_date.strftime("%A %d. %B %Y")} to {end_date.strftime("%A %d. %B %Y")}</h2>
      <ul>
-      <li><b>CPU_eff</b>: (100 * _sum("CpuTimeHr") / _sum("CoreTime") )</li>
+      <li>
+        <b>Please see
+            <a href="https://cmsdatapop.web.cern.ch/cmsdatapop/cpu_eff/">non-outlier</a>
+            and
+            <a href="https://cmsdatapop.web.cern.ch/cmsdatapop/cpu_eff_outlier/">outlier</a>
+            efficiency tables
+        </b>
+      </li>
+      <li><b>CPU_eff</b>: 100*sum(CpuTimeHr)/sum(CoreTime) ~~P.S.~~ CoreTime = WallClockHr * RequestCpus </li>
+      <li>
+        Ref1: <a href="https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/condor_cpu_efficiency.py">
+            Python script
+        </a>
+        &nbsp;
+        Ref2: <a href="https://cmsmonit-docs.web.cern.ch/MONIT/cms-htcondor-es/">
+            Documentation of used attributes
+        </a>
+      </li>
     </ul>
     <div class="tiers" style="display:block;">
     """
@@ -308,9 +344,12 @@ def _generate_main_page(selected_pd,
             $('table#dataframe thead tr').append('<th>site details</th>');
             $('table#dataframe tbody tr').append('<td><button class="btn-details">+</button></td>');
             var dt = $('#dataframe').DataTable( {
-            "order": [[ 4, "asc" ]],
-            "scrollX": false,
-
+                "order": [[ 4, "asc" ]],
+                "scrollX": false,
+                language: {
+                    search: "_INPUT_",
+                    searchPlaceholder: "--- Search Workflows ---",
+                },
             });
             $('table#dataframe tbody tr').on('click','td button.btn-details',toggleDetails)
             dt.on('draw', function(){
@@ -399,12 +438,16 @@ def generate_cpu_eff_site(
         _sum("CpuTimeHr").alias("tier_cputimehr"),
         _sum("WallClockHr").alias("tier_wallclockhr"),
     ).toPandas()
-
     grouped_wf = raw_df.groupby(*group_by_col, "Type").agg(
         (100 * _sum("CpuTimeHr") / _sum("CoreTime")).alias("wf_cpueff"),
         _sum("RequestCpus").alias("wf_cpus"),
         _sum("CpuTimeHr").alias("wf_cputimehr"),
         _sum("WallClockHr").alias("wf_wallclockhr"),
+    )
+    grouped_wf_t1_t2 = raw_df.filter("""Tier='T1' OR Tier='T2'""").groupby(*group_by_col, "Type").agg(
+        (100 * _sum("CpuTimeHr") / _sum("CoreTime")).alias("wf_cpueff_t1_t2"),
+        _sum("CpuTimeHr").alias("wf_cputimehr_t1_t2"),
+        _sum("WallClockHr").alias("wf_wallclockhr_t1_t2"),
     )
     grouped_site_wf = raw_df.groupby(*group_by_col, "Site").agg(
         (100 * _sum("CpuTimeHr") / _sum("CoreTime")).alias("wf_site_cpueff"),
@@ -414,10 +457,16 @@ def generate_cpu_eff_site(
         first("ScheddName").alias("schedd"),
         first("WMAgent_JobID").alias("wmagent_jobid"),
     )
-    select_expr = f"""wf_wallclockhr > 100"""
 
+    select_expr = f"""wf_wallclockhr > 100"""
     selected_df = grouped_wf.where(select_expr)
     selected_pd = selected_df.toPandas()
+    grouped_wf_t1_t2 = grouped_wf_t1_t2.toPandas()
+    grouped_wf_t1_t2.drop(['Type'], axis=1, inplace=True)
+    # Merge grouped_wf and grouped_wf_t1_t2 to see cpueff, cputimehr and wallclockhr values of (T1-T2 sites only)
+    selected_pd = pd.merge(selected_pd, grouped_wf_t1_t2,
+                           how='left', left_on=['Workflow', 'WMAgent_RequestName'],
+                           right_on=['Workflow', 'WMAgent_RequestName'])
     workflow_column = selected_pd["Workflow"].copy()
     filter_column = (
         workflow_column
@@ -445,8 +494,10 @@ def generate_cpu_eff_site(
         )
         site_wf.drop(columns="schedd")
         site_wf["@Kibana"] = (
-            kibana_by_site_base_link_1.format(START_DAY=start_date.strftime('%Y-%m-%d'),
-                                              END_DAY=end_date.strftime('%Y-%m-%d'))
+            kibana_by_site_base_link_1.format(START_DAY=(start_date + timedelta(seconds=time.altzone))
+                                              .strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                                              END_DAY=(end_date + timedelta(seconds=time.altzone))
+                                              .strftime('%Y-%m-%dT%H:%M:%S.000Z'))
             + str(cpu_eff_outlier)
             + kibana_by_site_base_link_2
             + site_wf["WMAgent_RequestName"]
