@@ -8,8 +8,19 @@ cpu efficiency for the workflows/request matching the parameters.
 import os
 import time
 from datetime import datetime, date, timedelta
+
+import click
+import numpy as np
+import pandas as pd
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col,
+    lit,
+    when,
+    sum as _sum,
+    first,
+)
 from pyspark.sql.types import (
     StructType,
     LongType,
@@ -18,20 +29,6 @@ from pyspark.sql.types import (
     DoubleType,
     IntegerType,
 )
-
-from pyspark.sql.functions import (
-    col,
-    lit,
-    concat,
-    when,
-    mean,
-    sum as _sum,
-    countDistinct,
-    first,
-)
-import pandas as pd
-import numpy as np
-import click
 
 _DEFAULT_DAYS = 30
 _VALID_TYPES = ["analysis", "production", "folding@home", "test"]
@@ -51,7 +48,7 @@ kibana_by_wf_base_link_1 = (
 kibana_by_wf_base_link_2 = '''%20AND%20Status:Completed%20AND%20JobFailed:0%20AND%20Workflow:%22'''
 # + Workflow
 kibana_by_wf_base_link_3 = '''%22%20AND%20WMAgent_RequestName:%22'''
-# + WMAgent_RequestName
+# + WMAgent_RequestName(only in production)
 kibana_by_wf_base_link_4 = '''%22'),sort:!(RecordTime,desc))">@Kibana_t1t2</a>'''
 
 # by_site
@@ -189,6 +186,7 @@ def _generate_main_page(selected_pd,
                         grouped_tiers,
                         start_date,
                         end_date,
+                        cms_type,
                         workflow_column=None,
                         filter_column=None,
                         cpu_eff_outlier=0):
@@ -220,8 +218,7 @@ def _generate_main_page(selected_pd,
         + str(cpu_eff_outlier)
         + kibana_by_wf_base_link_2
         + workflow_column
-        + kibana_by_wf_base_link_3
-        + selected_pd["WMAgent_RequestName"]
+        + (kibana_by_wf_base_link_3 + selected_pd["WMAgent_RequestName"] if (cms_type == 'production') else "")
         + kibana_by_wf_base_link_4
     )
     if not is_wf:
@@ -398,13 +395,13 @@ def generate_cpu_eff_site(
         raise ValueError(
             f"start date ({start_date}) should be earlier than end date({end_date})"
         )
-
     group_type_map = {
-        "production": ["Workflow", "WMAgent_RequestName"],
+        "production": ["Workflow", "WMAgent_RequestName"],  # Order is important
         "analysis": ["Workflow"],
         "test": ["Workflow"],
         "folding@home": ["Workflow"],
     }
+    # Should be a list, used also in dataframe merge conditions.
     group_by_col = group_type_map[cms_type]
     spark = get_spark_session()
     schema = _get_schema()
@@ -463,18 +460,18 @@ def generate_cpu_eff_site(
     selected_pd = selected_df.toPandas()
     grouped_wf_t1_t2 = grouped_wf_t1_t2.toPandas()
     grouped_wf_t1_t2.drop(['Type'], axis=1, inplace=True)
+
     # Merge grouped_wf and grouped_wf_t1_t2 to see cpueff, cputimehr and wallclockhr values of (T1-T2 sites only)
-    selected_pd = pd.merge(selected_pd, grouped_wf_t1_t2,
-                           how='left', left_on=['Workflow', 'WMAgent_RequestName'],
-                           right_on=['Workflow', 'WMAgent_RequestName'])
+    selected_pd = pd.merge(selected_pd, grouped_wf_t1_t2, how='left', left_on=group_by_col, right_on=group_by_col)
+
     workflow_column = selected_pd["Workflow"].copy()
     filter_column = (
         workflow_column
         if group_by_col[-1] == "Workflow"
         else selected_pd[group_by_col[-1]].copy()
     )
-    main_page = _generate_main_page(selected_pd, grouped_tiers, start_date, end_date, workflow_column, filter_column,
-                                    cpu_eff_outlier)
+    main_page = _generate_main_page(selected_pd, grouped_tiers, start_date, end_date, cms_type,
+                                    workflow_column, filter_column, cpu_eff_outlier)
     os.makedirs(output_folder, exist_ok=True)
     with open(f"{output_folder}/CPU_Efficiency_Table.html", "w") as ofile:
         ofile.write(main_page)
