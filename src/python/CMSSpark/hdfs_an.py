@@ -68,24 +68,17 @@ def run(fin, attrs, fout):
     for attr in attrs:
         col = attr+'_hash'
         data = data.withColumn(col, anonymize(getattr(data, attr)))
-#        data = data.withColumn(col, anonymize(data.user_dn))
 
-    # drop user_dn
+    # drop attributes
     data = reduce(DataFrame.drop, attrs, data)
-#    data = reduce(DataFrame.drop, ['user_dn'], data)
 
     # Save to csv
-    data.write.csv(fout)
-    data.head()
+    data.write.option("compression","gzip").csv(fout)
+#     data.head()
 
 def main():
     optmgr  = OptionParser('hdfs_app')
     msg = 'HDFS path to process'
-#    optmgr.parser.add_argument("--fin", action="store",
-#        dest="fin", default="", help=msg)
-#    msg = 'HDFS path to write results to'
-#    optmgr.parser.add_argument("--fout", action="store",
-#        dest="fout", default="", help=msg)
     msg = 'Comma separated list of attributes to anonimise'
     optmgr.parser.add_argument("--attrs", action="store",
         dest="attrs", default="", help=msg)
