@@ -1,58 +1,87 @@
 #!/bin/bash
-# this script is designed to be used in crontab, i.e. with full path
-# adjust script to put your desired notification address if necessary
+##H Script to anonymise data on HDFS
+##H Usage: run_hdfs_an.sh <input-dir> <output-dir> <attributes> <log-area>
+##H        to run this script you need to fetch CMSSpark and reside in its area
+##H        Example:
+##H        git clone git@github.com:dmwm/CMSSpark.git
+##H        cd CMSSpark; bin/run_hdfs_an.sh ...
+##H
+##H Options:
+##H   input-dir      input area on HDFS
+##H   output-dir     output area on HDFS
+##H   attributes     comma separated attributes, e.g. user_dn,Country
+##H   log-area       log area (default /tmp/hdfs_an
+##H
 
-#addr=cms-popdb-alarms@cern.ch
-addr=vkuznet@gmail.com
+# Check if user is passing least required arguments.
+if [ "$#" -lt 3  ]; then
+    cat $0 | grep "^##H" | sed -e "s,##H,,g"
+    exit 1
+fi
+
+hdir=$1
+odir=$2
+attrs=$3
+ldir=$4
+if [ "$ldir" == "" ]; then
+    ldir=/tmp/hdfs_an
+fi
+mkdir -p $ldir
+log=$ldir/`date '+%Y%m%d'`
 
 # DO NOT EDIT BELOW THIS LINE
+addr=cms-comp-monit-alerts@cern.ch
+
 # for Spark 2.X
 export PATH=$PATH:/usr/hdp/hadoop/bin
 export HADOOP_CONF_DIR=/etc/hadoop/conf
 
-# find out which date we should use to run the script
-year=`date +'%Y'`
-month=`date +'%m'`
-day=`date +'%d'`
-hdir=hdfs:///project/monitoring/archive/cmssw_pop/raw/metric
-tmpDirs=`hadoop fs -ls ${hdir}/$year/$month | grep tmp$ | awk '{print $8}' | sed -e "s,\.tmp,,g" -e "s,${hdir},,g"`
-pat=`echo $tmpDirs | tr ' ' '|'`
-lastSnapshot=`hadoop fs -ls ${hdir}/$year/$month | egrep -v ${pat} | tail -1 | awk '{print $8}'`
-#echo "Last available snapshot"
-#echo $lastSnapshot
-date=`echo $lastSnapshot | sed -e "s,${hdir},,g" -e "s,/,,g"`
-odir=hdfs:///cms/anonymized
-
-# set log area and environment
-me=$(dirname "$0")
-wdir=`echo $me | sed -e "s,/bin,,g"`
-mkdir -p $wdir/logs
-log=$wdir/logs/hdfs_an-`date +%Y%m%d`.log
+# setup local environment
 export PYTHONPATH=$wdir/src/python:$PYTHONPATH
 export PATH=$wdir/bin:$PATH
 
-echo "Start job for $year/$month/$day ..." >> $log 2>&1
-hadoop fs -ls ${hdir}/$year/$month >> $log 2>&1
-echo "Date to run: $date" >> $log 2>&1
-
-# check if we got a date to run
-if [ -z "${date}" ]; then
-    echo "No date to run" >> $log 2>&1
-    exit
-fi
-dotmp=`echo $date | grep tmp`
-if [ -n "${dotmp}" ]; then
-    echo "Date ends with tmp" >> $log 2>&1
-    exit
+amtool=""
+if [ -f /data/cms/bin/amtool ]; then
+    amtool=/data/cms/bin/amtool
+elif [ -f /cvmfs/cms.cern.ch/cmsmon/amtool ]; then
+    amtool=/cvmfs/cms.cern.ch/cmsmon/amtool
 fi
 
 # setup to run the script
-attrs="user_dn"
-#cmd="$wdir/bin/run_spark hdfs_an.py --yarn --fout=$odir --date=$date --hdir=$hdir/$year/$month/$day"
-cmd="$wdir/bin/run_spark hdfs_an.py --yarn --fout=$odir --attrs=$attrs --hdir=$hdir/$year/$month/22"
+cmd="$PWD/bin/run_spark hdfs_an.py --yarn --fout=$odir --attrs=$attrs --hdir=$hdir"
 echo "Will execute ..."
 echo $cmd
 msg="Error while executing $cmd on $USER@`hostname` log at $log"
+
+echo "amtool=$amtool"
+
 set -e
+
+trap func exit
+# Declare the function
+function func() {
+    local status=$?
+    if [ $status -ne 0 ]; then
+        local msg="run_hdfs_an completed with non zero status"
+        if [ "$amtool" != "" ]; then
+            local expire=`date -d '+1 hour' --rfc-3339=ns | tr ' ' 'T'`
+            local urls="http://cms-monitoring.cern.ch:30093 http://cms-monitoring-ha1.cern.ch:30093 http://cms-monitoring-ha2.cern.ch:30093"
+            for url in $urls; do
+                $amtool alert add run_hdfs_an \
+                    alertname=hdfs_an severity=medium tag=cronjob alert=amtool \
+                    --end=$expire\
+                    --annotation=summary="$msg" \
+                    --annotation=date="`date`" \
+                    --annotation=hostname="`hostname`" \
+                    --annotation=status="$status" \
+                    --annotation=command="$cmd" \
+                    --annotation=log="$log" \
+                    --alertmanager.url=$url
+            done
+        else
+            echo "$msg" | mail -s "alert run_hdfs_an" "$addr"
+        fi
+    fi
+}
 
 $cmd >> $log 2>&1
