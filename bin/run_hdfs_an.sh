@@ -29,6 +29,9 @@ fi
 mkdir -p $ldir
 log=$ldir/`date '+%Y%m%d'`
 
+# working directory, inside of CMSSpark
+wdir=$PWD
+
 # DO NOT EDIT BELOW THIS LINE
 addr=cms-comp-monit-alerts@cern.ch
 
@@ -84,4 +87,4 @@ function func() {
     fi
 }
 
-$cmd >> $log 2>&1
+time $cmd >> $log 2>&1
