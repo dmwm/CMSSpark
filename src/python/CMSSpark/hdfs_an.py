@@ -4,6 +4,7 @@
 # system modules
 import re    
 import hashlib
+import unicodedata
 from functools import reduce
 
 # third-party libs
@@ -30,25 +31,42 @@ def hash_match_partial(matchobj):
     m.update(match.encode('utf-8'))
     return matchobj.group(1) + m.hexdigest()
 
+def hashfunc(rec):
+    keyhash = hashlib.md5()
+    try:
+        keyhash.update(rec)
+    except TypeError: # python3
+        keyhash.update(rec.encode('ascii'))
+    return keyhash.hexdigest()
+
 def hash_private_info(message):
+    if message==None:
+        return
+    elif isinstance(message, unicode):
+        message = unicodedata.normalize('NFKD', message).encode('ASCII', 'ignore')
+    elif not isinstance(message, str):
+        print("### message", message, type(message))
+        return
     # Hash DNs
-    message = re.sub('(/DC=|/CN=|/OU=).*(?=(/DC=|/CN=|/OU=))(/DC=|/CN=|/OU=)\S*', hash_match, message)
+#    message = re.sub('(/DC=|/CN=|/OU=).*(?=(/DC=|/CN=|/OU=))(/DC=|/CN=|/OU=)\S*', hash_match, message)
     # Hash DNs without slashes
-    message = re.sub('(DC=|CN=|OU=).*(?=(DC=|CN=|OU=))(DC=|CN=|OU=)\S*', hash_match, message)
+#    message = re.sub('(DC=|CN=|OU=).*(?=(DC=|CN=|OU=))(DC=|CN=|OU=)\S*', hash_match, message)
     # Hash mail addresses
-    message = re.sub('[\w\.-]+@[\w\.-]+(?:\.[\w]+)+', hash_match, message)
+#    message = re.sub('[\w\.-]+@[\w\.-]+(?:\.[\w]+)+', hash_match, message)
     # Hash IPs
-    message = re.sub('[0-9]{1,3}(\.[0-9]{1,3}){3}', hash_match, message)
+#    message = re.sub('[0-9]{1,3}(\.[0-9]{1,3}){3}', hash_match, message)
     # Hash /user/{username} directories
-    message = re.sub('(/user/)(\w*)', hash_match_partial, message)
+#    message = re.sub('(/user/)(\w*)', hash_match_partial, message)
     # Hash /user={username} 
-    message = re.sub('(user\=)(\w*)', hash_match_partial, message)
+#    message = re.sub('(user\=)(\w*)', hash_match_partial, message)
     # Hash user.{username} .
-    message = re.sub('(user\.)(\w*)', hash_match_partial, message)
+#    message = re.sub('(user\.)(\w*)', hash_match_partial, message)
     # Hash bearer tokens
-    message = re.sub('(Bearer\s*)([^\s]*)', hash_match_partial, message)
+#    message = re.sub('(Bearer\s*)([^\s]*)', hash_match_partial, message)
     # Hash macaroons
-    message = re.sub('(macaroon\s*)([^\s]*)', hash_match_partial, message)
+#    message = re.sub('(macaroon\s*)([^\s]*)', hash_match_partial, message)
+    # hash everything else
+    message = hashfunc(message)
 
     return message
 
@@ -73,7 +91,7 @@ def run(fin, attrs, fout):
     data = reduce(DataFrame.drop, attrs, data)
 
     # Save to csv
-    data.write.option("compression","gzip").csv(fout)
+    data.write.option("compression","gzip").json(fout)
 #     data.head()
 
 def main():
