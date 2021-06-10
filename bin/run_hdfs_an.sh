@@ -10,7 +10,7 @@
 ##H   input-dir      input area on HDFS
 ##H   output-dir     output area on HDFS
 ##H   attributes     comma separated attributes, e.g. user_dn,Country
-##H   log-area       log area (default /tmp/hdfs_an
+##H   log-file       log file (default /tmp/hdfs_an.log)
 ##H
 
 # Check if user is passing least required arguments.
