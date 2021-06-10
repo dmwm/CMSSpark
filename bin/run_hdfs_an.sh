@@ -1,6 +1,6 @@
 #!/bin/bash
 ##H Script to anonymise data on HDFS
-##H Usage: run_hdfs_an.sh <input-dir> <output-dir> <attributes> <log-area>
+##H Usage: run_hdfs_an.sh <input-dir> <output-dir> <attributes> <log-file>
 ##H        to run this script you need to fetch CMSSpark and reside in its area
 ##H        Example:
 ##H        git clone git@github.com:dmwm/CMSSpark.git
@@ -22,12 +22,10 @@ fi
 hdir=$1
 odir=$2
 attrs=$3
-ldir=$4
-if [ "$ldir" == "" ]; then
-    ldir=/tmp/hdfs_an
+log=$4
+if [ "$log" == "" ]; then
+    log=/tmp/hdfs_an/log
 fi
-mkdir -p $ldir
-log=$ldir/`date '+%Y%m%d'`
 
 # working directory, inside of CMSSpark
 wdir=$PWD

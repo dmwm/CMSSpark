@@ -18,20 +18,8 @@ from CMSSpark.spark_utils import spark_context, condor_tables, split_dataset
 from CMSSpark.utils import info, split_date
 from CMSSpark.conf import OptionParser
 
-# Define cleanup methods
-def hash_match(matchobj):
-    match = matchobj.group(0)
-    m = hashlib.md5()
-    m.update(match.encode('utf-8'))
-    return m.hexdigest()
-
-def hash_match_partial(matchobj):
-    match = matchobj.group(2)
-    m = hashlib.md5()
-    m.update(match.encode('utf-8'))
-    return matchobj.group(1) + m.hexdigest()
-
 def hashfunc(rec):
+    "Generic hash function for given record"
     keyhash = hashlib.md5()
     try:
         keyhash.update(rec)
@@ -40,6 +28,7 @@ def hashfunc(rec):
     return keyhash.hexdigest()
 
 def hash_private_info(message):
+    "hash function for given message"
     if message==None:
         return
     elif isinstance(message, unicode):
@@ -47,30 +36,9 @@ def hash_private_info(message):
     elif not isinstance(message, str):
         print("### message", message, type(message))
         return
-    # Hash DNs
-#    message = re.sub('(/DC=|/CN=|/OU=).*(?=(/DC=|/CN=|/OU=))(/DC=|/CN=|/OU=)\S*', hash_match, message)
-    # Hash DNs without slashes
-#    message = re.sub('(DC=|CN=|OU=).*(?=(DC=|CN=|OU=))(DC=|CN=|OU=)\S*', hash_match, message)
-    # Hash mail addresses
-#    message = re.sub('[\w\.-]+@[\w\.-]+(?:\.[\w]+)+', hash_match, message)
-    # Hash IPs
-#    message = re.sub('[0-9]{1,3}(\.[0-9]{1,3}){3}', hash_match, message)
-    # Hash /user/{username} directories
-#    message = re.sub('(/user/)(\w*)', hash_match_partial, message)
-    # Hash /user={username} 
-#    message = re.sub('(user\=)(\w*)', hash_match_partial, message)
-    # Hash user.{username} .
-#    message = re.sub('(user\.)(\w*)', hash_match_partial, message)
-    # Hash bearer tokens
-#    message = re.sub('(Bearer\s*)([^\s]*)', hash_match_partial, message)
-    # Hash macaroons
-#    message = re.sub('(macaroon\s*)([^\s]*)', hash_match_partial, message)
-    # hash everything else
-    message = hashfunc(message)
+    return hashfunc(message)
 
-    return message
-
-def run(fin, attrs, fout):
+def run(fin, attrs, fout, nparts=3000):
     # Setting up the Spark session
     spark = SparkSession.builder.master("local[*]").appName("Issues").getOrCreate()
 
@@ -79,6 +47,8 @@ def run(fin, attrs, fout):
     res = spark.read.json(paths)
 
     data = res.select("data.*")
+    data.repartition(nparts)
+    print("### number of new data paritions", data.rdd.getNumPartitions())
 
     anonymize = udf(hash_private_info, returnType=StringType())
 
@@ -88,11 +58,10 @@ def run(fin, attrs, fout):
         data = data.withColumn(col, anonymize(getattr(data, attr)))
 
     # drop attributes
-    data = reduce(DataFrame.drop, attrs, data)
+    data = data.drop(*attrs)
 
     # Save to csv
     data.write.option("compression","gzip").json(fout)
-#     data.head()
 
 def main():
     optmgr  = OptionParser('hdfs_app')
@@ -100,9 +69,11 @@ def main():
     msg = 'Comma separated list of attributes to anonimise'
     optmgr.parser.add_argument("--attrs", action="store",
         dest="attrs", default="", help=msg)
+    optmgr.parser.add_argument("--nparts", action="store",
+        dest="nparts", default=100, help=msg)
     opts = optmgr.parser.parse_args()
     attrs = opts.attrs.split(',')
-    run(opts.hdir, attrs, opts.fout)
+    run(opts.hdir, attrs, opts.fout, opts.nparts)
 
 if __name__ == '__main__':
     main()
