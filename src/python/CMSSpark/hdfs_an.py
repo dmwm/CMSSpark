@@ -10,6 +10,7 @@ from functools import reduce
 # third-party libs
 import pandas as pd
 from pyspark.sql.functions import udf
+from pyspark.sql import SQLContext
 from pyspark.sql.types import StringType
 from pyspark.sql import DataFrame, SparkSession
 
@@ -38,13 +39,15 @@ def hash_private_info(message):
         return
     return hashfunc(message)
 
-def run(fin, attrs, fout, nparts=3000):
-    # Setting up the Spark session
-    spark = SparkSession.builder.master("local[*]").appName("Issues").getOrCreate()
+def run(fin, attrs, yarn, fout, verbose, nparts=3000):
+
+    # define spark context, it's main object which allow to communicate with spark
+    ctx = spark_context('cms', yarn, verbose)
+    sqlContext = SQLContext(ctx)
 
     # Reading all the files in a directory
     paths = [fin]
-    res = spark.read.json(paths)
+    res = sqlContext.read.json(paths)
 
     data = res.select("data.*")
     data.repartition(nparts)
@@ -73,7 +76,7 @@ def main():
         dest="nparts", default=100, help=msg)
     opts = optmgr.parser.parse_args()
     attrs = opts.attrs.split(',')
-    run(opts.hdir, attrs, opts.fout, opts.nparts)
+    run(opts.hdir, attrs, opts.yarn, opts.fout, opts.verbose, opts.nparts)
 
 if __name__ == '__main__':
     main()
