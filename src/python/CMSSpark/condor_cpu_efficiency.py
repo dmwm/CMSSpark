@@ -79,7 +79,7 @@ def format_df(df):
     """
     Set the presentation format for the dataframe
     """
-    pd.set_option("display.max_colwidth", -1)  # never cut long columns
+    pd.set_option("display.max_colwidth", None)  # never cut long columns
     pd.options.display.float_format = "{:,.2f}".format  # only 2 decimals
     df = df.rename(
         columns={
@@ -108,7 +108,7 @@ def get_tiers_html(grouped_tiers):
     Arrange tiers html
     """
     grouped_tiers = grouped_tiers.sort_values("Tier")
-    pd.set_option("display.max_colwidth", -1)  # never cut long columns
+    pd.set_option("display.max_colwidth", None)  # never cut long columns
     pd.options.display.float_format = "{:,.2f}".format  # only 2 decimals
     grouped_tiers["tier_cpueff"] = grouped_tiers["tier_cpueff"].map("{:,.1f}%".format)
     grouped_tiers["tier_cpus"] = grouped_tiers["tier_cpus"].map(int)
@@ -525,4 +525,3 @@ def generate_cpu_eff_site(
 
 if __name__ == "__main__":
     generate_cpu_eff_site()
-
