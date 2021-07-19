@@ -32,10 +32,6 @@ currentDir=$(
   cd "$(dirname "$0")" && pwd
 )
 
-OUTPUT_DIR="$1"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CMS_TYPES=("analysis" "production" "folding@home" "test")
-
 spark_submit=/usr/hdp/spark-2.3.0/bin/spark-submit
 spark_confs=(
     --conf spark.driver.bindAddress=0.0.0.0
@@ -49,11 +45,29 @@ spark_confs=(
     --conf spark.driver.memory=4g
 )
 
+OUTPUT_DIR="$1"
+OUTPUT_DIR_OUTLIER="${OUTPUT_DIR}_outlier"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CMS_TYPES=("analysis" "production" "folding@home" "test")
+
+echo "Starting spark jobs for cpu_eff_outlier=0, folder: " $OUTPUT_DIR
 for type in "${CMS_TYPES[@]}"
 do
 SUBFOLDER=$(echo "$type"|sed -e 's/[^[:alnum:]]/-/g' | tr -s '-' | tr '[:upper:]' '[:lower:]')
-$spark_submit --master yarn ${spark_confs[@]} \
+$spark_submit --master yarn "${spark_confs[@]}" \
 	"$currentDir/../src/python/CMSSpark/condor_cpu_efficiency.py" \
 	--cms_type "$type" \
-	--output_folder "$OUTPUT_DIR/$SUBFOLDER"
+	--output_folder "$OUTPUT_DIR/$SUBFOLDER" \
+	--cpu_eff_outlier=0
+done
+
+echo "Starting spark jobs for cpu_eff_outlier=1, folder: " $OUTPUT_DIR_OUTLIER
+for type in "${CMS_TYPES[@]}"
+do
+SUBFOLDER=$(echo "$type"|sed -e 's/[^[:alnum:]]/-/g' | tr -s '-' | tr '[:upper:]' '[:lower:]')
+$spark_submit --master yarn "${spark_confs[@]}" \
+	"$currentDir/../src/python/CMSSpark/condor_cpu_efficiency.py" \
+	--cms_type "$type" \
+	--output_folder "$OUTPUT_DIR_OUTLIER/$SUBFOLDER" \
+	--cpu_eff_outlier=1
 done
