@@ -112,7 +112,7 @@ def udf_step_extract(row):
             step_res['jobCPU'] = step.performance.cpu.TotalJobCPU
             step_res['jobTime'] = step.performance.cpu.TotalJobTime
             if step_res['jobCPU'] and step_res['nthreads'] and step_res['jobTime']:
-                step_res['cpuEff'] = round(100 * (step_res['jobCPU'] / step_res['ncores']) / step_res['jobTime'],
+                step_res['cpuEff'] = round(100 * (step_res['jobCPU'] / step_res['nthreads']) / step_res['jobTime'],
                                            2)
             else:
                 step_res['cpuEff'] = None
@@ -197,7 +197,7 @@ def _generate_main_page(selected_pd, task_column, start_date, end_date):
      <ul>
       <li>"mean_cpueff" is the average of all individual steps(cmsRun1,2,etc.) of a task. </li>
       <li>In detailed view, "mean_cpueff" is the average cpu eff of a specific step type in a site. </li>
-      <li>Individual step cpu efficiency calculation: <code>cpuEff=(jobCPU / ncores) / jobTime </code> </li>
+      <li>Individual step cpu efficiency calculation: <code>cpuEff=(jobCPU / nthreads) / jobTime </code> </li>
       <li>
         Ref1: <a href="https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/stepchain_cpu_eff.py">
             Python script
@@ -326,6 +326,7 @@ def main():
     df_details = df.groupby(["task", "site", "step_name"]).agg(
         fn.mean("cpuEff").alias("mean_cpueff"),
         fn.sum("ncores").alias("sum_ncores"),
+        fn.sum("nthreads").alias("sum_nthreads"),
         fn.sum("jobCPU").alias("sum_jobCPU"),
         fn.sum("jobTime").alias("sum_jobTime"),
         fn.mean("steps_len").alias("mean_steps_len"),
