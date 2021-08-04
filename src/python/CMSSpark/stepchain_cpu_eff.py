@@ -5,8 +5,9 @@
 
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
+import click
 import pandas as pd
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
@@ -18,29 +19,9 @@ from pyspark.sql.types import StructType, StructField, StringType, IntegerType, 
 pd.options.display.float_format = "{:,.3f}".format
 pd.set_option("display.max_colwidth", -1)
 
-kibana_link_1 = (
-        '''<a target="_blank" title="First click can be SSO redirection. ''' +
-        '''If so, please click 2nd time" href="''' +
-        '''https://monit-kibana.cern.ch/kibana/app/kibana#/discover?_g=(filters:!(),refreshInterval:''' +
-        '''(pause:!t,value:0),time:(from:'{START_DAY}',to:'{END_DAY}'))''' +
-        '''&_a=(columns:!(_source),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,index''' +
-        ''':'60770470-8326-11ea-88fc-cfaa9841e350',key:data.steps.site,negate:!f,params:(query:'''
-)
-# + SITE_NAME
-kibana_link_2 = '''),type:phrase,value:'''
-# + SITE_NAME
-kibana_link_3 = '''),query:(match:(data.steps.site:(query:'''
-# + SITE_NAME
-kibana_link_4 = (
-        ''',type:phrase))))),index:'60770470-8326-11ea-88fc-cfaa9841e350',interval:auto,query:''' +
-        '''(language:lucene,query:'data.meta_data.jobstate:success%20AND%20data.meta_data.jobtype:''' +
-        '''Production%20AND%20data.task:%22'''
-)
-# + TASK_NAME
-kibana_link_5 = '''%22'),sort:!(metadata.timestamp,desc))">@Kibana</a>'''
-
+_DEFAULT_DAYS = 15
 _DEFAULT_HDFS_FOLDER = "/project/monitoring/archive/wmarchive/raw/metric"
-_OUTPUT_FOLDER = "/eos/user/c/cmsmonit/www/stepchain"
+_VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 
 
 def get_spark_session(yarn=True, verbose=False):
@@ -76,7 +57,7 @@ def get_candidate_files(
     return candidate_files
 
 
-def schema():
+def get_schema():
     """Final schema of steps"""
     return StructType([
         StructField('ts', LongType(), nullable=False),
@@ -135,6 +116,33 @@ def udf_step_extract(row):
     if result:
         [r.setdefault("steps_len", count) for r in result]
         return result
+
+
+def get_kibana_links():
+    """Returns kibana link substrings as list.
+
+    String formatting is not possible since they are used in pandas column/index aggregations"""
+    kibana_link_0 = (
+            '''<a target="_blank" title="First click can be SSO redirection. ''' +
+            '''If so, please click 2nd time" href="''' +
+            '''https://monit-kibana.cern.ch/kibana/app/kibana#/discover?_g=(filters:!(),refreshInterval:''' +
+            '''(pause:!t,value:0),time:(from:'{START_DAY}',to:'{END_DAY}'))''' +
+            '''&_a=(columns:!(_source),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,index''' +
+            ''':'60770470-8326-11ea-88fc-cfaa9841e350',key:data.steps.site,negate:!f,params:(query:'''
+    )
+    # + SITE_NAME
+    kibana_link_1 = '''),type:phrase,value:'''
+    # + SITE_NAME
+    kibana_link_2 = '''),query:(match:(data.steps.site:(query:'''
+    # + SITE_NAME
+    kibana_link_3 = (
+            ''',type:phrase))))),index:'60770470-8326-11ea-88fc-cfaa9841e350',interval:auto,query:''' +
+            '''(language:lucene,query:'data.meta_data.jobstate:success%20AND%20data.meta_data.jobtype:''' +
+            '''Production%20AND%20data.task:%22'''
+    )
+    # + TASK_NAME
+    kibana_link_4 = '''%22'),sort:!(metadata.timestamp,desc))">@Kibana</a>'''
+    return [kibana_link_0, kibana_link_1, kibana_link_2, kibana_link_3, kibana_link_4]
 
 
 def _generate_main_page(selected_pd, task_column, start_date, end_date):
@@ -278,21 +286,21 @@ def write_htmls(grouped_details, grouped_task, start_date, end_date, output_fold
     html file name of a task contains different characters(-_-) which are replaced with slash.
     This replacement trick is transparent, users see normal task names.
     """
+    k_links = get_kibana_links()
     grouped_details = grouped_details.set_index(["task", "site", "step_name"]).sort_index()
     grouped_details["@Kibana"] = (
-            kibana_link_1.format(START_DAY=(start_date + timedelta(seconds=time.altzone))
-                                 .strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                                 END_DAY=(end_date + timedelta(seconds=time.altzone))
-                                 .strftime('%Y-%m-%dT%H:%M:%S.000Z')
-                                 ) +
+            k_links[0].format(
+                START_DAY=(start_date + timedelta(seconds=time.altzone)).strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                END_DAY=(end_date + timedelta(seconds=time.altzone)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+            ) +
             grouped_details.index.get_level_values('site') +
-            kibana_link_2 +
+            k_links[1] +
             grouped_details.index.get_level_values('site') +
-            kibana_link_3 +
+            k_links[2] +
             grouped_details.index.get_level_values('site') +
-            kibana_link_4 +
+            k_links[3] +
             grouped_details.index.get_level_values('task') +
-            kibana_link_5
+            k_links[4]
     )
     # Create one file per worflow, so we don't have a big file collapsing the browser.
     _folder = f"{output_folder}/wfbytask"
@@ -310,14 +318,35 @@ def write_htmls(grouped_details, grouped_task, start_date, end_date, output_fold
         ofile.write(main_page)
 
 
-def main():
+@click.command()
+@click.option("--output_folder", default="./www/stepchain", help="local output directory")
+@click.option("--start_date", type=click.DateTime(_VALID_DATE_FORMATS))
+@click.option("--end_date", type=click.DateTime(_VALID_DATE_FORMATS))
+def main(
+        output_folder="./www/stepchain",
+        start_date=None,
+        end_date=None,
+):
     """Get step data in wmarchive.
 
     Each step array contains multiple steps. Udf function returns each step as a separate row in a list.
     flatMap helps to flat list of steps to become individual rows in dataframe.
     """
-    start_date = datetime(2021, 7, 20)
-    end_date = datetime(2021, 8, 4)
+    print("Output folder:", output_folder)
+    # Borrowed logic from condor_cpu_efficiency
+    _yesterday = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
+    if not (start_date or end_date):
+        end_date = _yesterday
+        start_date = end_date - timedelta(days=_DEFAULT_DAYS)
+    elif not start_date:
+        start_date = end_date - timedelta(days=_DEFAULT_DAYS)
+    elif not end_date:
+        end_date = min(start_date + timedelta(days=_DEFAULT_DAYS), _yesterday)
+    if start_date > end_date:
+        raise ValueError(
+            f"start date ({start_date}) should be earlier than end date({end_date})"
+        )
+
     spark = get_spark_session()
     df_raw = spark.read.option("basePath", _DEFAULT_HDFS_FOLDER).json(
         get_candidate_files(start_date, end_date, spark, base=_DEFAULT_HDFS_FOLDER)
@@ -331,7 +360,7 @@ def main():
                   """
     )
     df_rdd = df_raw.rdd.flatMap(lambda r: udf_step_extract(r))
-    df = spark.createDataFrame(df_rdd, schema=schema()).dropDuplicates().where(col("ncores").isNotNull()).cache()
+    df = spark.createDataFrame(df_rdd, schema=get_schema()).dropDuplicates().where(col("ncores").isNotNull()).cache()
     df_details = df.groupby(["task", "site", "step_name"]).agg(
         fn.mean("cpuEff").alias("mean_cpueff"),
         fn.sum("ncores").alias("sum_ncores"),
@@ -347,7 +376,7 @@ def main():
         fn.sum("nthreads").alias("sum_nthreads"),
         fn.mean("steps_len").alias("mean_steps_len"),
     ).toPandas()
-    write_htmls(df_details, df_task, start_date, end_date, _OUTPUT_FOLDER)
+    write_htmls(df_details, df_task, start_date, end_date, output_folder)
 
 
 if __name__ == "__main__":

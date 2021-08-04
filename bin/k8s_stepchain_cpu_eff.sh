@@ -1,6 +1,4 @@
 #!/bin/bash
-# Create a site for the default period for each of the cms types
-#
 # This script is intended to be used as cron job in kubernetes.
 
 # Check output path is given
@@ -45,28 +43,9 @@ spark_confs=(
     --conf spark.driver.memory=4g
 )
 
-OUTPUT_DIR="${1}/cpu_eff"
-OUTPUT_DIR_OUTLIER="${OUTPUT_DIR}_outlier"
-CMS_TYPES=("analysis" "production" "folding@home" "test")
+OUTPUT_DIR="${1}/stepchain"
 
-echo "Starting spark jobs for cpu_eff_outlier=0, folder: " $OUTPUT_DIR
-for type in "${CMS_TYPES[@]}"
-do
-SUBFOLDER=$(echo "$type"|sed -e 's/[^[:alnum:]]/-/g' | tr -s '-' | tr '[:upper:]' '[:lower:]')
+echo "Starting spark job for stepchain cpu efficiencies, folder: " $OUTPUT_DIR
 $spark_submit --master yarn "${spark_confs[@]}" \
-	"$currentDir/../src/python/CMSSpark/condor_cpu_efficiency.py" \
-	--cms_type "$type" \
-	--output_folder "$OUTPUT_DIR/$SUBFOLDER" \
-	--cpu_eff_outlier=0
-done
+	"$currentDir/../src/python/CMSSpark/stepchain_cpu_eff.py" --output_folder "$OUTPUT_DIR"
 
-echo "Starting spark jobs for cpu_eff_outlier=1, folder: " $OUTPUT_DIR_OUTLIER
-for type in "${CMS_TYPES[@]}"
-do
-SUBFOLDER=$(echo "$type"|sed -e 's/[^[:alnum:]]/-/g' | tr -s '-' | tr '[:upper:]' '[:lower:]')
-$spark_submit --master yarn "${spark_confs[@]}" \
-	"$currentDir/../src/python/CMSSpark/condor_cpu_efficiency.py" \
-	--cms_type "$type" \
-	--output_folder "$OUTPUT_DIR_OUTLIER/$SUBFOLDER" \
-	--cpu_eff_outlier=1
-done
