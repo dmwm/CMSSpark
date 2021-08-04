@@ -21,18 +21,23 @@ pd.set_option("display.max_colwidth", -1)
 kibana_link_1 = (
         '''<a target="_blank" title="First click can be SSO redirection. ''' +
         '''If so, please click 2nd time" href="''' +
-        '''https://monit-kibana.cern.ch/kibana/app/kibana#/discover?_g=(filters:!(),refreshInterval:(pause:!t,''' +
-        '''value:0),time:(from:'START_DAY',to:'END_DAY'))&_a=(columns:!(data.task),filters:!(('$state':(store:''' +
-        '''appState),meta:(alias:!n,disabled:!f,index:'60770470-8326-11ea-88fc-cfaa9841e350',key:data.steps.site,''' +
-        '''negate:!f,params:(query:T2_CH_CERN),type:phrase,value:T2_CH_CERN),query:(match:(data.steps.site:(query:'''
+        '''https://monit-kibana.cern.ch/kibana/app/kibana#/discover?_g=(filters:!(),refreshInterval:''' +
+        '''(pause:!t,value:0),time:(from:'{START_DAY}',to:'{END_DAY}'))''' +
+        '''&_a=(columns:!(_source),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,index''' +
+        ''':'60770470-8326-11ea-88fc-cfaa9841e350',key:data.steps.site,negate:!f,params:(query:'''
 )
 # + SITE_NAME
-kibana_link_2 = (
-        ''',type:phrase))))),index:'60770470-8326-11ea-88fc-cfaa9841e350',interval:auto,query:(language:lucene,''' +
-        '''query:'data.meta_data.jobstate:success%20AND%20data.meta_data.jobtype:Production%20AND%20data.task:%22'''
+kibana_link_2 = '''),type:phrase,value:'''
+# + SITE_NAME
+kibana_link_3 = '''),query:(match:(data.steps.site:(query:'''
+# + SITE_NAME
+kibana_link_4 = (
+        ''',type:phrase))))),index:'60770470-8326-11ea-88fc-cfaa9841e350',interval:auto,query:''' +
+        '''(language:lucene,query:'data.meta_data.jobstate:success%20AND%20data.meta_data.jobtype:''' +
+        '''Production%20AND%20data.task:%22'''
 )
 # + TASK_NAME
-kibana_link_3 = '''%22'),sort:!(metadata.timestamp,desc))">@Kibana</a>'''
+kibana_link_5 = '''%22'),sort:!(metadata.timestamp,desc))">@Kibana</a>'''
 
 _DEFAULT_HDFS_FOLDER = "/project/monitoring/archive/wmarchive/raw/metric"
 _OUTPUT_FOLDER = "/eos/user/c/cmsmonit/www/stepchain"
@@ -282,8 +287,12 @@ def write_htmls(grouped_details, grouped_task, start_date, end_date, output_fold
                                  ) +
             grouped_details.index.get_level_values('site') +
             kibana_link_2 +
+            grouped_details.index.get_level_values('site') +
+            kibana_link_3 +
+            grouped_details.index.get_level_values('site') +
+            kibana_link_4 +
             grouped_details.index.get_level_values('task') +
-            kibana_link_3
+            kibana_link_5
     )
     # Create one file per worflow, so we don't have a big file collapsing the browser.
     _folder = f"{output_folder}/wfbytask"
