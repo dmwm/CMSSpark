@@ -30,7 +30,6 @@ from pyspark.sql.types import (
 pd.options.display.float_format = "{:,.2f}".format
 pd.set_option("display.max_colwidth", None)
 
-_DEFAULT_DAYS = 15
 _DEFAULT_HDFS_FOLDER = "/project/monitoring/archive/wmarchive/raw/metric"
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 
@@ -335,10 +334,12 @@ def write_htmls(grouped_details, grouped_task, start_date, end_date, output_fold
 @click.option("--output_folder", default="./www/stepchain", help="local output directory")
 @click.option("--start_date", type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option("--end_date", type=click.DateTime(_VALID_DATE_FORMATS))
+@click.option("--last_n_days", type=int, default=15, help="Last n days data will be used")
 def main(
         output_folder="./www/stepchain",
         start_date=None,
         end_date=None,
+        last_n_days=15,
 ):
     """Get step data in wmarchive.
 
@@ -349,11 +350,11 @@ def main(
     _yesterday = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
     if not (start_date or end_date):
         end_date = _yesterday
-        start_date = end_date - timedelta(days=_DEFAULT_DAYS)
+        start_date = end_date - timedelta(days=last_n_days)
     elif not start_date:
-        start_date = end_date - timedelta(days=_DEFAULT_DAYS)
+        start_date = end_date - timedelta(days=last_n_days)
     elif not end_date:
-        end_date = min(start_date + timedelta(days=_DEFAULT_DAYS), _yesterday)
+        end_date = min(start_date + timedelta(days=last_n_days), _yesterday)
     if start_date > end_date:
         raise ValueError(
             f"start date ({start_date}) should be earlier than end date({end_date})"
@@ -374,8 +375,8 @@ def main(
     df_rdd = df_raw.rdd.flatMap(lambda r: udf_step_extract(r))
     df = spark.createDataFrame(df_rdd, schema=get_schema()).dropDuplicates().where(_col("ncores").isNotNull()).cache()
     df_details = df.groupby(["task", "site", "step_name"]).agg(
-        _sum("ncores").alias("sum_ncores"),
         _mean("cpuEff").alias("mean_cpueff"),
+        _sum("ncores").alias("sum_ncores"),
         _sum("nthreads").alias("sum_nthreads"),
         _sum("jobCPU").alias("sum_jobCPU"),
         _sum("jobTime").alias("sum_jobTime"),
