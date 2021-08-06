@@ -11,13 +11,24 @@ import click
 import pandas as pd
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
-from pyspark.sql import functions as fn
-from pyspark.sql.functions import col
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, LongType
+from pyspark.sql.functions import (
+    col as _col,
+    collect_set as _collect_set,
+    mean as _mean,
+    sum as _sum,
+)
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
+    IntegerType,
+    DoubleType,
+    LongType,
+)
 
 # pd.set_option("display.max_colwidth", None)
-pd.options.display.float_format = "{:,.3f}".format
-pd.set_option("display.max_colwidth", -1)
+pd.options.display.float_format = "{:,.2f}".format
+pd.set_option("display.max_colwidth", None)
 
 _DEFAULT_DAYS = 15
 _DEFAULT_HDFS_FOLDER = "/project/monitoring/archive/wmarchive/raw/metric"
@@ -59,21 +70,23 @@ def get_candidate_files(
 
 def get_schema():
     """Final schema of steps"""
-    return StructType([
-        StructField('ts', LongType(), nullable=False),
-        StructField('task', StringType(), nullable=False),
-        StructField('fwjr_id', StringType(), nullable=False),
-        StructField('site', StringType(), nullable=False),
-        StructField('acquisitionEra', StringType(), nullable=True),
-        StructField('step_name', StringType(), nullable=False),
-        StructField('jobCPU', DoubleType(), nullable=True),
-        StructField('jobTime', DoubleType(), nullable=True),
-        StructField('ncores', IntegerType(), nullable=True),
-        StructField('nthreads', IntegerType(), nullable=True),
-        StructField('era_len', IntegerType(), nullable=True),
-        StructField('steps_len', IntegerType(), nullable=False),
-        StructField('cpuEff', DoubleType(), nullable=True),
-    ])
+    return StructType(
+        [
+            StructField('ts', LongType(), nullable=False),
+            StructField('task', StringType(), nullable=False),
+            StructField('fwjr_id', StringType(), nullable=False),
+            StructField('site', StringType(), nullable=False),
+            StructField('acquisitionEra', StringType(), nullable=True),
+            StructField('step_name', StringType(), nullable=False),
+            StructField('jobCPU', DoubleType(), nullable=True),
+            StructField('jobTime', DoubleType(), nullable=True),
+            StructField('ncores', IntegerType(), nullable=True),
+            StructField('nthreads', IntegerType(), nullable=True),
+            StructField('era_len', IntegerType(), nullable=True),
+            StructField('steps_len', IntegerType(), nullable=False),
+            StructField('cpuEff', DoubleType(), nullable=True),
+        ]
+    )
 
 
 def udf_step_extract(row):
@@ -332,7 +345,6 @@ def main(
     Each step array contains multiple steps. Udf function returns each step as a separate row in a list.
     flatMap helps to flat list of steps to become individual rows in dataframe.
     """
-    print("Output folder:", output_folder)
     # Borrowed logic from condor_cpu_efficiency
     _yesterday = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
     if not (start_date or end_date):
@@ -360,21 +372,21 @@ def main(
                   """
     )
     df_rdd = df_raw.rdd.flatMap(lambda r: udf_step_extract(r))
-    df = spark.createDataFrame(df_rdd, schema=get_schema()).dropDuplicates().where(col("ncores").isNotNull()).cache()
+    df = spark.createDataFrame(df_rdd, schema=get_schema()).dropDuplicates().where(_col("ncores").isNotNull()).cache()
     df_details = df.groupby(["task", "site", "step_name"]).agg(
-        fn.mean("cpuEff").alias("mean_cpueff"),
-        fn.sum("ncores").alias("sum_ncores"),
-        fn.sum("nthreads").alias("sum_nthreads"),
-        fn.sum("jobCPU").alias("sum_jobCPU"),
-        fn.sum("jobTime").alias("sum_jobTime"),
-        fn.mean("steps_len").alias("mean_steps_len"),
-        fn.collect_set("acquisitionEra").alias("acquisitionEra"),
+        _sum("ncores").alias("sum_ncores"),
+        _mean("cpuEff").alias("mean_cpueff"),
+        _sum("nthreads").alias("sum_nthreads"),
+        _sum("jobCPU").alias("sum_jobCPU"),
+        _sum("jobTime").alias("sum_jobTime"),
+        _mean("steps_len").alias("mean_steps_len"),
+        _collect_set("acquisitionEra").alias("acquisitionEra"),
     ).toPandas()
     df_task = df.groupby(["task"]).agg(
-        fn.mean("cpuEff").alias("mean_cpueff"),
-        fn.sum("ncores").alias("sum_ncores"),
-        fn.sum("nthreads").alias("sum_nthreads"),
-        fn.mean("steps_len").alias("mean_steps_len"),
+        _mean("cpuEff").alias("mean_cpueff"),
+        _sum("ncores").alias("sum_ncores"),
+        _sum("nthreads").alias("sum_nthreads"),
+        _mean("steps_len").alias("mean_steps_len"),
     ).toPandas()
     write_htmls(df_details, df_task, start_date, end_date, output_folder)
 
