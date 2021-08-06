@@ -30,41 +30,51 @@ from pyspark.sql.types import (
     IntegerType,
 )
 
-_DEFAULT_DAYS = 30
 _VALID_TYPES = ["analysis", "production", "folding@home", "test"]
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 _DEFAULT_HDFS_FOLDER = "/project/monitoring/archive/condor/raw/metric"
 
-# Kibana links should be as below to be able to use pandas df functionalities
-# by_workflow
-kibana_by_wf_base_link_1 = (
-    '''<a target="_blank" title="First click can be SSO redirection. ''' +
-    '''If so, please click 2nd time" href="https://es-cms.cern.ch/kibana/app/kibana#/discover?_g=''' +
-    '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}',to:'{END_DAY}'))&_a=(columns:!(''' +
-    '''RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site,RequestMemory,RequestMemory_Eval,CpuEffOutlier,Tier''' +
-    '''),index:'cms-20*',interval:auto,query:(language:lucene,query:'Tier:%2FT1%7CT2%2F%20AND%20CpuEffOutlier:'''
-)
-# + CpuEffOutlier
-kibana_by_wf_base_link_2 = '''%20AND%20Status:Completed%20AND%20JobFailed:0%20AND%20Workflow:%22'''
-# + Workflow
-kibana_by_wf_base_link_3 = '''%22%20AND%20WMAgent_RequestName:%22'''
-# + WMAgent_RequestName(only in production)
-kibana_by_wf_base_link_4 = '''%22'),sort:!(RecordTime,desc))">@Kibana_t1t2</a>'''
 
-# by_site
-kibana_by_site_base_link_1 = (
-    '''<a target="_blank" title="First click can be SSO redirection. ''' +
-    '''If so, please click 2nd time" href="https://es-cms.cern.ch/kibana/app/kibana#/discover?_g=''' +
-    '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}',to:'{END_DAY}'))&_a=(columns:!(''' +
-    '''RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site,RequestMemory,RequestMemory_Eval,CpuEffOutlier''' +
-    '''),index:'cms-20*',interval:auto,query:(language:lucene,query:'CpuEffOutlier:'''
-)
-# + CpuEffOutlier
-kibana_by_site_base_link_2 = '''%20AND%20Status:Completed%20AND%20JobFailed:0%20AND%20WMAgent_RequestName:%22'''
-# + WMAgent_RequestName
-kibana_by_site_base_link_3 = '''%22%20AND%20Workflow:%22'''  # + Workflow
-kibana_by_site_base_link_4 = '''%22%20AND%20Site:%22'''  # + Site
-kibana_by_site_base_link_5 = '''%22'),sort:!(RecordTime,desc))">@Kibana</a>'''
+def wf_kibana_links():
+    """Returns wf kibana links
+
+    Kibana links should be as below to be able to use pandas df functionalities
+    """
+    # + by_workflow
+    kibana_by_wf_base_link_0 = (
+        '''<a target="_blank" title="First click can be SSO redirection. ''' +
+        '''If so, please click 2nd time" href="https://es-cms.cern.ch/kibana/app/kibana#/discover?_g=''' +
+        '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}',to:'{END_DAY}'))&_a=(columns:!(''' +
+        '''RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site,RequestMemory,RequestMemory_Eval,CpuEffOutlier,Tier''' +
+        '''),index:'cms-20*',interval:auto,query:(language:lucene,''' +
+        '''query:'Tier:%2FT1%7CT2%2F%20AND%20CpuEffOutlier:'''
+    )
+    # + CpuEffOutlier
+    kibana_by_wf_base_link_1 = '''%20AND%20Status:Completed%20AND%20JobFailed:0%20AND%20Workflow:%22'''
+    # + Workflow
+    kibana_by_wf_base_link_2 = '''%22%20AND%20WMAgent_RequestName:%22'''
+    # + WMAgent_RequestName(only in production)
+    kibana_by_wf_base_link_3 = '''%22'),sort:!(RecordTime,desc))">@Kibana_t1t2</a>'''
+    return [kibana_by_wf_base_link_0, kibana_by_wf_base_link_1, kibana_by_wf_base_link_2, kibana_by_wf_base_link_3]
+
+
+def site_kibana_links():
+    # by_site
+    kibana_by_site_base_link_0 = (
+        '''<a target="_blank" title="First click can be SSO redirection. ''' +
+        '''If so, please click 2nd time" href="https://es-cms.cern.ch/kibana/app/kibana#/discover?_g=''' +
+        '''(refreshInterval:(pause:!t,value:0),time:(from:'{START_DAY}',to:'{END_DAY}'))&_a=(columns:!(''' +
+        '''RequestCpus,CpuEff,CpuTimeHr,WallClockHr,Site,RequestMemory,RequestMemory_Eval,CpuEffOutlier''' +
+        '''),index:'cms-20*',interval:auto,query:(language:lucene,query:'CpuEffOutlier:'''
+    )
+    # + CpuEffOutlier
+    kibana_by_site_base_link_1 = '''%20AND%20Status:Completed%20AND%20JobFailed:0%20AND%20WMAgent_RequestName:%22'''
+    # + WMAgent_RequestName
+    kibana_by_site_base_link_2 = '''%22%20AND%20Workflow:%22'''  # + Workflow
+    kibana_by_site_base_link_3 = '''%22%20AND%20Site:%22'''  # + Site
+    kibana_by_site_base_link_4 = '''%22'),sort:!(RecordTime,desc))">@Kibana</a>'''
+    return [kibana_by_site_base_link_0, kibana_by_site_base_link_1, kibana_by_site_base_link_2,
+            kibana_by_site_base_link_3, kibana_by_site_base_link_4]
 
 
 def get_spark_session(yarn=True, verbose=False):
@@ -202,6 +212,7 @@ def _generate_main_page(selected_pd,
     )
     filter_column = filter_column if filter_column is not None else workflow_column
     is_wf = filter_column.name == "Workflow"
+    wf_klinks = wf_kibana_links()
     selected_pd["Workflow"] = (
         f'<a class="wfname{" selname" if is_wf else ""}">'
         + workflow_column
@@ -211,15 +222,15 @@ def _generate_main_page(selected_pd,
           '<a target="_blank" href="https://dmytro.web.cern.ch/dmytro/cmsprodmon/workflows.php?prep_id=task_'
         + workflow_column
         + '">PMon</a> '
-        + kibana_by_wf_base_link_1.format(START_DAY=(start_date + timedelta(seconds=time.altzone))
-                                          .strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                                          END_DAY=(end_date + timedelta(seconds=time.altzone))
-                                          .strftime('%Y-%m-%dT%H:%M:%S.000Z'))
+        + wf_klinks[0].format(START_DAY=(start_date + timedelta(seconds=time.altzone))
+                              .strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                              END_DAY=(end_date + timedelta(seconds=time.altzone))
+                              .strftime('%Y-%m-%dT%H:%M:%S.000Z'))
         + str(cpu_eff_outlier)
-        + kibana_by_wf_base_link_2
+        + wf_klinks[1]
         + workflow_column
-        + (kibana_by_wf_base_link_3 + selected_pd["WMAgent_RequestName"] if (cms_type == 'production') else "")
-        + kibana_by_wf_base_link_4
+        + (wf_klinks[2] + selected_pd["WMAgent_RequestName"] if (cms_type == 'production') else "")
+        + wf_klinks[3]
     )
     if not is_wf:
         _fc = '<a class="selname">' + filter_column + "</a>"
@@ -369,28 +380,28 @@ def _generate_main_page(selected_pd,
     help=f"Workflow type to query {_VALID_TYPES}",
 )
 @click.option("--output_folder", default="./www/cpu_eff", help="local output directory")
-@click.option("--offset_days", default=3, help="Offset to end_date")
+@click.option("--last_n_days", type=int, default=30, help="Last n days data will be used")
 @click.option("--cpu_eff_outlier", default=0, help="Filter by CpuEffOutlier")
 def generate_cpu_eff_site(
     start_date=None,
     end_date=None,
     cms_type="production",
     output_folder="./www/cpu_eff",
-    offset_days=3,
+    last_n_days=30,
     cpu_eff_outlier=0,
 ):
     """
     """
-    _offset_days = datetime.combine(date.today() - timedelta(days=offset_days), datetime.min.time())
+    _yesterday = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
     if not (start_date or end_date):
         # defaults to the last 30 days with 3 days offset.
         # Default: (today-33days to today-3days)
-        end_date = _offset_days
-        start_date = end_date - timedelta(days=_DEFAULT_DAYS)
+        end_date = _yesterday
+        start_date = end_date - timedelta(days=last_n_days)
     elif not start_date:
-        start_date = end_date - timedelta(days=_DEFAULT_DAYS)
+        start_date = end_date - timedelta(days=last_n_days)
     elif not end_date:
-        end_date = min(start_date + timedelta(days=_DEFAULT_DAYS), _offset_days)
+        end_date = min(start_date + timedelta(days=last_n_days), _yesterday)
     if start_date > end_date:
         raise ValueError(
             f"start date ({start_date}) should be earlier than end date({end_date})"
@@ -480,6 +491,7 @@ def generate_cpu_eff_site(
         col(filter_column.name).isin(filter_column.to_list())
     ).toPandas()
     if cms_type == "production":
+        site_klinks = site_kibana_links()
         site_wf["log"] = (
             "<a href='https://cms-unified.web.cern.ch/cms-unified/logmapping/"
             + site_wf["WMAgent_RequestName"]
@@ -491,18 +503,18 @@ def generate_cpu_eff_site(
         )
         site_wf.drop(columns="schedd")
         site_wf["@Kibana"] = (
-            kibana_by_site_base_link_1.format(START_DAY=(start_date + timedelta(seconds=time.altzone))
-                                              .strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                                              END_DAY=(end_date + timedelta(seconds=time.altzone))
-                                              .strftime('%Y-%m-%dT%H:%M:%S.000Z'))
-            + str(cpu_eff_outlier)
-            + kibana_by_site_base_link_2
-            + site_wf["WMAgent_RequestName"]
-            + kibana_by_site_base_link_3
-            + site_wf["Workflow"]
-            + kibana_by_site_base_link_4
-            + site_wf["Site"]
-            + kibana_by_site_base_link_5
+                site_klinks[0].format(START_DAY=(start_date + timedelta(seconds=time.altzone))
+                                      .strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                                      END_DAY=(end_date + timedelta(seconds=time.altzone))
+                                      .strftime('%Y-%m-%dT%H:%M:%S.000Z'))
+                + str(cpu_eff_outlier)
+                + site_klinks[1]
+                + site_wf["WMAgent_RequestName"]
+                + site_klinks[2]
+                + site_wf["Workflow"]
+                + site_klinks[3]
+                + site_wf["Site"]
+                + site_klinks[4]
         )
     site_wf = site_wf.set_index([*group_by_col, "Site"]).sort_index()
     # Create one file per worflow, so we don't have a big file collapsing the browser.
