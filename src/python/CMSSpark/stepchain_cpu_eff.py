@@ -381,6 +381,8 @@ def main(
         _sum("jobCPU").alias("sum_jobCPU"),
         _sum("jobTime").alias("sum_jobTime"),
         _mean("steps_len").alias("mean_steps_len"),
+        _mean("nthreads").alias("mean_nthreads"),
+        _mean("ncores").alias("mean_ncores"),
         _collect_set("acquisitionEra").alias("acquisitionEra"),
     ).toPandas()
     df_task = df.groupby(["task"]).agg(
@@ -388,6 +390,8 @@ def main(
         _sum("ncores").alias("sum_ncores"),
         _sum("nthreads").alias("sum_nthreads"),
         _mean("steps_len").alias("mean_steps_len"),
+        _mean("nthreads").alias("mean_nthreads"),
+        _mean("ncores").alias("mean_ncores"),
     ).toPandas()
     write_htmls(df_details, df_task, start_date, end_date, output_folder)
 
