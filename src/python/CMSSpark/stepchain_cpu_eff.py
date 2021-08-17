@@ -157,6 +157,12 @@ def get_kibana_links():
     return [kibana_link_0, kibana_link_1, kibana_link_2, kibana_link_3, kibana_link_4]
 
 
+def get_req_mgr_links():
+    link_0 = '''<a target="_blank" title="ReqMgr link of the task" href="https://cmsweb.cern.ch/reqmgr2/fetch?rid='''
+    link_1 = '''">@ReqMgr</a>'''
+    return [link_0, link_1]
+
+
 def _generate_main_page(selected_pd, task_column, start_date, end_date):
     """Create HTML page
 
@@ -322,7 +328,14 @@ def write_htmls(grouped_details, grouped_task, start_date, end_date, output_fold
         df_iter.droplevel(["task"]).to_html(
             f"{_folder}/Cpu_Eff_byTask_{task_name}.html", escape=False,
         )
-
+    req_mgr_links = get_req_mgr_links()
+    # ReqMgr website link
+    grouped_task["@ReqMgr"] = (
+            req_mgr_links[0] +
+            # extract task_name from "/task_name/name_of_1st_step"
+            grouped_task['task'].str.split("/").str[1] +
+            req_mgr_links[1]
+    )
     task_column = grouped_task["task"].copy()
     main_page = _generate_main_page(grouped_task, task_column, start_date, end_date)
     os.makedirs(output_folder, exist_ok=True)
@@ -380,18 +393,20 @@ def main(
         _sum("nthreads").alias("sum_nthreads"),
         _sum("jobCPU").alias("sum_jobCPU"),
         _sum("jobTime").alias("sum_jobTime"),
-        _mean("steps_len").alias("mean_steps_len"),
-        _mean("nthreads").alias("mean_nthreads"),
-        _mean("ncores").alias("mean_ncores"),
+        _mean("steps_len").alias("#steps"),
+        _mean("nthreads").alias("#nthreads"),
+        _mean("ncores").alias("#ncores"),
         _collect_set("acquisitionEra").alias("acquisitionEra"),
     ).toPandas()
     df_task = df.groupby(["task"]).agg(
         _mean("cpuEff").alias("mean_cpueff"),
         _sum("ncores").alias("sum_ncores"),
         _sum("nthreads").alias("sum_nthreads"),
-        _mean("steps_len").alias("mean_steps_len"),
-        _mean("nthreads").alias("mean_nthreads"),
-        _mean("ncores").alias("mean_ncores"),
+        _sum("jobCPU").alias("sum_jobCPU"),
+        _sum("jobTime").alias("sum_jobTime"),
+        _mean("steps_len").alias("#steps"),
+        _mean("nthreads").alias("#nthreads"),
+        _mean("ncores").alias("#ncores"),
     ).toPandas()
     write_htmls(df_details, df_task, start_date, end_date, output_folder)
 
