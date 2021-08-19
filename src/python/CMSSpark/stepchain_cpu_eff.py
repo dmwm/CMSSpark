@@ -112,8 +112,7 @@ def udf_step_extract(row):
             step_res['jobCPU'] = step.performance.cpu.TotalJobCPU
             step_res['jobTime'] = step.performance.cpu.TotalJobTime
             if step_res['jobCPU'] and step_res['nthreads'] and step_res['jobTime']:
-                step_res['cpuEff'] = round(100 * (step_res['jobCPU'] / step_res['nthreads']) / step_res['jobTime'],
-                                           2)
+                step_res['cpuEff'] = round(100 * (step_res['jobCPU'] / step_res['nthreads']) / step_res['jobTime'], 2)
             else:
                 step_res['cpuEff'] = None
             step_res['acquisitionEra'] = set()
@@ -401,7 +400,7 @@ def main(
     df_rdd = df_raw.rdd.flatMap(lambda r: udf_step_extract(r))
     df = spark.createDataFrame(df_rdd, schema=get_schema()).dropDuplicates().where(_col("ncores").isNotNull()).cache()
     df_details = df.groupby(["task", "site", "step_name"]).agg(
-        _mean("cpuEff").alias("mean_cpueff"),
+        (100 * (_sum("jobCPU") / _mean("nthreads")) / _sum("jobTime")).alias("avg_cpueff"),
         _count(lit(1)).alias("#jobs"),
         _mean("steps_len").alias("#steps"),
         _mean("nthreads").alias("#nthreads"),
@@ -409,16 +408,16 @@ def main(
         (_sum("jobCPU") / _count(lit(1))).alias("avg_jobCPU"),
         (_sum("jobTime") / _count(lit(1))).alias("avg_jobTime"),
         _collect_set("acquisitionEra").alias("acquisitionEra"),
-    ).toPandas()
+    ).withColumn("avg_cpueff", _col("avg_cpueff").cast(IntegerType())).toPandas().toPandas()
     df_task = df.groupby(["task"]).agg(
-        _mean("cpuEff").alias("mean_cpueff"),
+        (100 * (_sum("jobCPU") / _mean("nthreads")) / _sum("jobTime")).alias("avg_cpueff"),
         _count(lit(1)).alias("#jobs"),
         _mean("steps_len").alias("#steps"),
         _mean("nthreads").alias("#nthreads"),
         _mean("ncores").alias("#ncores"),
         (_sum("jobCPU") / _count(lit(1))).alias("avg_jobCPU"),
         (_sum("jobTime") / _count(lit(1))).alias("avg_jobTime"),
-    ).toPandas()
+    ).withColumn("avg_cpueff", _col("avg_cpueff").cast(IntegerType())).toPandas()
     write_htmls(df_details, df_task, start_date, end_date, output_folder)
 
 
