@@ -14,6 +14,8 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col as _col,
     collect_set as _collect_set,
+    count as _count,
+    lit,
     mean as _mean,
     sum as _sum,
 )
@@ -226,13 +228,24 @@ def _generate_main_page(selected_pd, task_column, start_date, end_date):
     <h2>Dump of CMSSW StepChain CPU Efficiencies
     from {start_date.strftime("%A %d. %B %Y")} to {end_date.strftime("%A %d. %B %Y")}</h2>
      <ul>
-      <li>"mean_cpueff" is the average of all individual steps(cmsRun1,2,etc.) of a task. </li>
-      <li>In detailed view, "mean_cpueff" is the average cpu eff of a specific step type in a site. </li>
-      <li>Individual step cpu efficiency calculation: <code>cpuEff=(jobCPU / nthreads) / jobTime </code> </li>
       <li>
-        Ref1: <a href="https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/stepchain_cpu_eff.py">
-            Python script
-        </a>
+        In main page, <strong>mean_cpueff</strong> is the average of all individual steps(cmsRun1,2,etc.) of a task.
+      </li>
+      <li>
+        In detailed view, <strong>mean_cpueff</strong> is the average cpu eff of a specific step type in a site.
+      </li>
+      <li>Aggregations:</li>
+        <ul>
+          <li>
+            <strong>Individual step cpu efficiency calculation</strong>: <code>cpuEff=
+            (jobCPU / nthreads) / jobTime </code>
+          </li>
+          <li><strong>avg_jobCPU</strong>: <code>sum(jobCPU) / #jobs </code></li>
+          <li><strong>avg_jobTime</strong>: <code>sum(jobTime) / #jobs </code></li>
+        </ul>
+      <li>Script that produces this table: <a href=
+            "https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/stepchain_cpu_eff.py"
+          >stepchain_cpu_eff.py</a>
       </li>
     </ul>
     """
@@ -389,24 +402,22 @@ def main(
     df = spark.createDataFrame(df_rdd, schema=get_schema()).dropDuplicates().where(_col("ncores").isNotNull()).cache()
     df_details = df.groupby(["task", "site", "step_name"]).agg(
         _mean("cpuEff").alias("mean_cpueff"),
-        _sum("ncores").alias("sum_ncores"),
-        _sum("nthreads").alias("sum_nthreads"),
-        _sum("jobCPU").alias("sum_jobCPU"),
-        _sum("jobTime").alias("sum_jobTime"),
+        _count(lit(1)).alias("#jobs"),
         _mean("steps_len").alias("#steps"),
         _mean("nthreads").alias("#nthreads"),
         _mean("ncores").alias("#ncores"),
+        (_sum("jobCPU") / _count(lit(1))).alias("avg_jobCPU"),
+        (_sum("jobTime") / _count(lit(1))).alias("avg_jobTime"),
         _collect_set("acquisitionEra").alias("acquisitionEra"),
     ).toPandas()
     df_task = df.groupby(["task"]).agg(
         _mean("cpuEff").alias("mean_cpueff"),
-        _sum("ncores").alias("sum_ncores"),
-        _sum("nthreads").alias("sum_nthreads"),
-        _sum("jobCPU").alias("sum_jobCPU"),
-        _sum("jobTime").alias("sum_jobTime"),
+        _count(lit(1)).alias("#jobs"),
         _mean("steps_len").alias("#steps"),
         _mean("nthreads").alias("#nthreads"),
         _mean("ncores").alias("#ncores"),
+        (_sum("jobCPU") / _count(lit(1))).alias("avg_jobCPU"),
+        (_sum("jobTime") / _count(lit(1))).alias("avg_jobTime"),
     ).toPandas()
     write_htmls(df_details, df_task, start_date, end_date, output_folder)
 
