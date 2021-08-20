@@ -45,7 +45,7 @@ def get_spark_session(yarn=True, verbose=False):
 
 
 def get_candidate_files(
-        start_date, end_date, spark, base=_DEFAULT_HDFS_FOLDER,
+    start_date, end_date, spark, base=_DEFAULT_HDFS_FOLDER,
 ):
     """
     Returns a list of hdfs folders that can contain data for the given dates.
@@ -112,8 +112,7 @@ def udf_step_extract(row):
             step_res['jobCPU'] = step.performance.cpu.TotalJobCPU
             step_res['jobTime'] = step.performance.cpu.TotalJobTime
             if step_res['jobCPU'] and step_res['nthreads'] and step_res['jobTime']:
-                step_res['cpuEff'] = round(100 * (step_res['jobCPU'] / step_res['nthreads']) / step_res['jobTime'],
-                                           2)
+                step_res['cpuEff'] = round(100 * (step_res['jobCPU'] / step_res['nthreads']) / step_res['jobTime'], 2)
             else:
                 step_res['cpuEff'] = None
             step_res['acquisitionEra'] = set()
@@ -137,12 +136,12 @@ def get_kibana_links():
 
     String formatting is not possible since they are used in pandas column/index aggregations"""
     kibana_link_0 = (
-            '''<a target="_blank" title="First click can be SSO redirection. ''' +
-            '''If so, please click 2nd time" href="''' +
-            '''https://monit-kibana.cern.ch/kibana/app/kibana#/discover?_g=(filters:!(),refreshInterval:''' +
-            '''(pause:!t,value:0),time:(from:'{START_DAY}',to:'{END_DAY}'))''' +
-            '''&_a=(columns:!(_source),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,index''' +
-            ''':'60770470-8326-11ea-88fc-cfaa9841e350',key:data.steps.site,negate:!f,params:(query:'''
+        '''<a target="_blank" title="First click can be SSO redirection. ''' +
+        '''If so, please click 2nd time" href="''' +
+        '''https://monit-kibana.cern.ch/kibana/app/kibana#/discover?_g=(filters:!(),refreshInterval:''' +
+        '''(pause:!t,value:0),time:(from:'{START_DAY}',to:'{END_DAY}'))''' +
+        '''&_a=(columns:!(_source),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,index''' +
+        ''':'60770470-8326-11ea-88fc-cfaa9841e350',key:data.steps.site,negate:!f,params:(query:'''
     )
     # + SITE_NAME
     kibana_link_1 = '''),type:phrase,value:'''
@@ -150,9 +149,9 @@ def get_kibana_links():
     kibana_link_2 = '''),query:(match:(data.steps.site:(query:'''
     # + SITE_NAME
     kibana_link_3 = (
-            ''',type:phrase))))),index:'60770470-8326-11ea-88fc-cfaa9841e350',interval:auto,query:''' +
-            '''(language:lucene,query:'data.meta_data.jobstate:success%20AND%20data.meta_data.jobtype:''' +
-            '''Production%20AND%20data.task:%22'''
+        ''',type:phrase))))),index:'60770470-8326-11ea-88fc-cfaa9841e350',interval:auto,query:''' +
+        '''(language:lucene,query:'data.meta_data.jobstate:success%20AND%20data.meta_data.jobtype:''' +
+        '''Production%20AND%20data.task:%22'''
     )
     # + TASK_NAME
     kibana_link_4 = '''%22'),sort:!(metadata.timestamp,desc))">@Kibana</a>'''
@@ -175,9 +174,9 @@ def _generate_main_page(selected_pd, task_column, start_date, end_date):
     """
 
     selected_pd["task"] = (
-            f'<a class="taskname">'
-            + task_column
-            + '</a><br>'
+        f'<a class="taskname">'
+        + task_column
+        + '</a><br>'
     )
     _fc = '<a class="selname">' + task_column + "</a>"
 
@@ -320,18 +319,18 @@ def write_htmls(grouped_details, grouped_task, start_date, end_date, output_fold
     k_links = get_kibana_links()
     grouped_details = grouped_details.set_index(["task", "site", "step_name"]).sort_index()
     grouped_details["@Kibana"] = (
-            k_links[0].format(
-                START_DAY=(start_date + timedelta(seconds=time.altzone)).strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                END_DAY=(end_date + timedelta(seconds=time.altzone)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
-            ) +
-            grouped_details.index.get_level_values('site') +
-            k_links[1] +
-            grouped_details.index.get_level_values('site') +
-            k_links[2] +
-            grouped_details.index.get_level_values('site') +
-            k_links[3] +
-            grouped_details.index.get_level_values('task') +
-            k_links[4]
+        k_links[0].format(
+            START_DAY=(start_date + timedelta(seconds=time.altzone)).strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+            END_DAY=(end_date + timedelta(seconds=time.altzone)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        ) +
+        grouped_details.index.get_level_values('site') +
+        k_links[1] +
+        grouped_details.index.get_level_values('site') +
+        k_links[2] +
+        grouped_details.index.get_level_values('site') +
+        k_links[3] +
+        grouped_details.index.get_level_values('task') +
+        k_links[4]
     )
     # Create one file per worflow, so we don't have a big file collapsing the browser.
     _folder = f"{output_folder}/wfbytask"
@@ -344,10 +343,10 @@ def write_htmls(grouped_details, grouped_task, start_date, end_date, output_fold
     req_mgr_links = get_req_mgr_links()
     # ReqMgr website link
     grouped_task["@ReqMgr"] = (
-            req_mgr_links[0] +
-            # extract task_name from "/task_name/name_of_1st_step"
-            grouped_task['task'].str.split("/").str[1] +
-            req_mgr_links[1]
+        req_mgr_links[0] +
+        # extract task_name from "/task_name/name_of_1st_step"
+        grouped_task['task'].str.split("/").str[1] +
+        req_mgr_links[1]
     )
     task_column = grouped_task["task"].copy()
     main_page = _generate_main_page(grouped_task, task_column, start_date, end_date)
@@ -362,10 +361,10 @@ def write_htmls(grouped_details, grouped_task, start_date, end_date, output_fold
 @click.option("--end_date", type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option("--last_n_days", type=int, default=15, help="Last n days data will be used")
 def main(
-        output_folder="./www/stepchain",
-        start_date=None,
-        end_date=None,
-        last_n_days=15,
+    output_folder="./www/stepchain",
+    start_date=None,
+    end_date=None,
+    last_n_days=15,
 ):
     """Get step data in wmarchive.
 
@@ -401,7 +400,7 @@ def main(
     df_rdd = df_raw.rdd.flatMap(lambda r: udf_step_extract(r))
     df = spark.createDataFrame(df_rdd, schema=get_schema()).dropDuplicates().where(_col("ncores").isNotNull()).cache()
     df_details = df.groupby(["task", "site", "step_name"]).agg(
-        _mean("cpuEff").alias("mean_cpueff"),
+        (100 * (_sum("jobCPU") / _mean("nthreads")) / _sum("jobTime")).alias("avg_cpueff"),
         _count(lit(1)).alias("#jobs"),
         _mean("steps_len").alias("#steps"),
         _mean("nthreads").alias("#nthreads"),
@@ -409,16 +408,16 @@ def main(
         (_sum("jobCPU") / _count(lit(1))).alias("avg_jobCPU"),
         (_sum("jobTime") / _count(lit(1))).alias("avg_jobTime"),
         _collect_set("acquisitionEra").alias("acquisitionEra"),
-    ).toPandas()
+    ).withColumn("avg_cpueff", _col("avg_cpueff").cast(IntegerType())).toPandas()
     df_task = df.groupby(["task"]).agg(
-        _mean("cpuEff").alias("mean_cpueff"),
+        (100 * (_sum("jobCPU") / _mean("nthreads")) / _sum("jobTime")).alias("avg_cpueff"),
         _count(lit(1)).alias("#jobs"),
         _mean("steps_len").alias("#steps"),
         _mean("nthreads").alias("#nthreads"),
         _mean("ncores").alias("#ncores"),
         (_sum("jobCPU") / _count(lit(1))).alias("avg_jobCPU"),
         (_sum("jobTime") / _count(lit(1))).alias("avg_jobTime"),
-    ).toPandas()
+    ).withColumn("avg_cpueff", _col("avg_cpueff").cast(IntegerType())).toPandas()
     write_htmls(df_details, df_task, start_date, end_date, output_folder)
 
 
