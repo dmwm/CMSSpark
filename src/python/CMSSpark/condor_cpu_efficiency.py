@@ -97,9 +97,11 @@ def format_df(df):
             "wf_cpus": "CPUs",
             "wf_cputimehr": "CPU_time_hr",
             "wf_wallclockhr": "Wall_time_hr",
+            "wf_wasted_cputimehr": "Wasted_CpuTimeHr",
             "wf_cpueff_t1_t2": "CPU_eff_T1T2",
             "wf_cputimehr_t1_t2": "CPU_time_hr_T1T2",
-            "wf_wallclockhr_t1_t2": "Wall_time_hr_T1T2"
+            "wf_wallclockhr_t1_t2": "Wall_time_hr_T1T2",
+            "wf_wasted_cputimehr_t1_t2": "Wasted_CpuTimeHr_T1T2"
         }
     )
 
@@ -107,9 +109,11 @@ def format_df(df):
     df["CPUs"] = df["CPUs"].map(int)
     df["CPU_time_hr"] = df["CPU_time_hr"].map(int)
     df["Wall_time_hr"] = df["Wall_time_hr"].map(int)
+    df["Wasted_CpuTimeHr"] = df["Wasted_CpuTimeHr"].map(int)
     df["CPU_eff_T1T2"] = df["CPU_eff_T1T2"].apply(lambda x: "-" if np.isnan(x) else "{:,.1f}%".format(x))
     df["CPU_time_hr_T1T2"] = df["CPU_time_hr_T1T2"].apply(lambda x: "-" if np.isnan(x) else int(x))
     df["Wall_time_hr_T1T2"] = df["Wall_time_hr_T1T2"].apply(lambda x: "-" if np.isnan(x) else int(x))
+    df["Wasted_CpuTimeHr_T1T2"] = df["Wasted_CpuTimeHr_T1T2"].apply(lambda x: "-" if np.isnan(x) else int(x))
     return df
 
 
@@ -437,7 +441,13 @@ def generate_cpu_eff_site(
         raw_df.withColumn(
             "RequestCpus",
             when(col("RequestCpus").isNotNull(), col("RequestCpus")).otherwise(lit(1)),
-        ).withColumn("CoreTime", col("WallClockHr") * col("RequestCpus"))
+        ).withColumn(
+            "CoreTime",
+            col("WallClockHr") * col("RequestCpus")
+        ).withColumn(
+            "Wasted_cputimehr",
+            ((col("RequestCpus") * col("WallClockHr")) - col("CpuTimeHr"))
+        )
     ).cache()
 
     grouped_tiers = raw_df.groupby("Tier", "Type", "CpuEffOutlier").agg(
@@ -451,17 +461,20 @@ def generate_cpu_eff_site(
         _sum("RequestCpus").alias("wf_cpus"),
         _sum("CpuTimeHr").alias("wf_cputimehr"),
         _sum("WallClockHr").alias("wf_wallclockhr"),
+        _sum("Wasted_cputimehr").alias("wf_wasted_cputimehr"),
     )
     grouped_wf_t1_t2 = raw_df.filter("""Tier='T1' OR Tier='T2'""").groupby(*group_by_col, "Type").agg(
         (100 * _sum("CpuTimeHr") / _sum("CoreTime")).alias("wf_cpueff_t1_t2"),
         _sum("CpuTimeHr").alias("wf_cputimehr_t1_t2"),
         _sum("WallClockHr").alias("wf_wallclockhr_t1_t2"),
+        _sum("Wasted_cputimehr").alias("wf_wasted_cputimehr_t1_t2"),
     )
     grouped_site_wf = raw_df.groupby(*group_by_col, "Site").agg(
         (100 * _sum("CpuTimeHr") / _sum("CoreTime")).alias("wf_site_cpueff"),
         _sum("RequestCpus").alias("wf_cpus"),
         _sum("CpuTimeHr").alias("wf_site_cputimehr"),
         _sum("WallClockHr").alias("wf_site_wallclockhr"),
+        _sum("Wasted_cputimehr").alias("wf_site_wasted_cputimehr"),
         first("ScheddName").alias("schedd"),
         first("WMAgent_JobID").alias("wmagent_jobid"),
     )
