@@ -11,6 +11,7 @@ from dateutil.relativedelta import relativedelta
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
+    avg as _avg,
     col,
     count as _count,
     countDistinct,
@@ -18,6 +19,7 @@ from pyspark.sql.functions import (
     lit,
     lower,
     max as _max,
+    min as _min,
     round as _round,
     sum as _sum,
     when,
@@ -31,8 +33,7 @@ pd.set_option("display.max_colwidth", None)
 
 HDFS_RUCIO_CONTENTS = "/project/awg/cms/rucio_contents/*/part*.avro"
 HDFS_RUCIO_DIDS = "/project/awg/cms/rucio_dids/*/part*.avro"
-# HDFS_RUCIO_REPLICAS = f"/project/awg/cms/rucio/{datetime.today().strftime('%Y-%m-%d')}/replicas/part*.avro"
-HDFS_RUCIO_REPLICAS = f"/project/awg/cms/rucio/2021-08-26/replicas/part*.avro"
+HDFS_RUCIO_REPLICAS = f"/project/awg/cms/rucio/{datetime.today().strftime('%Y-%m-%d')}/replicas/part*.avro"
 
 
 def get_ts_thresholds():
@@ -98,52 +99,35 @@ def get_spark_session(yarn=True, verbose=False):
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
-def main():
+def prepare_spark_dataframes(spark):
     """
-    TODO: Send resulting datasets in threshold groups with their sizes to ElasticSearch or Prometheus ..
-    TODO: .. because resulting number of datasets are ~700K. It cannot be served in html table.
+        Prepare Spark dataframes using DIDS, REPLICAS AND CONTENTS Rucio tables in HDFS
 
-    Logic:
-        - Get all files on disk by joining "replicas" and "dids" table.
-        - "dids" table contains all files, but "replicas" table contains only files on disk.
-        - After finding files on disk, get the parent datasets of those files by joining "contents" table.
-        - "contents" table provides parent dataset of a file.
-        - Dumped "contents" table in HDFS includes only `did_type='D' AND child_type='F'`
-        - Then group-by by "dataset" and calculate last accessed_at of dataset by getting "max" accessed_at of files
-        which belongs to same dataset.
-        - Now we have last access time of dataset which is extracted from its files.
-        - Finally, join the result with df_dids_datasets to get size of each dataset from "dids" table.
-
-    Access time filter logic:
-        - If "last_access_ts" is less than 3 months ago, then set "months_old" as 3,
-        - If "last_access_ts" is less than 3 monthsa ago, then set "months_old" as 6,
-        - If "last_access_ts" is less than 3 months ago, then set "months_old" as 12
-
-    The result includes only the datasets whose last access time is 3 months ago.
-    And the dataset whose last access time is less than 12 months or 6 months is NOT included in 3 months flag
-    which means a dataset can only 1 flag(3, 6 or 12).
-
+        --- DBS terminology is used ---
+        - file:    file in Rucio
+        - block:   dataset in Rucio
+        - dataset: container in Rucio
     """
-
-    spark = get_spark_session()
-    # - DBS terminology is used -
-    # DBS:file, Rucio:file
-    # DBS:block, Rucio:dataset
-    # DBS:dataset, Rucio:container
+    # STEP-1: Get file to block mappings from CONTENTS table as spark df
     df_contents_f_to_b = spark.read.format("com.databricks.spark.avro").load(HDFS_RUCIO_CONTENTS) \
         .withColumnRenamed("NAME", "block") \
         .withColumnRenamed("CHILD_NAME", "file") \
         .select(["block", "file"]) \
         .cache()
 
+    # STEP-2: Get block to dataset mappings from CONTENTS table as spark df
     df_contents_b_to_d = spark.read.format("com.databricks.spark.avro").load(HDFS_RUCIO_CONTENTS) \
         .withColumnRenamed("NAME", "dataset") \
         .withColumnRenamed("CHILD_NAME", "block") \
         .select(["dataset", "block"]) \
         .cache()
 
-    ###############
+    # STEP-3: Get ids of only Disk RSEs
     disk_rse_ids = get_disk_rse_ids()
+
+    # STEP-4: Create spark dataframe for REPLICAS table by filtering only Disk RSEs of CMS. Importance:
+    #           - provides files in Disk RSEs
+    #           - provides file size in RSEs (not all of them, see Step-6)
     df_replicas = spark.read.format("avro") \
         .load(HDFS_RUCIO_REPLICAS) \
         .withColumn("rse_id", lower(_hex(col("RSE_ID")))) \
@@ -154,7 +138,10 @@ def main():
         .select(["file", "rse_id", "fsize_replicas"]) \
         .cache()
 
-    #####
+    # STEP-5: Create spark dataframe for DIDS table by selecting only Files. Importance:
+    #           - provides whole files in CMS
+    #           - provides file access times!
+    #           - provides file size (compatible with replicas, tested), (not all of them, see step-6)
     df_dids_files = spark.read.format("avro") \
         .load(HDFS_RUCIO_DIDS) \
         .filter(col("SCOPE") == "cms") \
@@ -165,69 +152,139 @@ def main():
         .select(["file", "fsize_dids", "accessed_at"]) \
         .cache()
 
-    #######
+    # STEP-6: Left join df_replicas and df_dids_files to fill the fsize for all files. Importance:
+    #           - fills fsize for all files by combining both REPLICAS values and DIDS values
     df_replicas_j_dids = df_replicas.join(df_dids_files, ["file"], how="left").cache()
+
+    # STEP-7: Check that REPLICAS and DIDS Files join filled the file size values of all files. Yes!
     if df_replicas_j_dids.filter(col("fsize_dids").isNull() & col("fsize_replicas").isNull()).head():
         print("We have a problem! At least one of them should not be null !")
         sys.exit(1)
-
-    ##############
-    if df_replicas_j_dids.withColumn("bytes_ratio",
-                                     when(
-                                         col("fsize_dids").isNotNull() & col("fsize_replicas").isNotNull(),
-                                         col("fsize_dids") / col("fsize_replicas")
-                                     ).otherwise("0")
-                                     ).filter((col("bytes_ratio") != 1.0) & (col("bytes_ratio") != 0)).head():
+    # STEP-8: Check that REPLICAS and DIDS Files size values are compatible. Yes!
+    elif df_replicas_j_dids.withColumn("bytes_ratio",
+                                       when(
+                                           col("fsize_dids").isNotNull() & col("fsize_replicas").isNotNull(),
+                                           col("fsize_dids") / col("fsize_replicas")
+                                       ).otherwise("0")
+                                       ).filter((col("bytes_ratio") != 1.0) & (col("bytes_ratio") != 0)).head():
         print("We have a problem, bytes are not equal in DIDS and REPLICAS!")
         sys.exit(1)
 
-    ########
-    # BYTES_DID or BYTES_REP should not be null. Just combine them to get BYTES
-    df_fsize_filled = df_replicas_j_dids.withColumn("fsize",
-                                                    when(col("fsize_dids").isNotNull(), col("fsize_dids"))
-                                                    .when(col("fsize_replicas").isNotNull(), col("fsize_replicas"))
-                                                    ) \
+    # STEP-9: fsize_dids or fsize_replicas should not be null. Just combine them to fill file sizes.
+    #   - Because size of files are filled, I called "complete"
+    df_files_complete = df_replicas_j_dids \
+        .withColumn("fsize",
+                    when(col("fsize_dids").isNotNull(), col("fsize_dids"))
+                    .when(col("fsize_replicas").isNotNull(), col("fsize_replicas"))
+                    ) \
         .select(['file', 'rse_id', 'accessed_at', 'fsize']) \
         .cache()
 
-    #######
-    # Change order of columns by select
-    df1 = df_fsize_filled.join(df_contents_f_to_b, ["file"], how="left")
-    df1 = df1.filter(col("block").isNotNull()) \
-        .select(['file', 'block', 'rse_id', 'accessed_at', 'fsize']) \
+    return (df_contents_f_to_b,
+            df_contents_b_to_d,
+            df_replicas,
+            df_dids_files,
+            df_replicas_j_dids,
+            df_files_complete
+            )
+
+
+def main():
+    """
+    TODO: Create html page
+
+    Access time filter logic:
+        - If "last_access_ts" is less than 3 months ago, then set "months_old" as 3,
+        - If "last_access_ts" is less than 6 monthsa ago, then set "months_old" as 6,
+        - If "last_access_ts" is less than 12 months ago, then set "months_old" as 12
+
+    The result includes only the datasets whose last access time are 12, 6 or 3 months ago.
+    """
+    spark = get_spark_session()
+    (df_contents_f_to_b,
+     df_contents_b_to_d,
+     df_replicas,
+     df_dids_files,
+     df_replicas_j_dids,
+     df_files_complete) = prepare_spark_dataframes(spark)
+
+    # ===============================================================================
+    # Continue with joins
+    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    # -------------------------------------------------------------------------------
+
+    # --- STEP-10 / Tests to check dataframes are okay ---:
+    #         df_block_file_rse.select("file").distinct().count() =  is 29921156
+    #         df_block_file_rse.filter(col("file").isNull()).count() = 0
+    #         df_block_file_rse.filter(col("block").isNull()).count() = 57892
+    #         Above line means, we cannot extract block names of 57892 file from CONTENTS table ..
+    #         .. which provides F:D and D:C mapping (file, dataset, container in Rucio terms)
+    #         df_block_file_rse.filter(col("rse_id").isNull()).count() = 0
+    #         df_block_file_rse.filter(col("fsize").isNull()).count() = 0
+    #         We are all good, just drop null block names.
+
+    # STEP-10: Left join df_files_complete and df_contents_f_to_b to get block names of files.
+    #   - There are some files that we cannot extract their block names from CONTENTS table
+    #   - So filter out them.
+    df_block_file_rse = df_files_complete \
+        .join(df_contents_f_to_b, ["file"], how="left") \
+        .select(['block', 'file', 'rse_id', 'accessed_at', 'fsize', ]) \
+        .filter(col("block").isNotNull()) \
         .cache()
-    # df1.filter(col("bname").isNull()).count() # 57892 file do not have block name
-    # print("We have a problem, a file's block is not known")
-    # Total 33TB
 
-    ##################
-    df_approximate_dataset_size = df1 \
-        .groupby(["block", "rse_id"]).agg(_sum(col("fsize")).alias("block_size_per_rse")) \
-        .groupby(["block"]).agg(_max(col("block_size_per_rse")).alias("max_block_size_in_rse")) \
-        .join(df_contents_b_to_d, ["block"], how='left') \
-        .groupby(["dataset"]) \
-        .agg(_round(_sum(col("max_block_size_in_rse")) / 2 ** 40, 10).alias("max_dataset_size(TB)")) \
+    # --- STEP-11 / Tests to check dataframes are okay ---:
+    #         df_all.filter(col("dataset").isNull()).count() = 280821
+
+    # STEP-11: Left join df_block_file_rse and df_contents_b_to_d to get dataset names of blocks&files.
+    #   - There are some blocks that we cannot extract their dataset names from CONTENTS table.
+    #   - So filter out them.
+    df_all = df_block_file_rse \
+        .join(df_contents_b_to_d, ["block"], how="left") \
+        .select(['dataset', 'block', 'file', 'rse_id', 'accessed_at', 'fsize']) \
+        .filter(col("dataset").isNotNull()) \
         .cache()
 
-    ##################
-    ts_thresholds = get_ts_thresholds()
-
-    df_block_results = df1.groupby(["block"]) \
-        .agg(_max(col("accessed_at")).alias("last_access_time_of_block"),
-             _sum(when(col("accessed_at").isNull(), 1).otherwise(0)).alias("#files_null_access_time"),
-             _count(lit(1)).alias("#files"),
-             countDistinct(col("file")).alias("#files_unique_in_block")
+    # STEP-12: Group by "dataset" and "rses" to calculate:
+    #       - dataset_size_in_rse: total size of dataset in a RSE by summing up dataset's all files in that RSE.
+    #       - last_access_time_of_dataset_per_rse: last access time of dataset in a RSE ...
+    #           ... by getting max of file "accessed_at" field of dataset's all files in that RSE.
+    #       - #files_null_access_time_per_rse: number of files which has NULL "access_at" field ...
+    #           ... in each dataset in a RSE. ...
+    #           ... This important to know to filter out if there is any NULL access_at file in calculation.
+    #       - #files_per_rse: number of files od the dataset in that RSE
+    #       - #files_unique_per_rse: unique count of dataset files in that RSE
+    #       Final result will be like: one dataset can be in multiple RSEs and presumably ...
+    #           ... it may have different sizes since a dataset may lost one of its block or file in a RSE?
+    df_final_dataset_rse = df_all \
+        .groupby(["dataset", "rse_id"]) \
+        .agg(_sum(col("fsize")).alias("dataset_size_in_rse"),
+             _max(col("accessed_at")).alias("last_access_time_of_dataset_per_rse"),
+             _sum(when(col("accessed_at").isNull(), 1).otherwise(0)).alias("#files_null_access_time_per_rse"),
+             _count(lit(1)).alias("#files_per_rse"),
+             countDistinct(col("file")).alias("#files_unique_per_rse"),
              ) \
         .cache()
 
-    #####################
-    df_dataset_results = df_block_results. \
-        join(df_contents_b_to_d, ["block"], how='left') \
+    # STEP-13: Filter "last_access_time_of_dataset_per_rse" should not be null, should be one of 3, 6 or 12 ...
+    #            ... and "#files_null_access_time_per_rse"==0 means that there should not be any file ...
+    #            ... with NULL "access_at" field to be correct as much as possible.
+    df_final_dataset_rse = df_final_dataset_rse.filter(col("last_access_time_of_dataset_per_rse").isNotNull() &
+                                                       (col("#files_null_access_time_per_rse") == 0)).cache()
+
+    # STEP-14: Get thresholds. They are unix timestamps which are 3, 6 and 12 months ago from today.
+    ts_thresholds = get_ts_thresholds()
+
+    # STEP-15: Group by dataset to get final result from all RSEs' datasets.
+    #            - max_dataset_size(TB): max size of dataset in all RSEs that contain this dataset
+    #            - max_dataset_size(TB): min size of dataset in all RSEs that contain this dataset
+    #            - max_dataset_size(TB): avg size of dataset in all RSEs that contain this dataset
+    #            - last_access_time_of_dataset: last access time of dataset in all RSEs
+    df = df_final_dataset_rse \
         .groupby(["dataset"]) \
-        .agg(_max(col("last_access_time_of_block")).alias("last_access_time_of_dataset"),
-             _sum(col("#files_null_access_time")).alias("#files_null_access_time"),
-             _sum(col("#files")).alias("#files"),
-             _sum(col("#files_unique")).alias("#files_unique_in_block"),
+        .agg(_round(_max(col("dataset_size_in_rse")) / (10 ** 12), 5).alias("max_dataset_size(TB)"),
+             _round(_min(col("dataset_size_in_rse")) / (10 ** 12), 5).alias("min_dataset_size(TB)"),
+             _round(_avg(col("dataset_size_in_rse")) / (10 ** 12), 5).alias("avg_dataset_size(TB)"),
+             _max(col("last_access_time_of_dataset_per_rse")).alias("last_access_time_of_dataset"),
              ) \
         .withColumn('last_access_at_least_n_months_ago',
                     when(col('last_access_time_of_dataset') < ts_thresholds[12], 12)
@@ -235,12 +292,8 @@ def main():
                     .when(col('last_access_time_of_dataset') < ts_thresholds[3], 3)
                     .otherwise(None)
                     ) \
+        .filter(col('last_access_at_least_n_months_ago').isNotNull()) \
         .cache()
+    # df.select(["max_dataset_size(TB)", "min_dataset_size(TB)", "avg_dataset_size(TB)"]).groupBy().sum().show()
 
-    ###################
-    df_dataset_results = df_dataset_results \
-        .filter(col("last_access_at_least_n_months_ago").isNotNull() & (col("#files_null_access_time") == 0))
-    df = df_dataset_results.join(df_approximate_dataset_size, ["dataset"], how='left')
-    # total_size_tb = df.select(["max_dataset_size(TB)"]).groupBy().sum().collect()[0][0]
-    df.select(["max_dataset_size(TB)"]).groupBy().sum().collect()
     return df
