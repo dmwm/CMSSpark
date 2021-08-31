@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-"""Get last access timeS of datasets by joining Rucio's REPLICAS, DIDS and CONTENTS tables"""
+"""Get last access times of datasets by joining Rucio's REPLICAS, DIDS and CONTENTS tables"""
 import pickle
 import sys
-from datetime import datetime
-
+from datetime import datetime, timedelta
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 from pyspark import SparkContext
@@ -28,12 +27,33 @@ from pyspark.sql.types import (
     LongType,
 )
 
-pd.options.display.float_format = "{:,.8f}".format
+pd.options.display.float_format = "{:,.2f}".format
 pd.set_option("display.max_colwidth", None)
 
 HDFS_RUCIO_CONTENTS = "/project/awg/cms/rucio_contents/*/part*.avro"
 HDFS_RUCIO_DIDS = "/project/awg/cms/rucio_dids/*/part*.avro"
-HDFS_RUCIO_REPLICAS = f"/project/awg/cms/rucio/{datetime.today().strftime('%Y-%m-%d')}/replicas/part*.avro"
+
+
+# HDFS_RUCIO_REPLICAS, see below function
+
+
+def get_hdfs_rucio_replicas_path(spark):
+    """Get replicas hdfs folder of today or yesterday"""
+    today = f"/project/awg/cms/rucio/{datetime.today().strftime('%Y-%m-%d')}/replicas/"
+    yesterday = f"/project/awg/cms/rucio/{(datetime.today() - timedelta(days=1)).strftime('%Y-%m-%d')}/replicas/"
+    HDFS_RUCIO_REPLICAS_EXT = "part*.avro"
+    jvm = spark._jvm
+    jsc = spark._jsc
+    fs = jvm.org.apache.hadoop.fs.FileSystem.get(jsc.hadoopConfiguration())
+    if fs.exists(jvm.org.apache.hadoop.fs.Path(today)):
+        print(today + " exists")
+        return today + HDFS_RUCIO_REPLICAS_EXT
+    elif fs.exists(jvm.org.apache.hadoop.fs.Path(yesterday)):
+        print(yesterday + " exists")
+        return yesterday + HDFS_RUCIO_REPLICAS_EXT
+    else:
+        print(yesterday + " NOT exists")
+        sys.exit(1)
 
 
 def get_ts_thresholds():
@@ -108,6 +128,7 @@ def prepare_spark_dataframes(spark):
         - block:   dataset in Rucio
         - dataset: container in Rucio
     """
+    HDFS_RUCIO_REPLICAS = get_hdfs_rucio_replicas_path(spark)
     # STEP-1: Get file to block mappings from CONTENTS table as spark df
     df_contents_f_to_b = spark.read.format("com.databricks.spark.avro").load(HDFS_RUCIO_CONTENTS) \
         .withColumnRenamed("NAME", "block") \
@@ -246,13 +267,13 @@ def main():
 
     # STEP-12: Group by "dataset" and "rses" to calculate:
     #       - dataset_size_in_rse: total size of dataset in a RSE by summing up dataset's all files in that RSE.
-    #       - last_access_time_of_dataset_per_rse: last access time of dataset in a RSE ...
-    #           ... by getting max of file "accessed_at" field of dataset's all files in that RSE.
-    #       - #files_null_access_time_per_rse: number of files which has NULL "access_at" field ...
+    #       - `last_access_time_of_dataset_per_rse`: last access time of dataset in a RSE ...
+    #           ... by getting max of file `accessed_at` field of dataset's all files in that RSE.
+    #       - `#files_null_access_time_per_rse`: number of files which has NULL `accessed_at` field ...
     #           ... in each dataset in a RSE. ...
-    #           ... This important to know to filter out if there is any NULL access_at file in calculation.
-    #       - #files_per_rse: number of files od the dataset in that RSE
-    #       - #files_unique_per_rse: unique count of dataset files in that RSE
+    #           ... This important to know to filter out if there is any NULL accessed_at file in calculation.
+    #       - `#files_per_rse`: number of files od the dataset in that RSE
+    #       - `#files_unique_per_rse`: unique count of dataset files in that RSE
     #       Final result will be like: one dataset can be in multiple RSEs and presumably ...
     #           ... it may have different sizes since a dataset may lost one of its block or file in a RSE?
     df_final_dataset_rse = df_all \
@@ -265,35 +286,79 @@ def main():
              ) \
         .cache()
 
-    # STEP-13: Filter "last_access_time_of_dataset_per_rse" should not be null, should be one of 3, 6 or 12 ...
-    #            ... and "#files_null_access_time_per_rse"==0 means that there should not be any file ...
-    #            ... with NULL "access_at" field to be correct as much as possible.
-    df_final_dataset_rse = df_final_dataset_rse.filter(col("last_access_time_of_dataset_per_rse").isNotNull() &
-                                                       (col("#files_null_access_time_per_rse") == 0)).cache()
-
-    # STEP-14: Get thresholds. They are unix timestamps which are 3, 6 and 12 months ago from today.
+    # STEP-13: Get thresholds. They are unix timestamps which are 3, 6 and 12 months ago from today.
     ts_thresholds = get_ts_thresholds()
 
-    # STEP-15: Group by dataset to get final result from all RSEs' datasets.
-    #            - max_dataset_size(TB): max size of dataset in all RSEs that contain this dataset
-    #            - max_dataset_size(TB): min size of dataset in all RSEs that contain this dataset
-    #            - max_dataset_size(TB): avg size of dataset in all RSEs that contain this dataset
-    #            - last_access_time_of_dataset: last access time of dataset in all RSEs
+    # STEP-14:
+    #   Filter for calculating last_accessed_at_least_{12|6|3}_months_ago columns.
+    #       - To produce correct results, "last_access_time_of_dataset_per_rse" field should not be null
+    #           which means a dataset's all files' accessed_at fields are filled.
+    #       - And "#files_null_access_time_per_rse"==0 means that there should not be ...
+    #           any file with NULL "accessed_at" field.
+    # Group by dataset to get final result from all RSEs' datasets.
+    #   - max_dataset_size(TB): max size of dataset in all RSEs that contain this dataset
+    #   - max_dataset_size(TB): min size of dataset in all RSEs that contain this dataset
+    #   - max_dataset_size(TB): avg size of dataset in all RSEs that contain this dataset
+    #   - last_access_time_of_dataset: last access time of dataset in all RSEs
     df = df_final_dataset_rse \
+        .filter(col("last_access_time_of_dataset_per_rse").isNotNull() &
+                (col("#files_null_access_time_per_rse") == 0)
+                ) \
         .groupby(["dataset"]) \
-        .agg(_round(_max(col("dataset_size_in_rse")) / (10 ** 12), 5).alias("max_dataset_size(TB)"),
-             _round(_min(col("dataset_size_in_rse")) / (10 ** 12), 5).alias("min_dataset_size(TB)"),
-             _round(_avg(col("dataset_size_in_rse")) / (10 ** 12), 5).alias("avg_dataset_size(TB)"),
+        .agg(_round(_max(col("dataset_size_in_rse")) / (10 ** 12), 2).alias("max_dataset_size(TB)"),
+             _round(_min(col("dataset_size_in_rse")) / (10 ** 12), 2).alias("min_dataset_size(TB)"),
+             _round(_avg(col("dataset_size_in_rse")) / (10 ** 12), 2).alias("avg_dataset_size(TB)"),
+             _sum(col("#files_null_access_time_per_rse")).alias("#files_null_access_time_per_dataset"),
              _max(col("last_access_time_of_dataset_per_rse")).alias("last_access_time_of_dataset"),
              ) \
-        .withColumn('last_access_at_least_n_months_ago',
-                    when(col('last_access_time_of_dataset') < ts_thresholds[12], 12)
-                    .when(col('last_access_time_of_dataset') < ts_thresholds[6], 6)
-                    .when(col('last_access_time_of_dataset') < ts_thresholds[3], 3)
-                    .otherwise(None)
+        .withColumn('last_access_more_than_12_months_ago',
+                    when(col('last_access_time_of_dataset') < ts_thresholds[12], 1).otherwise(0)
                     ) \
-        .filter(col('last_access_at_least_n_months_ago').isNotNull()) \
+        .withColumn('last_access_more_than_6_months_ago',
+                    when(col('last_access_time_of_dataset') < ts_thresholds[6], 1).otherwise(0)
+                    ) \
+        .withColumn('last_access_more_than_3_months_ago',
+                    when(col('last_access_time_of_dataset') < ts_thresholds[3], 1).otherwise(0)
+                    ) \
+        .filter((col('last_access_more_than_12_months_ago') == 1) |
+                (col('last_access_more_than_6_months_ago') == 1) |
+                (col('last_access_more_than_3_months_ago') == 1)
+                ) \
         .cache()
-    # df.select(["max_dataset_size(TB)", "min_dataset_size(TB)", "avg_dataset_size(TB)"]).groupBy().sum().show()
 
-    return df
+    # STEP-15: Find datasets which have only null accessed_at fields in its files
+    df_all_null_accessed_at = df_final_dataset_rse \
+        .filter(col("last_access_time_of_dataset_per_rse").isNull()) \
+        .groupby(["dataset"]) \
+        .agg(_round(_max(col("dataset_size_in_rse")) / (10 ** 12), 2).alias("max_dataset_size(TB)"),
+             _round(_min(col("dataset_size_in_rse")) / (10 ** 12), 2).alias("min_dataset_size(TB)"),
+             _round(_avg(col("dataset_size_in_rse")) / (10 ** 12), 2).alias("avg_dataset_size(TB)"),
+             _sum(col("#files_null_access_time_per_rse")).alias("#files_null_access_time_per_dataset"),
+             _max(col("last_access_time_of_dataset_per_rse")).alias("last_access_time_of_dataset"),
+             ) \
+        .cache()
+
+    # Total for not null data: not read more than 3,6,12 months which is equal to more than 3 months values.
+    df.select(["max_dataset_size(TB)", "min_dataset_size(TB)", "avg_dataset_size(TB)"]).groupBy().sum().show()
+
+    # For 12 months
+    df.filter(col("last_access_more_than_12_months_ago") == 1).select(
+        ["max_dataset_size(TB)", "min_dataset_size(TB)", "avg_dataset_size(TB)"]).groupBy().sum().show()
+    print(df.filter(col("last_access_more_than_12_months_ago") == 1).count())
+
+    # For 6 months
+    df.filter(col("last_access_more_than_6_months_ago") == 1).select(
+        ["max_dataset_size(TB)", "min_dataset_size(TB)", "avg_dataset_size(TB)"]).groupBy().sum().show()
+    print(df.filter(col("last_access_more_than_6_months_ago") == 1).count())
+
+    # For 3 months
+    df.filter(col("last_access_more_than_3_months_ago") == 1).select(
+        ["max_dataset_size(TB)", "min_dataset_size(TB)", "avg_dataset_size(TB)"]).groupBy().sum().show()
+    print(df.filter(col("last_access_more_than_3_months_ago") == 1).count())
+
+    # For all null accessed_at(all files) datasets
+    df_all_null_accessed_at.select(
+        ["max_dataset_size(TB)", "min_dataset_size(TB)", "avg_dataset_size(TB)"]).groupBy().sum().show()
+    print(df_all_null_accessed_at.count())
+
+    return df, df_all_null_accessed_at
