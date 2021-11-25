@@ -29,11 +29,13 @@ elif ! (java -XX:+PrintFlagsFinal -version 2>/dev/null | grep -E -q 'UseAES\s*=\
     (echo >&2 "This script requires a java version with AES enabled")
     exit 1
 fi
+
 # Check if CMSSpark is in the python path,
 # otherwise add it assuming the script is in the default location
 if ! python -c "import CMSSpark.rucio_daily" 2>/dev/null; then
     export PYTHONPATH="$SCRIPT_DIR/../src/python:$PYTHONPATH"
 fi
+
 # Run the script
 spark-submit \
     --master yarn \
