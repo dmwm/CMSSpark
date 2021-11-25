@@ -23,6 +23,8 @@ if ! klist -s; then
     echo "There is not valid ticket yet"
     kinit
 fi
+
+# Do not print progress bar: showConsoleProgress=false
 spark-submit \
     --master yarn \
     --conf spark.driver.extraClassPath='/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar' \
@@ -30,4 +32,5 @@ spark-submit \
     --conf spark.executor.instances=30 \
     --conf spark.executor.cores=4 \
     --conf spark.driver.memory=4g \
+    --conf spark.ui.showConsoleProgress=false \
     "$currentDir/../src/python/CMSSpark/condor_crab_unique_users.py" "$@"

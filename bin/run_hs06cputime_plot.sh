@@ -24,6 +24,7 @@ if ! klist -s; then
     kinit
 fi
 
+# Do not print progress bar: showConsoleProgress=false
 spark-submit \
     --master yarn \
     --conf spark.driver.extraClassPath='/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar' \
@@ -31,4 +32,5 @@ spark-submit \
     --conf spark.executor.instances=30 \
     --conf spark.executor.cores=4 \
     --conf spark.driver.memory=4g \
+    --conf spark.ui.showConsoleProgress=false \
     "$currentDir/../src/python/CMSSpark/condor_hs06coreHrPlot.py" "$@"
