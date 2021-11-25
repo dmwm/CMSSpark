@@ -28,5 +28,5 @@ then
 fi
 spark-submit  --master yarn \
 --conf spark.driver.extraClassPath='/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar' \
---conf spark.executor.memory=8g --conf spark.executor.instances=60 --conf spark.executor.cores=4 --conf spark.driver.memory=4g \
+--conf spark.executor.memory=8g --conf spark.executor.instances=30 --conf spark.executor.cores=4 --conf spark.driver.memory=4g \
 "$currentDir/../src/python/CMSSpark/condor_cpu_efficiency.py" "$@"

@@ -55,7 +55,7 @@ spark_confs=(
   --conf "spark.driver.blockManager.port=${CONDOR_CPU_EFF_SERVICE_PORT_PORT_1}"
   --conf "spark.driver.extraClassPath=${WDIR}/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar"
   --conf "spark.executor.memory=8g"
-  --conf "spark.executor.instances=31"
+  --conf "spark.executor.instances=30"
   --conf "spark.executor.cores=4"
   --conf "spark.driver.memory=4g"
 )

@@ -40,7 +40,7 @@ fi
 # Run the script
 spark-submit --master yarn \
              --driver-memory 10g \
-             --num-executors 48 \
+             --num-executors 30 \
              --executor-memory 6g \
              --packages org.apache.spark:spark-avro_2.11:2.4.3 \
              "$SCRIPT_DIR/../src/python/CMSSpark/rucio_daily.py" "$@"
