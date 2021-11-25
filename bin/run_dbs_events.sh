@@ -11,7 +11,7 @@ odf=$wdir/dbs_events.csv
 hdir=hdfs:///cms/dbs_events
 
 # remove existing hadoop area
-hadoop fs -rm -r -skipTrash $hdir 2>&1 1>& /dev/null
+hadoop fs -rm -r -skipTrash $hdir 2>&1 1>&/dev/null
 if [ -d $odir ]; then
     rm -rf $odir
 fi
@@ -25,8 +25,8 @@ run_spark dbs_events.py --yarn --fout=$hdir
 
 # get back data frame parts
 hadoop fs -get /cms/dbs_events $odir/
-head -1 $odir/dbs_events/part-00000* > $odf
-cat $odir/dbs_events/part* | grep -v nevents | sed -e "s,\",,g" >> $odf
+head -1 $odir/dbs_events/part-00000* >$odf
+cat $odir/dbs_events/part* | grep -v nevents | sed -e "s,\",,g" >>$odf
 rm -f ${odf}.gz
 gzip $odf
 rm -rf $odir
