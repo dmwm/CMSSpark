@@ -45,6 +45,6 @@ then
     export PYTHONPATH="$SCRIPT_DIR/../src/python:$PYTHONPATH"
 fi
 # Run the script
-spark-submit --master yarn --driver-memory 10g --num-executors 48  --executor-memory 6g\
+spark-submit --master yarn --driver-memory 10g --num-executors 30  --executor-memory 6g\
  --conf spark.driver.extraClassPath="$HADOOP_CLIENT_JAR"\
  "$SCRIPT_DIR/../src/python/CMSSpark/dbs_event_count_plot.py" "$@"
