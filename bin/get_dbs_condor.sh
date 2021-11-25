@@ -10,10 +10,10 @@ for m in $months; do
         idir=dataset/$year/$m/$d
         fout="out/dataset-${year}${m}${d}.csv"
         echo "Scan: $hdir/$idir"
-        hadoop fs -cat $hdir/$idir/part-00000* | head -1 > $fout
-#        head -1 $idir/part-00000* > $fout
-        header=`cat $fout`
-        hadoop fs -cat $hdir/$idir/part-* | grep -v $header | sed -e "s,\",,g" >> $fout
-#        cat $idir/part-* | grep -v $header | sed -e "s,\",,g" >> $fout
+        hadoop fs -cat $hdir/$idir/part-00000* | head -1 >$fout
+        #        head -1 $idir/part-00000* > $fout
+        header=$(cat $fout)
+        hadoop fs -cat $hdir/$idir/part-* | grep -v $header | sed -e "s,\",,g" >>$fout
+        #        cat $idir/part-* | grep -v $header | sed -e "s,\",,g" >> $fout
     done
 done
