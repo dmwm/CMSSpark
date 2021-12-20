@@ -31,4 +31,5 @@ START=$(date -d "$MONTH/01" +%Y%m%d)
 if [[ -f "$OUTPUT_DIR/dataset_totals.csv" ]]; then
     mv "$OUTPUT_DIR/dataset_totals.csv" "$OUTPUT_DIR/dataset_totals_${START}_${END}.csv"
     ln -s -f "$OUTPUT_DIR/dataset_totals_${START}_${END}.csv" "$OUTPUT_DIR/dataset_totals_last_month.csv"
+    ln -s -f "$OUTPUT_DIR/top_total_rb_${START}_${END}.png" "$OUTPUT_DIR/topDS_last_rolling_month.png"
 fi

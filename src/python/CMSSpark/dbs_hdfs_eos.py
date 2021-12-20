@@ -9,11 +9,11 @@ import os
 import click
 import matplotlib
 
+matplotlib.use("Agg")  # this should be called before use seaborn
+
 # from matplotlib.backends.backend_pdf import PdfPages
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import regexp_extract
-
-matplotlib.use("Agg")  # this should be called before use seaborn
 import seaborn as sns
 from CMSSpark.spark_utils import spark_context, eos_tables, dbs_tables
 
@@ -30,8 +30,8 @@ def get_spark_session(yarn=True, verbose=False):
 
 def generate_parquet(
     date,
-#    hdir="hdfs:///project/monitoring/archive/eos/logs/reports/cms", #before 2020
-    hdir="hdfs:///project/monitoring/archive/eos-report/logs/cms", #after 2020
+    # hdir="hdfs:///project/monitoring/archive/eos/logs/reports/cms", #before 2020
+    hdir="hdfs:///project/monitoring/archive/eos-report/logs/cms",  # after 2020
     parquetLocation=DEFAULT_PARQUET_LOCATION,
     spark=None,
     mode="append",
@@ -86,8 +86,8 @@ def generate_dataset_totals_pandasdf(
         spark = get_spark_session(True, False)
     eos_df = (
         spark.read.option("basePath", parquetLocation)
-        .parquet(parquetLocation)
-        .filter("day between {} AND {}".format(*period))
+            .parquet(parquetLocation)
+            .filter("day between {} AND {}".format(*period))
     )
     eos_df = eos_df.groupby(
         "session", "file_lfn", "application", "user", "user_dn"
@@ -265,7 +265,7 @@ def run_report_totals(ctx, period, outputdir, only_csv):
                 outputdir, "top_total_rb_{}-{}.{}".format(period[0], period[1], _format)
             ),
             format=_format,
-            bbox_inches = "tight",
+            bbox_inches="tight",
         )
 
 
