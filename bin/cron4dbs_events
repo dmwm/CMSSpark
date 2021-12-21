@@ -3,7 +3,8 @@
 # adjust script to put your desired notification address if necessary
 
 #addr=cms-popdb-alarms@cern.ch
-addr=vkuznet@gmail.com
+#addr=vkuznet@gmail.com
+addr=cms-comp-monit-alerts@cern.ch
 
 # DO NOT EDIT BELOW THIS LINE
 # for Spark 2.X
