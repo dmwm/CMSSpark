@@ -1,0 +1,56 @@
+    </div>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            //
+            function toggleDetails(){
+                var tr = $(this).closest("tr");
+                sel_name = $(tr).find("td a.selname").text()
+                dataset_name = $(tr).find("td a.dataset").text()
+                d_class="details-show"
+                row = dt.row(tr)
+                if(!row.child.isShown())
+                {
+                    // html file name of a dataset name includes slash replaced with -_-,
+                    // so use that convention to reach fil name from dataset name
+                    sel_name_replaced = sel_name.replaceAll(/\//g, "-_-");
+                    $(tr).addClass(d_class)
+                    row.child("<div id='details_"+sel_name_replaced+"'>loading</div>").show()
+                    folder = "rsedetails"
+                    $.get(folder+"/dataset_"+sel_name_replaced+".html", function (response){
+                        var html = response;
+                        $("#details_"+sel_name_replaced).html(html);
+                    });
+                }else{
+                    $(tr).removeClass(d_class)
+                    row.child.hide()
+                }
+            }
+            $('table#dataframe thead tr').append('<th>dataset details</th>');
+            $('table#dataframe tbody tr').append('<td><button class="btn-details">+</button></td>');
+            //
+            var dt = $('#dataframe').DataTable( {
+                // To set total row to first
+                "orderCellsTop": true,
+                "dom": "lifrtip",
+                "order": [[ 3, "desc" ]],
+                "pageLength" : 10,
+                "scrollX": false,
+                language: {
+                    search: "_INPUT_",
+                    searchPlaceholder: "--- Search Dataset ---",
+                },
+            });
+            //
+            $('table#dataframe tbody tr').on('click','td button.btn-details',toggleDetails)
+            //
+            dt.on('draw', function(){
+                $('table#dataframe tbody tr').off('click').on('click','td button.btn-details',toggleDetails)
+            })
+            //
+        });
+    </script>
+</body>
+<!-- final -->
+</html>
