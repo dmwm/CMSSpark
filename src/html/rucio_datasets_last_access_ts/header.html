@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.10.20/css/jquery.dataTables.min.css">
+<style>
+    .dataTables_filter input {
+      border: 7px solid Tomato;
+      width: 400px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    table td {
+	word-break: break-all;
+    }
+    table td:nth-child(n+2) {
+        text-align: right;
+    }
+    #dataframe-tiers table {
+      font-family: arial, sans-serif;
+      border-collapse: collapse;
+      width: 100%;
+    }
+    #dataframe-tiers td, th {
+      border: 1px solid #dddddd;
+      text-align: left;
+      padding: 8px;
+    }
+    #dataframe-tiers tr:nth-child(even) {
+      background-color: #dddddd;
+    }
+</style>
+</head>
+<body>
+    <div class="cms">
+        <img src="https://cds.cern.ch/record/1306150/files/cmsLogo_image.jpg"
+            alt="CMS" style="width: 5%; float:left">
+        <h3 style="width: 100%; float:right">
+            Rucio Datasets which are not read since N months and have size greater than 1.0TB in disk
+            <small>Last Update: UPDATE_TIME UTC</small>
+        </h3>
+    </div>
+    <div class="w3-container">
+    <ul class="w3-ul w3-small" style="width:100%;margin-left:2%">
+      <li class="w3-padding-small">
+        Please read the "Assumptions and explanations of Rucio tables" part in the source code:
+      </li>
+      <li class="w3-padding-small">
+        <a href="https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/rucio_datasets_last_access_ts.py">
+                CMSSpark/rucio_datasets_last_access_ts.py</a></b>
+      </li>
+    </ul>
+    </div>
+    <div class="container" style="display:block; width:100%">
