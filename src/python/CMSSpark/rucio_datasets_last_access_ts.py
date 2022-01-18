@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-"""Get last access times of datasets by joining Rucio's REPLICAS, DIDS and CONTENTS tables"""
+"""Create html pages for datasets' access times by joining Rucio's REPLICAS, DIDS and CONTENTS tables"""
 
 import pickle
-import sys
 from datetime import datetime
 
 import click
@@ -16,6 +15,8 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     avg as _avg,
     col,
+    collect_list,
+    concat_ws,
     count as _count,
     countDistinct,
     greatest,
@@ -37,52 +38,70 @@ HDFS_RUCIO_CONTENTS = "/project/awg/cms/rucio_contents/{}/part*.avro".format(TOD
 HDFS_RUCIO_DIDS = "/project/awg/cms/rucio_dids/{}/part*.avro".format(TODAY)
 HDFS_RUCIO_REPLICAS = "/project/awg/cms/rucio/{}/replicas/part*.avro".format(TODAY)
 TB_DENOMINATOR = 10 ** 12
-MIN_TB_LIMIT = 1.0  # TB
 
 pd.options.display.float_format = "{:,.2f}".format
 pd.set_option("display.max_colwidth", -1)
 
 ########################################################
-""" ---- Assumptions and explanations of Rucio tables ----
-     DBS vs Rucio terminology ---
+""" 
+---- Assumptions and explanations of Rucio tables ----
+    DBS vs Rucio terminology ---
         - file:    [F]ile in Rucio
         - block:   [D]ataset in Rucio
         - dataset: [C]ontainer in Rucio
-    
+
     Notes:
         - We used DBS terminology otherwise specified implicitly!!!
         - In function&dataframe names: f, b, d are initial letters of file, block and dataset
+        - df_pd stands for pandas dataframe
+
+    Why Assumptions: 
+        - It's certain that final result is not 100% correct with below assumptions, but without below assumptions, ...
+          ... it's impossible to produce any result.
+
+    Assumptions for datasets not accessed since N months:
+        1. Ignore files which do not have: block name, dataset name, accessed_at, size
+        2. Ignore blocks which do not have: dataset name
+        3. Ignore datasets even if they have a file with NULL access time
+        4. Get only datasets with desired size to filter so many small datasets
+        5. We may miss some datasets even if they obey the above assumptions, ...
+          ... because of filtering the last access time in all RSEs. An example for dataset X:
+          - in RSE A: last access is 14 months ago, in RSE B: last access is 1 months ago
+          - dataset X will not appear in the main page because it's overall last access is 1 month ago.
     
-    Assumptions:
-        * It's certain that final result is not 100% correct with below assumptions, but without below assumptions,
-          it's impossible to produce any result.
-            - Ignore files which do not have: block name, dataset name, accessed_at, size
-            - ACCESSED_AT information of files comes from DIDS and REPLICAS tables
-            -  BYTES(fsize) information of files comes from DIDS and REPLICAS tables
- 
-    
+    Assumptions for datasets never read:
+        1. Ignore files which do not have: block name, dataset name, accessed_at, size
+        2. Ignore blocks which do not have: dataset name
+        3. Get only datasets such that all files of it has NULL access time
+        4. Get only datasets with desired size to filter so many small datasets
+        5. We may miss some datasets even if they obey the above assumptions, ...
+          ... because of filtering the last access time in all RSEs. An example for dataset X:
+          - in RSE A: last access is 14 months ago, in RSE B: last access is 1 months ago
+          - dataset X will not appear in the main page because it's overall last access is 1 month ago.
+
     Data sources in Rucio tables:
         ACCESSED_AT (last access time)                     : greatest of DIDS' and REPLICAS' ACCESSED_AT
+        CREATED_AT (creation time)                         : greatest of DIDS' and REPLICAS' CREATED_AT
         BYTES (file size)                                  : DIDS and REPLICAS (equal for same files)
         RSE ID - FILE relation                             : comes from REPLICAS
         All file-block, block-dataset membership/ownership : comes from CONTENTS
     
+
+    Steps of datasets not read since N months:
+        - Main aim is to get Datasets, their RSEs, last access times and sizes in RSEs.
+        - All filters depends on above assumptions
+        - Steps:
+            1. Get files in disk RSEs, their accessed_at(DIDS and REPLICAS) and size (DIDS and REPLICAS)
+            2. Get dataset names of files in RSEs (firstly files to blocks, secondly blocks to datasets)
+            3. Calculate last access time of datasets (max accessed_at of all files) 
+            4. Get datasets' max,min,avg sizes in all RSEs, the RSEs that it belongs to 
+            5. Create sub htmls for details of dataset in a single RSE
     
-    
-    Steps:
-        ---- Main aim is to get Datasets, their rses and last access times and sizes in RSEs. Then filter.
-        - Get 
-            - files in disk RSEs, their accessed_at(DIDS and REPLICAS) and size (DIDS and REPLICAS)
-            - reach to dataset names of files in RSEs (files to blocks, blocks to datasets)
-            - Calculate last access time of datasets (max of all files) 
-            - dataset max,min,avg sizes in all RSEs and 
-            - details of dataset in a single RSE
-        - Filter (!ATTENTION!)
-            - Filter out datasets which have even a single file with NULL accessed_at
-            - Filter only datasets which are read since 12 months (FOR NOW)
-    
-    
-    
+    Steps of datasets never read:
+        - Mostly same for the steps in "datasets not read since N months"
+        - Different filtering is used as explained in the assumptions
+        - Instead of accessed_at, created_at provided in the resilt
+
     --- Rucio table usages: ---
     1. CMS_RUCIO_PROD.CONTENTS
         Includes file dataset block relationships in only one degree.
@@ -107,23 +126,8 @@ pd.set_option("display.max_colwidth", -1)
         
 Reference
  - Sqoop jobs that dumps Rucio tables to hdfs: https://github.com/dmwm/CMSKubernetes/tree/master/docker/sqoop/scripts
+
 """
-
-
-def get_n_months_ago_epoch_msec(n_months_ago):
-    """Returns integer unix timestamp msec of n months ago from today"""
-    dt = datetime.today() + relativedelta(months=-n_months_ago)  # minus
-    return int(datetime(dt.year, dt.month, dt.day).timestamp()) * 1000
-
-
-def get_disk_rse_ids(rse_id_name_map_pickle):
-    """Get rse:rse_id map from pickle filter only Disk rses, returns dict
-
-    See CMSMONIT-324 how to fetch only Disk RSE_IDs using Rucio cli (author: David Lange)
-    """
-    with open(rse_id_name_map_pickle, "rb+") as f:
-        rses = pickle.load(f)
-    return dict([(k, v) for k, v in rses.items() if not any(tmp in k for tmp in ["Tape", "Test", "Temp"])])
 
 
 def get_spark_session(yarn=True, verbose=False):
@@ -133,35 +137,56 @@ def get_spark_session(yarn=True, verbose=False):
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
-# ---------------------------------------------------------------------------------------
-# Prepare Spark dataframes in separate functions
-# ---------------------------------------------------------------------------------------
+def get_n_months_ago_epoch_msec(n_months_ago):
+    """Returns integer unix timestamp msec of n months ago from today"""
+    dt = datetime.today() + relativedelta(months=-n_months_ago)  # minus
+    return int(datetime(dt.year, dt.month, dt.day).timestamp()) * 1000
+
+
+def get_disk_rse_ids(rse_id_name_map_pickle):
+    """Get rse:rse_id map from pickle by filtering only Disk rses
+
+    See CMSSpark/static/rucio/rse_name_id_map_pickle.py
+    """
+    with open(rse_id_name_map_pickle, "rb+") as f:
+        rses = pickle.load(f)
+    return dict([(k, v) for k, v in rses.items() if not any(tmp in k for tmp in ["Tape", "Test", "Temp"])])
+
+
+def get_reverted_disk_rses_id_name_map(disk_rses_id_name_map):
+    """Revert k:v to v:k"""
+    return {v: k for k, v in disk_rses_id_name_map.items()}
+
+
+# --------------------------------------------------------------------------------
+# Intermediate dataset creation functions
+# --------------------------------------------------------------------------------
 
 
 def get_df_replicas(spark, disk_rse_ids):
-    """Create main replicas dataframe by selecting only Disk RSEs
+    """Create main replicas dataframe by selecting only Disk RSEs in Rucio REPLICAS table
 
     Columns selected:
         - file: file name
         - fsize_replicas: represents size of a file in REPLICAS table
         - rse_id
         - rep_accessed_at
-
-    df_replicas: Main replicas Spark dataframe for this script
+        - rep_created_at
     """
     return spark.read.format("avro").load(HDFS_RUCIO_REPLICAS) \
         .withColumn("rse_id", lower(_hex(col("RSE_ID")))) \
         .withColumn("fsize_replicas", col("BYTES").cast(LongType())) \
         .withColumnRenamed("NAME", "file") \
         .withColumnRenamed("ACCESSED_AT", "rep_accessed_at") \
+        .withColumnRenamed("CREATED_AT", "rep_created_at") \
         .filter(col("rse_id").isin(disk_rse_ids)) \
         .filter(col("SCOPE") == "cms") \
-        .select(["file", "rse_id", "fsize_replicas", "rep_accessed_at"]) \
+        .select(["file", "rse_id", "fsize_replicas", "rep_accessed_at", "rep_created_at"]) \
         .cache()
 
 
 def get_df_dids_files(spark):
-    """Create spark dataframe for DIDS table by selecting only Files.
+    """Create spark dataframe for DIDS table by selecting only Files in Rucio DIDS table.
 
     Filters:
         - DELETED_AT not null
@@ -173,8 +198,7 @@ def get_df_dids_files(spark):
         - file: file name
         - fsize_dids: represents size of a file in DIDS table
         - dids_accessed_at: file last access time
-
-    df_dids_files: All files catalog, their sizes and last access times
+        - dids_created_at: file creation time
     """
     return spark.read.format("avro").load(HDFS_RUCIO_DIDS) \
         .filter(col("DELETED_AT").isNull()) \
@@ -183,66 +207,32 @@ def get_df_dids_files(spark):
         .filter(col("DID_TYPE") == "F") \
         .withColumnRenamed("NAME", "file") \
         .withColumnRenamed("ACCESSED_AT", "dids_accessed_at") \
+        .withColumnRenamed("CREATED_AT", "dids_created_at") \
         .withColumn("fsize_dids", col("BYTES").cast(LongType())) \
-        .select(["file", "fsize_dids", "dids_accessed_at"]) \
+        .select(["file", "fsize_dids", "dids_accessed_at", "dids_created_at"]) \
         .cache()
 
 
 def get_df_replicas_j_dids(df_replicas, df_dids_files):
-    """Left join of df_replicas and df_dids_files to fill the RSE_ID, fsize and accessed_at for all files.
+    """Left join of df_replicas and df_dids_files to fill the RSE_ID, fsize and accessed_at, created_at for all files.
 
-    Be aware that there are 2 file size columns, they will be combined in "df_file_rse_ts_size".
+    Be aware that there are 2 columns for each fsize, accessed_at, created_at
+    They will be combined in get_df_file_rse_ts_size
 
     Columns:
-        comes from DID:       file, dids_accessed_at, fsize_dids,
-        comes from REPLICAS:  file, rse_id, fsize_replicas, rep_accessed_at
-
-    df_replicas_j_dids: Filled fsize for all files by combining both REPLICAS values and DIDS values
+        comes from DID:       file, dids_accessed_at, dids_created_at, fsize_dids,
+        comes from REPLICAS:  file, rse_id, fsize_replicas, rep_accessed_at, rep_created_at
    """
     return df_replicas.join(df_dids_files, ["file"], how="left").cache()
 
 
-def check_replicas_dids_join_is_desired(df_replicas_j_dids):
-    """Check all files have size values in joined dataframe and also 2 tables' size values are equal for same files
-
-    df_replicas_j_dids is left join of REPLICAS and DIDS
-    There are 2 tables to get file sizes: REPLICAS, DIDS.
-    Not all files have size information, so we'll use combined values of above tables to set sizes of all files.
-    Then check:
-        1. All files have size information
-        2. Size values of DIDS and REPLICAS tables are equal for same files
-    """
-
-    # Check that REPLICAS and DIDS join filled the size values of all files. Yes!
-    if df_replicas_j_dids.filter(
-        col("fsize_dids").isNull() & col("fsize_replicas").isNull()
-    ).head():
-        print("We have a problem! At least one file does not have size info!")
-        return False
-    # Check that REPLICAS and DIDS size values are compatible. Yes!
-    elif df_replicas_j_dids.withColumn(
-        "bytes_ratio",
-        when(
-            col("fsize_dids").isNotNull() & col("fsize_replicas").isNotNull(),
-            col("fsize_dids") / col("fsize_replicas")
-        ).otherwise("0")
-    ).filter(
-        (col("bytes_ratio") != 1.0) & (col("bytes_ratio") != 0.0)
-    ).head():
-        print("We have a problem, bytes are not equal in DIDS and REPLICAS!")
-        return False
-    else:
-        print("df_replicas_j_dids is desired.")
-        return True
-
-
 def get_df_file_rse_ts_size(df_replicas_j_dids):
-    """fsize_dids or fsize_replicas should not be null. Just combine them to fill file sizes.
+    """Combines columns to get filled and correct values from join of DIDS and REPLICAS
 
     Firstly, REPLICAS size value will be used. If there are files with no size values, DIDS size values will be used:
-    see "when" function order.
+    see "when" function order. For accessed_at and created_at, their max values will be get.
 
-    Columns: file, rse_id, accessed_at, fsize
+    Columns: file, rse_id, accessed_at, fsize, created_at
 
     df_file_rse_ts_size: files and their rse_id, size and access time are completed
     """
@@ -254,19 +244,20 @@ def get_df_file_rse_ts_size(df_replicas_j_dids):
         .withColumn("accessed_at",
                     greatest(col("dids_accessed_at"), col("rep_accessed_at"))
                     ) \
-        .select(['file', 'rse_id', 'accessed_at', 'fsize']) \
+        .withColumn("created_at",
+                    greatest(col("dids_created_at"), col("rep_created_at"))
+                    ) \
+        .select(['file', 'rse_id', 'accessed_at', 'fsize', 'created_at']) \
         .cache()
 
 
 def get_df_contents_f_to_b(spark):
-    """Get all files that a block contains, or all blocks that a file belongs to.
+    """Create a dataframe for FILE-BLOCK membership/ownership map
 
-    This dataframe ensures unique (file, block) couples because of:
-        CONTENTS table pk: CONSTRAINT CONTENTS_PK PRIMARY KEY (SCOPE, NAME, CHILD_SCOPE, CHILD_NAME)
+    This dataframe ensures unique (file, block) couples because of table schema PK:
+        - CONTENTS table pk: CONSTRAINT CONTENTS_PK PRIMARY KEY (SCOPE, NAME, CHILD_SCOPE, CHILD_NAME)
 
     Columns selected: block, file
-
-    df_contents_f_to_b: FILE-BLOCK membership/ownership map
     """
     return spark.read.format("com.databricks.spark.avro").load(HDFS_RUCIO_CONTENTS) \
         .filter(col("SCOPE") == "cms") \
@@ -282,13 +273,13 @@ def get_df_contents_f_to_b(spark):
 def get_df_block_file_rse_ts_size(df_file_rse_ts_size, df_contents_f_to_b):
     """ Left join df_file_rse_ts_size and df_contents_f_to_b to get block names of files.
 
-    Columns: block(from df_contents_f_to_b), file, rse_id, accessed_at, fsize
+    In short: adds "block" names to "df_file_rse_ts_size" dataframe
 
-    df_block_file_rse_ts_size: add "block" names to "df_file_rse_ts_size" dataframe
+    Columns: block(from df_contents_f_to_b), file, rse_id, accessed_at, fsize
     """
     df_block_file_rse_ts_size = df_file_rse_ts_size \
         .join(df_contents_f_to_b, ["file"], how="left") \
-        .select(['block', 'file', 'rse_id', 'accessed_at', 'fsize']) \
+        .select(['block', 'file', 'rse_id', 'accessed_at', 'created_at', 'fsize']) \
         .cache()
 
     print("Stats of df_block_file_rse_ts_size before filtering out null values =>")
@@ -324,14 +315,12 @@ def stats_of_df_block_file_rse_ts_size(df_block_file_rse_ts_size):
 
 
 def get_df_contents_b_to_d(spark):
-    """Get all blocks that a dataset contains, or all datasets that a block belongs to.
+    """Create a dataframe for BLOCK-DATASET membership/ownership map
 
-    This dataframe ensures unique (block, dataset) couples because of:
-        CONTENTS table pk: CONSTRAINT CONTENTS_PK PRIMARY KEY (SCOPE, NAME, CHILD_SCOPE, CHILD_NAME)
+    This dataframe ensures unique (block, dataset) couples because of table schema PK:
+        - CONTENTS table pk: CONSTRAINT CONTENTS_PK PRIMARY KEY (SCOPE, NAME, CHILD_SCOPE, CHILD_NAME)
 
     Columns selected: dataset, block
-
-    df_contents_b_to_d: BLOCK-DATASET membership/ownership map
     """
     return spark.read.format("com.databricks.spark.avro").load(HDFS_RUCIO_CONTENTS) \
         .filter(col("SCOPE") == "cms") \
@@ -346,16 +335,14 @@ def get_df_contents_b_to_d(spark):
 
 def get_df_dataset_file_rse_ts_size(df_block_file_rse_ts_size, df_contents_b_to_d):
     """Left join df_block_file_rse_ts_size and df_contents_b_to_d to get dataset names of blocks.
-    
-    After getting dataset of blocks(so files), drop blocks.
-    
-    Columns: dataset(from df_contents_b_to_d), file, rse_id, accessed_at, fsize
 
-    df_dataset_file_rse_ts_size: add "dataset" name to df_block_file_rse_ts_size.
+    In short: adds "dataset" names to "df_block_file_rse_ts_size" dataframe and drops block from it
+
+    Columns: dataset(from df_contents_b_to_d), file, rse_id, accessed_at, fsize
     """
     df_dataset_file_rse_ts_size = df_block_file_rse_ts_size \
         .join(df_contents_b_to_d, ["block"], how="left") \
-        .select(['dataset', 'block', 'file', 'rse_id', 'accessed_at', 'fsize']) \
+        .select(['dataset', 'block', 'file', 'rse_id', 'accessed_at', 'created_at', 'fsize']) \
         .cache()
 
     null_dataset_distinct_block_count = df_dataset_file_rse_ts_size.filter(
@@ -368,18 +355,62 @@ def get_df_dataset_file_rse_ts_size(df_block_file_rse_ts_size, df_contents_b_to_
     # Drop blocks since we got the dataset of files (our on of main aims till here)
     return df_dataset_file_rse_ts_size.filter(
         col("dataset").isNotNull()
-    ).select(['dataset', 'file', 'rse_id', 'accessed_at', 'fsize'])
+    ).select(['dataset', 'file', 'rse_id', 'accessed_at', 'created_at', 'fsize'])
 
 
-def get_df_final_datasets_and_rses(df_dataset_file_rse_ts_size, n_months_ago):
-    """Group by "dataset" and "rse_id" of df_d_b_f_rse_ts_size
+# --------------------------------------------------------------------------------
+# Main dataset creation functions
+# --------------------------------------------------------------------------------
+
+def get_df_main_datasets_never_read(df_dataset_file_rse_ts_size, disk_rses_id_name_map, min_tb_limit):
+    """Get never accessed datasets' dataframes"""
+    reverted_disk_rses_id_name_map = get_reverted_disk_rses_id_name_map(disk_rses_id_name_map)
+    df_sub_datasets_never_read = df_dataset_file_rse_ts_size \
+        .groupby(["rse_id", "dataset"]) \
+        .agg(_round(_sum(col("fsize")) / TB_DENOMINATOR, 5).alias("dataset_size_in_rse_tb"),
+             _max(col("accessed_at")).alias("last_access_time_of_dataset_in_rse"),
+             _max(col("created_at")).alias("last_create_time_of_dataset_in_rse"),
+             _sum(
+                 when(col("accessed_at").isNull(), 1).otherwise(0)
+             ).alias("#files_with_null_access_time_of_dataset_in_rse"),
+             _count(lit(1)).alias("#files_of_dataset_in_rse"),
+             countDistinct(col("file")).alias("#distinct_files_of_dataset_in_rse"),
+             ) \
+        .filter(col("last_access_time_of_dataset_in_rse").isNull()) \
+        .filter(col("dataset_size_in_rse_tb") > min_tb_limit) \
+        .replace(reverted_disk_rses_id_name_map, subset=['rse_id']) \
+        .withColumnRenamed("rse_id", "RSE name") \
+        .select(['RSE name',
+                 'dataset',
+                 'dataset_size_in_rse_tb',
+                 'last_create_time_of_dataset_in_rse',
+                 '#distinct_files_of_dataset_in_rse'
+                 ]) \
+        .cache()
+
+    df_main_datasets_never_read = df_sub_datasets_never_read \
+        .groupby(["dataset"]) \
+        .agg(_max(col("dataset_size_in_rse_tb")).alias("max_dataset_size_in_rses(TB)"),
+             _min(col("dataset_size_in_rse_tb")).alias("min_dataset_size_in_rses(TB)"),
+             _avg(col("dataset_size_in_rse_tb")).alias("avg_dataset_size_in_rses(TB)"),
+             _max(col("last_create_time_of_dataset_in_rse")).alias("last_create_time_of_dataset_in_all_rses"),
+             concat_ws(", ", collect_list("RSE name")).alias("RSEs"),
+             ) \
+        .cache()
+    return df_main_datasets_never_read, df_sub_datasets_never_read
+
+
+def get_df_sub_not_read_since(df_dataset_file_rse_ts_size, disk_rses_id_name_map, min_tb_limit, n_months_filter):
+    """Get dataframe of datasets that are not read since N months for sub details htmls
+
+    Group by "dataset" and "rse_id" of get_df_dataset_file_rse_ts_size
 
     Filters:
         - If a dataset contains EVEN a single file with null accessed_at, filter out
 
     Access time filter logic:
-        - If "last_access_time_of_dataset_in_all_rses" is less than "n_months_ago",
-          set "is_not_read_since_{n_months_ago}_months" column as True
+        - If "last_access_time_of_dataset_in_all_rses" is less than "n_months_filter", ...
+          ... set "is_not_read_since_{n_months_filter}_months" column as True
 
     Columns:
         - "dataset_size_in_rse_tb"
@@ -396,19 +427,13 @@ def get_df_final_datasets_and_rses(df_dataset_file_rse_ts_size, n_months_ago):
         - "#distinct_files_of_dataset_in_rse"
                 Number of unique files count of dataset in an RSE
 
-        Final result will be like:
-            One dataset can be in multiple RSEs and
-            presumably it may have different sizes since a dataset may have lost some of its blocks or files in an RSE?
-
-    df_final_datasets_and_rses: dataset, rse_id and their size and access time calculations
+    df_main_datasets_and_rses: RSE name, dataset and their size and access time calculations
     """
+    # New boolean column name to map dataset-rse_id couples are not read at least n_months_filter or not
+    bool_column_is_not_read_since_n_months = 'is_not_read_since_{}_months'.format(str(n_months_filter))
 
-    # New boolean column to map dataset-rse_id couples are not read at least n_months_ago or not
-    bool_column_is_not_read_since_n_months = 'is_not_read_since_{}_months'.format(str(n_months_ago))
-
-    if n_months_ago not in (3, 6, 12):
-        print("Please provide integer 3, 6 or 12")
-        sys.exit(0)
+    # Get reverted dict to get RSE names from id
+    reverted_disk_rses_id_name_map = get_reverted_disk_rses_id_name_map(disk_rses_id_name_map)
 
     return df_dataset_file_rse_ts_size \
         .groupby(["rse_id", "dataset"]) \
@@ -422,7 +447,7 @@ def get_df_final_datasets_and_rses(df_dataset_file_rse_ts_size, n_months_ago):
              ) \
         .withColumn(bool_column_is_not_read_since_n_months,
                     when(
-                        col('last_access_time_of_dataset_in_rse') < get_n_months_ago_epoch_msec(n_months_ago),
+                        col('last_access_time_of_dataset_in_rse') < get_n_months_ago_epoch_msec(n_months_filter),
                         True).otherwise(False)
                     ) \
         .filter((
@@ -431,74 +456,43 @@ def get_df_final_datasets_and_rses(df_dataset_file_rse_ts_size, n_months_ago):
                     col("#files_with_null_access_time_of_dataset_in_rse") == 0
                 )) \
         .filter(col(bool_column_is_not_read_since_n_months)) \
-        .filter(col("dataset_size_in_rse_tb") > MIN_TB_LIMIT) \
-        .select(['rse_id',
+        .filter(col("dataset_size_in_rse_tb") > min_tb_limit) \
+        .replace(reverted_disk_rses_id_name_map, subset=['rse_id']) \
+        .withColumnRenamed("rse_id", "RSE name") \
+        .select(['RSE name',
                  'dataset',
                  'dataset_size_in_rse_tb',
                  'last_access_time_of_dataset_in_rse',
                  '#distinct_files_of_dataset_in_rse'
                  ]) \
         .cache()
-    # !Attention! See last filter that filters only dataset-rse_id couples which are not read at least "n_months_ago"
 
 
-def get_df_final_datasets(df_final_datasets_and_rses):
-    """Calculate main results of datasets by aggregating their values in RSEs.
+def get_df_main_not_read_since(df_sub_not_read_since):
+    """Get dataframe of datasets not read since N months for main htmls.
 
-    Group by Dataset to get final result from all RSEs' datasets.
-      - max_dataset_size_in_rses(TB): max size of dataset in all RSEs that contain this Dataset
-      - min_dataset_size_in_rses(TB): min size of dataset in all RSEs that contain this Dataset
-      - avg_dataset_size_in_rses(TB): avg size of dataset in all RSEs that contain this Dataset
-      - last_access_time_of_dataset_in_all_rses: latest access time of dataset in all RSEs
-
-
-
-    The final result includes only the Datasets whose last access time is older than 3 months.
+    Get last access of dataframe in all RSEs
     """
-
-    return df_final_datasets_and_rses \
+    return df_sub_not_read_since \
         .groupby(["dataset"]) \
         .agg(_max(col("dataset_size_in_rse_tb")).alias("max_dataset_size_in_rses(TB)"),
              _min(col("dataset_size_in_rse_tb")).alias("min_dataset_size_in_rses(TB)"),
              _avg(col("dataset_size_in_rse_tb")).alias("avg_dataset_size_in_rses(TB)"),
              _max(col("last_access_time_of_dataset_in_rse")).alias("last_access_time_of_dataset_in_all_rses"),
+             concat_ws(", ", collect_list("RSE name")).alias("RSEs"),
              ) \
         .cache()
 
 
-def prepare_df_pandas_for_html(df_pandas):
-    """Get last access time 12 months of datasets and filter size greater than MIN_TB_LIMIT
+# --------------------------------------------------------------------------------
+# HTML creation functions
+# --------------------------------------------------------------------------------
+
+def get_html_header_footer_strings(base_html_directory=None):
+    """ Reads partial html files and return them as strings
     """
-    # Filter columns
-    df_pandas = df_pandas[[
-        "dataset",
-        "max_dataset_size_in_rses(TB)",
-        "min_dataset_size_in_rses(TB)",
-        "avg_dataset_size_in_rses(TB)",
-        "last_access_time_of_dataset_in_all_rses",
-    ]]
-
-    # Filter datasets that their min datset size in RSE is less than 0.4TB
-    df_pandas = df_pandas[
-        df_pandas["min_dataset_size_in_rses(TB)"] >= MIN_TB_LIMIT
-        ].sort_values(by=['avg_dataset_size_in_rses(TB)'], ascending=False)
-
-    df_pandas = df_pandas.reset_index(drop=True)
-    total_row = {
-        'dataset': 'total',
-        'max_dataset_size_in_rses(TB)': "{:,.2f}".format(df_pandas["max_dataset_size_in_rses(TB)"].sum()),
-        'min_dataset_size_in_rses(TB)': "{:,.2f}".format(df_pandas["min_dataset_size_in_rses(TB)"].sum()),
-        'avg_dataset_size_in_rses(TB)': "{:,.2f}".format(df_pandas["avg_dataset_size_in_rses(TB)"].sum()),
-        'last_access_time_of_dataset_in_all_rses': "-",
-    }
-    return df_pandas.copy(deep=True), total_row
-
-
-def get_html_strings(base_html_directory=None):
-    """Reads partial html files and return them as strings"""
     if base_html_directory is None:
         base_html_directory = os.getcwd()
-
     with open(os.path.join(base_html_directory, "header.html")) as f:
         header = f.read()
     with open(os.path.join(base_html_directory, "footer.html")) as f:
@@ -506,131 +500,304 @@ def get_html_strings(base_html_directory=None):
     return header, footer
 
 
-def create_html_sub_toggle_rse_parts(df_pandas_final_datasets_and_rses, output_dir):
-    """Creates detaild sun RSE part for datasets rows"""
-    df_pandas_final_datasets_and_rses = df_pandas_final_datasets_and_rses.set_index(["dataset", "rse_id"]).sort_index()
-    _folder = os.path.join(output_dir, "rsedetails")
+def prep_pd_df_never_read_for_sub_html(df_pd_sub_datasets_never_read):
+    """ Prepare pandas dataframe of sub details html which serve RSE details for datasets never read
+    """
+    # Add column with human-readable date
+    df_pd_sub_datasets_never_read["last creation UTC"] = pd.to_datetime(
+        df_pd_sub_datasets_never_read["last_create_time_of_dataset_in_rse"], unit='ms'
+    )
+    # Rename
+    df_pd_sub_datasets_never_read = df_pd_sub_datasets_never_read.rename(
+        columns={
+            'dataset_size_in_rse_tb': "dataset size(TB)",
+            '#distinct_files_of_dataset_in_rse': "number of distinct files of dataset",
+            'last_create_time_of_dataset_in_rse': "last creation msec UTC",
+        }
+    )
+    # Change order
+    df_pd_sub_datasets_never_read = df_pd_sub_datasets_never_read[[
+        "dataset", "RSE name", "dataset size(TB)", "last creation UTC", "last creation msec UTC",
+        "number of distinct files of dataset",
+    ]]
+    return df_pd_sub_datasets_never_read.set_index(
+        ["dataset", "RSE name"]
+    ).sort_index()
+
+
+def prep_pd_df_never_read_for_main_html(df_pd_main_datasets_never_read):
+    """Prepare pandas dataframe of main html for datasets never read
+    """
+    # Filter columns
+    df_pd_main_datasets_never_read = df_pd_main_datasets_never_read[[
+        "dataset", "max_dataset_size_in_rses(TB)", "min_dataset_size_in_rses(TB)", "avg_dataset_size_in_rses(TB)",
+        "last_create_time_of_dataset_in_all_rses", "RSEs",
+    ]]
+    # Filter datasets that their min datset size in RSE is less than 0.4TB
+    df_pd_main_datasets_never_read = df_pd_main_datasets_never_read \
+        .sort_values(by=['avg_dataset_size_in_rses(TB)'], ascending=False) \
+        .reset_index(drop=True)
+
+    # Convert date to string
+    df_pd_main_datasets_never_read['last_create_time_of_dataset_in_all_rses'] = pd.to_datetime(
+        df_pd_main_datasets_never_read['last_create_time_of_dataset_in_all_rses'], unit='ms'
+    )
+    # Rename and return
+    return df_pd_main_datasets_never_read.rename(
+        columns={
+            "max_dataset_size_in_rses(TB)": "max size in rses(TB)",
+            "min_dataset_size_in_rses(TB)": "min size in rses(TB)",
+            "avg_dataset_size_in_rses(TB)": "avg size in rses(TB)",
+            "last_create_time_of_dataset_in_all_rses": "last creation in all RSEs UTC",
+        }
+    ).copy(deep=True)
+
+
+def prep_pd_df_not_read_since_for_sub_htmls(df_pd_sub_not_read_since):
+    """ Prepare pandas dataframe of sub details html which serve RSE details for datasets not read since N months
+    """
+    # Add column with human-readable date
+    df_pd_sub_not_read_since["last access UTC"] = pd.to_datetime(
+        df_pd_sub_not_read_since["last_access_time_of_dataset_in_rse"], unit='ms'
+    )
+    # Rename
+    df_pd_sub_not_read_since = df_pd_sub_not_read_since.rename(
+        columns={
+            'dataset_size_in_rse_tb': "dataset size(TB)",
+            '#distinct_files_of_dataset_in_rse': "number of distinct files of dataset",
+            'last_access_time_of_dataset_in_rse': "last access msec UTC",
+        }
+    )
+    # Change order
+    df_pd_sub_not_read_since = df_pd_sub_not_read_since[[
+        "dataset", "RSE name", "dataset size(TB)", "last access UTC", "last access msec UTC",
+        "number of distinct files of dataset",
+    ]]
+
+    return df_pd_sub_not_read_since.set_index(
+        ["dataset", "RSE name"]
+    ).sort_index()
+
+
+def prep_pd_df_not_read_since_for_main_html(df_pd_main_not_read_since):
+    """Prepare pandas dataframe of main html for datasets not read since N months
+    """
+    # Filter columns
+    df_pd_main_not_read_since = df_pd_main_not_read_since[[
+        "dataset", "max_dataset_size_in_rses(TB)", "min_dataset_size_in_rses(TB)", "avg_dataset_size_in_rses(TB)",
+        "last_access_time_of_dataset_in_all_rses", "RSEs",
+    ]]
+    #
+    df_pd_main_not_read_since = df_pd_main_not_read_since \
+        .sort_values(by=['avg_dataset_size_in_rses(TB)'], ascending=False) \
+        .reset_index(drop=True)
+    # Convert date to string
+    df_pd_main_not_read_since['last_access_time_of_dataset_in_all_rses'] = pd.to_datetime(
+        df_pd_main_not_read_since['last_access_time_of_dataset_in_all_rses'], unit='ms'
+    )
+    # Rename and return
+    return df_pd_main_not_read_since.rename(
+        columns={
+            "max_dataset_size_in_rses(TB)": "max size in rses(TB)",
+            "min_dataset_size_in_rses(TB)": "min size in rses(TB)",
+            "avg_dataset_size_in_rses(TB)": "avg size in rses(TB)",
+            "last_access_time_of_dataset_in_all_rses": "last access in all RSEs",
+        }
+    ).copy(deep=True)
+
+
+def create_sub_htmls(df_pd_sub, output_dir, sub_folder):
+    """ Creates html files which include RSE details for each dataset
+
+    Generic html creation for all choices:
+        - datasets that are not read since N months and
+        - dataset that never read
+
+    'Show details' column values come from these htmls. For each dataset there is a html file for RSE detail.
+    """
+    # Create sub directory
+    _folder = os.path.join(output_dir, sub_folder)
     os.makedirs(_folder, exist_ok=True)
-    for dataset_name, df_iter in df_pandas_final_datasets_and_rses.groupby(["dataset"]):
+    for dataset_name, df_iter in df_pd_sub.groupby(["dataset"]):
         # Slash in dataframe name is replaced with "-_-" in html, javascript will reconvert
         # Dataset names will be html name, and slash is not allowed unix file names
         dataset_name = dataset_name.replace("/", "-_-")
-        df_iter.droplevel(["dataset"]).to_html(
+        df_iter.droplevel(["dataset"]).reset_index().to_html(
             os.path.join(_folder, "dataset_{}.html".format(dataset_name)),
             escape=False,
+            index=False,
         )
 
 
-def create_html(df_pandas, total_row, n_months_ago, base_html_directory=None, output_dir="./"):
-    """Create and write html page
+def create_main_html(df_pd_main,
+                     static_html_dir,
+                     output_dir,
+                     sub_folder,
+                     main_html_file_name,
+                     min_tb_limit,
+                     title_replace_str, ):
+    """Create and write main html page
+
+    Generic html creation for all choices:
+        - datasets that are not read since N months and
+        - dataset that never read
     """
     # Get html_header and html_footer
-    html_header, html_footer = get_html_strings(base_html_directory)
-    html_header = html_header.replace("UPDATE_TIME", datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))
-    html_header = html_header.replace("Rucio Datasets which are not read since N months",
-                                      "Rucio Datasets which are not read since {} months".format(n_months_ago))
-
-    # To stick total column to first row
-    #   total_on_header = """<tr >
-    #     <th>{dataset}</th>
-    #     <th align="right">{max_dataset_size_in_rses(TB)}</th>
-    #     <th align="right">{min_dataset_size_in_rses(TB)}</th>
-    #     <th align="right">{avg_dataset_size_in_rses(TB)}</th>
-    #     <th align="right">{last_access_time_of_dataset_in_all_rses}</th>
-    #   </tr>
-    # </thead>
-    #           """.format(**total_row)
+    html_header, html_footer = get_html_header_footer_strings(static_html_dir)
+    # header replace
+    html_header = html_header.replace("__UPDATE_TIME__", datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))
+    html_header = html_header.replace("__are not read since n months__", title_replace_str)
+    html_header = html_header.replace("__TB_LIMIT__", str(min_tb_limit))
+    # footer replace
+    html_footer = html_footer.replace("__SUB_FOLDER_NAME__", sub_folder)
 
     # Main column is dataset
-    main_column = df_pandas["dataset"].copy()
-    df_pandas["dataset"] = (
+    main_column = df_pd_main["dataset"].copy()
+    df_pd_main["dataset"] = (
         '<a class="dataset">'
         + main_column
         + '</a><br>'
     )
     _fc = '<a class="selname">' + main_column + "</a>"
-    df_pandas["dataset"] = _fc
+    df_pd_main["dataset"] = _fc
 
     # Main pandas html operations
-
-    html = df_pandas.to_html(escape=False, index=False)
-
-    # Add total ro to header. Be careful there should be only one  <thead>...</thead>!
-    # html = html.replace(" </thead>", total_on_header)
-
-    html = html.replace(
-        'table border="1" class="dataframe"',
-        'table id="dataframe" class="display compact" style="width:100%;"',
-    )
-    html = html.replace('style="text-align: right;"', "")
+    html = df_pd_main.to_html(escape=False, index=False)
     # cleanup of the default dump
     html = html.replace(
         'table border="1" class="dataframe"',
         'table id="dataframe" class="display compact" style="width:100%;"',
     )
     html = html.replace('style="text-align: right;"', "")
-
     # Append
     result = html_header + html + html_footer
-    with open(os.path.join(output_dir, "rucio_datasets_last_access.html"), "w") as f:
+    with open(os.path.join(output_dir, main_html_file_name), "w") as f:
         f.write(result)
 
 
+def create_htmls_for_not_read_since(df_pd_main_not_read_since, df_pd_sub_not_read_since, static_html_dir,
+                                    output_dir, sub_folder, main_html_file_name, min_tb_limit, title_replace_str, ):
+    # Prepare main pandas dataframe for datasets not read since n months
+    df_pd_main = prep_pd_df_not_read_since_for_main_html(
+        df_pd_main_not_read_since=df_pd_main_not_read_since
+    )
+    # Prepare sub details pandas dataframe
+    df_pd_sub = prep_pd_df_not_read_since_for_sub_htmls(
+        df_pd_sub_not_read_since=df_pd_sub_not_read_since
+    )
+    create_main_html(df_pd_main, static_html_dir, output_dir, sub_folder, main_html_file_name, min_tb_limit,
+                     title_replace_str, )
+    create_sub_htmls(df_pd_sub, output_dir, sub_folder)
+
+
+def create_htmls_for_never_read(df_pd_main_datasets_never_read, df_pd_sub_datasets_never_read, static_html_dir,
+                                output_dir, sub_folder, main_html_file_name, min_tb_limit, title_replace_str, ):
+    # Prepare main pandas dataframe for datasets never read
+    df_pd_main = prep_pd_df_never_read_for_main_html(
+        df_pd_main_datasets_never_read=df_pd_main_datasets_never_read
+    )
+    # Prepare sub details pandas dataframe
+    df_pd_sub = prep_pd_df_never_read_for_sub_html(
+        df_pd_sub_datasets_never_read=df_pd_sub_datasets_never_read
+    )
+    create_main_html(df_pd_main, static_html_dir, output_dir, sub_folder, main_html_file_name, min_tb_limit,
+                     title_replace_str, )
+    create_sub_htmls(df_pd_sub, output_dir, sub_folder)
+
+
 @click.command()
-@click.option("--html_directory", default=None, required=True,
-              help="For example: ~/CMSSpark/src/html/rucio_datasets_last_access_ts")
-@click.option("--output_dir", default=None, required=True,
+@click.option("--static_html_dir",
+              default=None,
+              type=str,
+              required=True,
+              help="Html directory for header footer. For example: ~/CMSSpark/src/html/rucio_datasets_last_access_ts")
+@click.option("--output_dir",
+              default=None,
+              type=str,
+              required=True,
               help="I.e. /eos/user/c/cmsmonit/www/rucio/rucio_datasets_last_access.html")
-@click.option("--rses_pickle", default=None, required=True,
+@click.option("--rses_pickle",
+              default=None,
+              type=str,
+              required=True,
               help="Please see rse_name_id_map_pickle.py', Default: ~/CMSSpark/static/rucio/rses.pickle")
-def main(html_directory=None, output_dir=None, rses_pickle=None):
+@click.option("--min_tb_limit",
+              default=1.0,
+              type=float,
+              required=True,
+              help="Minumum TB limit to filter dataset sizes")
+# @click.option("--n_months_filter",
+#               default=12,
+#               type=int,
+#               required=True,
+#               help="0: datasets never read htmls;  3,6,12: datasets not read since N months html")
+def main(static_html_dir=None, output_dir=None, rses_pickle=None, min_tb_limit=None):
     """
-        Main function that create Spark dataframes and create html page from the final result
+        Main function that run Spark dataframe creations and create html pages
     """
+    print(f"Static html dir: {static_html_dir}",
+          f"Output dir: {output_dir}",
+          f"Rses pickle dir: {rses_pickle}",
+          f"Min TB limit: {min_tb_limit}")
+    #
+    os.makedirs(output_dir, exist_ok=True)
 
     # Get rse ids of only Disk RSEs
     disk_rses_id_name_map = get_disk_rse_ids(rses_pickle)
 
-    # === Start Spark aggregations ====
-
+    # Start Spark aggregations
+    #
     spark = get_spark_session()
     df_replicas = get_df_replicas(spark, list(disk_rses_id_name_map.values()))
     df_dids_files = get_df_dids_files(spark)
     df_replicas_j_dids = get_df_replicas_j_dids(df_replicas, df_dids_files)
-    check_replicas_dids_join_is_desired(df_replicas_j_dids)
     df_file_rse_ts_size = get_df_file_rse_ts_size(df_replicas_j_dids)
     df_contents_f_to_b = get_df_contents_f_to_b(spark)
     df_block_file_rse_ts_size = get_df_block_file_rse_ts_size(df_file_rse_ts_size, df_contents_f_to_b)
     df_contents_b_to_d = get_df_contents_b_to_d(spark)
     df_dataset_file_rse_ts_size = get_df_dataset_file_rse_ts_size(df_block_file_rse_ts_size, df_contents_b_to_d)
 
-    # Create html page from final Spark dataframe for datasets not accessed at least 12 months
-    n_months_ago = 12
+    # Create htmls for all datasets not read since [3,6,12] months
+    for n_months_filter in [3, 6, 12]:
+        # Create htmls for datasets not read since N months
+        # Get Spark dataframe for RSE details sub htmls
+        df_sub_not_read_since = get_df_sub_not_read_since(
+            df_dataset_file_rse_ts_size=df_dataset_file_rse_ts_size,
+            disk_rses_id_name_map=disk_rses_id_name_map,
+            min_tb_limit=min_tb_limit,
+            n_months_filter=n_months_filter
+        )
 
-    # Get pandas dataframe
-    df_final_datasets_and_rses_12 = get_df_final_datasets_and_rses(df_dataset_file_rse_ts_size, n_months_ago)
-    df_final_datasets_12 = get_df_final_datasets(df_final_datasets_and_rses_12)
-    #
-    df_pandas_final_datasets_and_rses = df_final_datasets_and_rses_12.toPandas()
-    #
-    df_pandas = df_final_datasets_12.toPandas()
-    df_pandas, total_row = prepare_df_pandas_for_html(df_pandas)
+        # includes only dataset values, no RSE details
+        df_main_not_read_since = get_df_main_not_read_since(df_sub_not_read_since)
+        #
+        create_htmls_for_not_read_since(df_pd_main_not_read_since=df_main_not_read_since.toPandas(),
+                                        df_pd_sub_not_read_since=df_sub_not_read_since.toPandas(),
+                                        static_html_dir=static_html_dir,
+                                        output_dir=output_dir,
+                                        sub_folder=f"rses_{n_months_filter}_months",
+                                        main_html_file_name=f"datasets_not_read_since_{n_months_filter}_months.html",
+                                        min_tb_limit=min_tb_limit,
+                                        title_replace_str=f"are not read since {n_months_filter} months",
+                                        )
 
-    # Replace RSE ID with its name
-    reverted_disk_rses_id_name_map = {v: k for k, v in disk_rses_id_name_map.items()}
-    df_pandas_final_datasets_and_rses = df_pandas_final_datasets_and_rses.replace(
-        {"rse_id": reverted_disk_rses_id_name_map}
+    # Create htmls for datasets never read
+    # Get both Spark dataframes
+    df_main_datasets_never_read, df_sub_datasets_never_read = get_df_main_datasets_never_read(
+        df_dataset_file_rse_ts_size=df_dataset_file_rse_ts_size,
+        disk_rses_id_name_map=disk_rses_id_name_map,
+        min_tb_limit=min_tb_limit,
     )
-
-    # Create dataset sub rse details part
-    create_html_sub_toggle_rse_parts(df_pandas_final_datasets_and_rses, output_dir)
-
-    # Create main html
-    create_html(df_pandas=df_pandas,
-                total_row=total_row,
-                n_months_ago=n_months_ago,
-                base_html_directory=html_directory,
-                output_dir=output_dir)
+    #
+    create_htmls_for_never_read(df_pd_main_datasets_never_read=df_main_datasets_never_read.toPandas(),
+                                df_pd_sub_datasets_never_read=df_sub_datasets_never_read.toPandas(),
+                                static_html_dir=static_html_dir,
+                                output_dir=output_dir,
+                                sub_folder="rses_never",
+                                main_html_file_name=f"datasets_never_read.html",
+                                min_tb_limit=min_tb_limit,
+                                title_replace_str=f"never read",
+                                )
 
 
 if __name__ == "__main__":
