@@ -4,30 +4,47 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.10.20/css/jquery.dataTables.min.css">
 <style>
+    body {
+	    font-family: 'Trebuchet MS', sans-serif;
+    }
     .dataTables_filter input {
       border: 7px solid Tomato;
       width: 400px;
       font-size: 16px;
       font-weight: bold;
     }
-    table td {
-	word-break: break-all;
+    /* dataset */
+    table tr td:nth-child(1) {
+        text-align: left;
     }
-    table td:nth-child(n+2) {
+    /* max */
+    table tr td:nth-child(2) {
         text-align: right;
+        white-space:nowrap;
     }
-    #dataframe-tiers table {
-      font-family: arial, sans-serif;
-      border-collapse: collapse;
-      width: 100%;
+    /* min */
+    table tr td:nth-child(3) {
+        text-align: right;
+        white-space:nowrap;
     }
-    #dataframe-tiers td, th {
-      border: 1px solid #dddddd;
-      text-align: left;
-      padding: 8px;
+    /* avg */
+    table tr td:nth-child(4) {
+        text-align: right;
+        white-space:nowrap;
     }
-    #dataframe-tiers tr:nth-child(even) {
-      background-color: #dddddd;
+    /* time */
+    table tr td:nth-child(5) {
+        text-align: right;
+        white-space:nowrap;
+    }
+    /* RSEs */
+    table tr td:nth-child(6) {
+        background-color: #FFFDEA;
+        width: 15%;
+    }
+    /* details */
+    table tr td:nth-child(7) {
+        white-space:nowrap;
     }
 </style>
 </head>
@@ -35,20 +52,99 @@
     <div class="cms">
         <img src="https://cds.cern.ch/record/1306150/files/cmsLogo_image.jpg"
             alt="CMS" style="width: 5%; float:left">
-        <h3 style="width: 100%; float:right">
-            Rucio Datasets which are not read since N months and have size greater than 1.0TB in disk
-            <small>Last Update: UPDATE_TIME UTC</small>
+        <h3 style="width: 100%;">
+            Rucio Datasets which __are not read since n months__ and have size greater than __TB_LIMIT__TB in disk
         </h3>
+        <small>Last Update: __UPDATE_TIME__ UTC</small>
     </div>
-    <div class="w3-container">
-    <ul class="w3-ul w3-small" style="width:100%;margin-left:2%">
-      <li class="w3-padding-small">
-        Please read the "Assumptions and explanations of Rucio tables" part in the source code:
-      </li>
-      <li class="w3-padding-small">
-        <a href="https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/rucio_datasets_last_access_ts.py">
-                CMSSpark/rucio_datasets_last_access_ts.py</a></b>
-      </li>
-    </ul>
+    <div class="w3-container" style="margin-left: 3%;">
+        <button style="font-size: 18px; background-color: white; color: black; border: 3px solid #f9ccac;" onclick="explainFunction()">please read explanations</button>
+    </div>
+
+    <div id="explanations" style="display: none; margin-top: 2%;">
+        Source code: <a href="https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/rucio_datasets_last_access_ts.py">
+               	CMSSpark/rucio_datasets_last_access_ts.py</a>
+        <pre>
+
+---- Assumptions ----
+    Why Assumptions:
+        - It's certain that final result is not 100% correct with below assumptions, but without below assumptions, ...
+          ... it's almost impossible to produce any result.
+
+    Assumptions for datasets not accessed since N months:
+        1. Ignore files which do not have: block name, dataset name, accessed_at, size
+        2. Ignore blocks which do not have: dataset name
+        3. Ignore datasets even if they have a file with NULL access time
+        4. Get only datasets with desired size to filter so many small datasets
+        5. We may miss some datasets even if they obey the above assumptions, ...
+          ... because of filtering the last access time in all RSEs. An example for dataset X:
+          - in RSE A: last access is 14 months ago, in RSE B: last access is 1 months ago
+          - dataset X will not appear in the main page because it's overall last access is 1 month ago.
+
+    Assumptions for datasets never read:
+        1. Ignore files which do not have: block name, dataset name, accessed_at, size
+        2. Ignore blocks which do not have: dataset name
+        3. Get only datasets such that all files of it has NULL access time
+        4. Get only datasets with desired size to filter so many small datasets
+        5. We may miss some datasets even if they obey the above assumptions, ...
+          ... because of filtering the last access time in all RSEs. An example for dataset X:
+          - in RSE A: last access is 14 months ago, in RSE B: last access is 1 months ago
+          - dataset X will not appear in the main page because it's overall last access is 1 month ago.
+
+---- DBS vs Rucio terminology ---
+        - file:    [F]ile in Rucio
+        - block:   [D]ataset in Rucio
+        - dataset: [C]ontainer in Rucio
+    !!!We used DBS terminology in this script otherwise specified implicitly!!
+
+---- Rucio tables and what we assumed to get ----
+    --  Data origins in Rucio tables: --
+       - ACCESSED_AT (last access time)                     : greatest of DIDS' and REPLICAS' ACCESSED_AT
+       - CREATED_AT (creation time)                         : greatest of DIDS' and REPLICAS' CREATED_AT
+       - BYTES (file size)                                  : DIDS and REPLICAS (equal for same files)
+       - RSE ID - FILE relation                             : comes from REPLICAS
+       - All file-block, block-dataset membership/ownership : comes from CONTENTS
+
+    1. CMS_RUCIO_PROD.CONTENTS
+        Includes file dataset block relationships in only one degree.
+        Provides all files that a dataset contains, or all datasets that a file belongs to
+        Provides all datasets that a container contains, or all containers that a dataset belongs to
+        DID_TYPE-CHILD_TYPE can be:  D-F or C-D (Rucio terminology first letters)
+        Used columns: SCOPE, NAME, CHILD_SCOPE, CHILD_NAME, DID_TYPE, CHILD_TYPE
+
+    2. CMS_RUCIO_PROD.DIDS
+        Provides all files in CMS scope
+        Provides file last access time
+        Provides file size (compatibility with Rucio REPLICAS table is checked and they provide same values)
+        Only files are selected: DID_TYPE=F
+        Used columns: SCOPE, DID_TYPE, NAME, ACCESSED_AT, BYTES
+
+    3. CMS_RUCIO_PROD.REPLICAS
+        Provides files that exist in Disk RSEs, in CMS scope.
+        Provides file sizes in in Disk RSEs (same with DIDS)
+        Provides file last access time
+        Only Disk RSE_IDs are selected
+        Used columns: SCOPE, RSE_ID BYTES NAME
+
+---- Logical Steps ----
+    Steps of datasets not read since N months:
+        - Main aim is to get Datasets, their RSEs, last access times and sizes in RSEs.
+        - All filters depends on above assumptions
+        - Steps:
+            1. Get files in disk RSEs, their accessed_at(DIDS and REPLICAS) and size (DIDS and REPLICAS)
+            2. Get dataset names of files in RSEs (firstly files to blocks, secondly blocks to datasets)
+            3. Calculate last access time of datasets (max accessed_at of all files)
+            4. Get datasets' max,min,avg sizes in all RSEs, the RSEs that it belongs to
+            5. Create sub htmls for details of dataset in a single RSE
+
+    Steps of datasets never read:
+        - Mostly same for the steps in "datasets not read since N months"
+        - Different filtering is used as explained in the assumptions
+        - Instead of accessed_at, created_at provided in the resilt
+
+Reference
+ - Sqoop jobs that dumps Rucio tables to hdfs: https://github.com/dmwm/CMSKubernetes/tree/master/docker/sqoop/scripts
+
+        </pre>
     </div>
     <div class="container" style="display:block; width:100%">

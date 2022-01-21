@@ -107,3 +107,6 @@ campaigns/
 spark_exec_time_*.txt
 _SUCCESS
 part-*
+
+# Default log directory
+logs
