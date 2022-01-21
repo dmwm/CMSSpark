@@ -2,6 +2,16 @@
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
     <script type="text/javascript" src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js"></script>
     <script>
+        function explainFunction() {
+          var x = document.getElementById("explanations");
+          if (x.style.display === "none") {
+            x.style.display = "block";
+          } else {
+            x.style.display = "none";
+          }
+        }
+    </script>
+    <script>
         $(document).ready(function () {
             //
             function toggleDetails(){
@@ -17,7 +27,8 @@
                     sel_name_replaced = sel_name.replaceAll(/\//g, "-_-");
                     $(tr).addClass(d_class)
                     row.child("<div id='details_"+sel_name_replaced+"'>loading</div>").show()
-                    folder = "rsedetails"
+                    row.child("<div id='details_"+sel_name_replaced+"'>loading</div>").show()
+                    folder = "__SUB_FOLDER_NAME__"
                     $.get(folder+"/dataset_"+sel_name_replaced+".html", function (response){
                         var html = response;
                         $("#details_"+sel_name_replaced).html(html);
@@ -27,8 +38,8 @@
                     row.child.hide()
                 }
             }
-            $('table#dataframe thead tr').append('<th>dataset details</th>');
-            $('table#dataframe tbody tr').append('<td><button class="btn-details">+</button></td>');
+            $('table#dataframe thead tr').append('<th>Details</th>');
+            $('table#dataframe tbody tr').append('<td><button class="btn-details" style="border-color:#E5B6B6;">Show details</button></td>');
             //
             var dt = $('#dataframe').DataTable( {
                 // To set total row to first
