@@ -1,6 +1,7 @@
     </div>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
     <script type="text/javascript" src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.2.2/js/dataTables.buttons.min.js"></script>
     <script>
         function explainFunction() {
           var x = document.getElementById("explanations");
@@ -41,17 +42,32 @@
             $('table#dataframe thead tr').append('<th>Details</th>');
             $('table#dataframe tbody tr').append('<td><button class="btn-details" style="border-color:#E5B6B6;">Show details</button></td>');
             //
+            var url = new URL(window.location.href);
+            var searchString = url.searchParams.get("search");
+            if (searchString == null){
+              searchString = ''
+            }
             var dt = $('#dataframe').DataTable( {
                 // To set total row to first
                 "orderCellsTop": true,
-                "dom": "lifrtip",
+                "dom": "lifBrtip",
                 "order": [[ 3, "desc" ]],
                 "pageLength" : 10,
                 "scrollX": false,
+                "oSearch": { "sSearch": searchString },
                 language: {
                     search: "_INPUT_",
                     searchPlaceholder: "--- Search Dataset ---",
                 },
+                buttons: [
+                    {
+                        text: 'Get search as link',
+                        action: function ( e, dt, node, config ) {
+                          url.searchParams.set('search', dt.search());
+                          window.location.replace(url.href);
+                        }
+                    }
+                ]
             });
             //
             $('table#dataframe tbody tr').on('click','td button.btn-details',toggleDetails)
