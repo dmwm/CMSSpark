@@ -57,14 +57,15 @@
                 "oSearch": { "sSearch": searchString },
                 language: {
                     search: "_INPUT_",
-                    searchPlaceholder: "--- Search Dataset ---",
+                    searchPlaceholder: "- Search by Dataset or RSE -",
                 },
                 buttons: [
                     {
-                        text: 'Get search as link',
+                        text: 'Copy search link to clipboard',
                         action: function ( e, dt, node, config ) {
                           url.searchParams.set('search', dt.search());
-                          window.location.replace(url.href);
+                          //window.location.replace(url.href);
+                          navigator.clipboard.writeText(url.href);
                         }
                     }
                 ]

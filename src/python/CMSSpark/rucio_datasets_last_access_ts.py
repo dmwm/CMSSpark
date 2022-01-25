@@ -394,7 +394,7 @@ def get_df_main_datasets_never_read(df_dataset_file_rse_ts_size, disk_rses_id_na
              _min(col("dataset_size_in_rse_tb")).alias("min_dataset_size_in_rses(TB)"),
              _avg(col("dataset_size_in_rse_tb")).alias("avg_dataset_size_in_rses(TB)"),
              _max(col("last_create_time_of_dataset_in_rse")).alias("last_create_time_of_dataset_in_all_rses"),
-             concat_ws(", ", collect_list("RSE name")).alias("RSEs"),
+             concat_ws(", ", collect_list("RSE name")).alias("RSE(s)"),
              ) \
         .cache()
     return df_main_datasets_never_read, df_sub_datasets_never_read
@@ -471,7 +471,7 @@ def get_df_sub_not_read_since(df_dataset_file_rse_ts_size, disk_rses_id_name_map
 def get_df_main_not_read_since(df_sub_not_read_since):
     """Get dataframe of datasets not read since N months for main htmls.
 
-    Get last access of dataframe in all RSEs
+    Get last access of dataframe in all RSE(s)
     """
     return df_sub_not_read_since \
         .groupby(["dataset"]) \
@@ -479,7 +479,7 @@ def get_df_main_not_read_since(df_sub_not_read_since):
              _min(col("dataset_size_in_rse_tb")).alias("min_dataset_size_in_rses(TB)"),
              _avg(col("dataset_size_in_rse_tb")).alias("avg_dataset_size_in_rses(TB)"),
              _max(col("last_access_time_of_dataset_in_rse")).alias("last_access_time_of_dataset_in_all_rses"),
-             concat_ws(", ", collect_list("RSE name")).alias("RSEs"),
+             concat_ws(", ", collect_list("RSE name")).alias("RSE(s)"),
              ) \
         .cache()
 
@@ -510,14 +510,14 @@ def prep_pd_df_never_read_for_sub_html(df_pd_sub_datasets_never_read):
     # Rename
     df_pd_sub_datasets_never_read = df_pd_sub_datasets_never_read.rename(
         columns={
-            'dataset_size_in_rse_tb': "dataset size(TB)",
+            'dataset_size_in_rse_tb': "dataset size [TB]",
             '#distinct_files_of_dataset_in_rse': "number of distinct files of dataset",
             'last_create_time_of_dataset_in_rse': "last creation msec UTC",
         }
     )
     # Change order
     df_pd_sub_datasets_never_read = df_pd_sub_datasets_never_read[[
-        "dataset", "RSE name", "dataset size(TB)", "last creation UTC", "last creation msec UTC",
+        "dataset", "RSE name", "dataset size [TB]", "last creation UTC", "last creation msec UTC",
         "number of distinct files of dataset",
     ]]
     return df_pd_sub_datasets_never_read.set_index(
@@ -531,7 +531,7 @@ def prep_pd_df_never_read_for_main_html(df_pd_main_datasets_never_read):
     # Filter columns
     df_pd_main_datasets_never_read = df_pd_main_datasets_never_read[[
         "dataset", "max_dataset_size_in_rses(TB)", "min_dataset_size_in_rses(TB)", "avg_dataset_size_in_rses(TB)",
-        "last_create_time_of_dataset_in_all_rses", "RSEs",
+        "last_create_time_of_dataset_in_all_rses", "RSE(s)",
     ]]
     # Filter datasets that their min datset size in RSE is less than 0.4TB
     df_pd_main_datasets_never_read = df_pd_main_datasets_never_read \
@@ -545,9 +545,9 @@ def prep_pd_df_never_read_for_main_html(df_pd_main_datasets_never_read):
     # Rename and return
     return df_pd_main_datasets_never_read.rename(
         columns={
-            "max_dataset_size_in_rses(TB)": "max size in rses(TB)",
-            "min_dataset_size_in_rses(TB)": "min size in rses(TB)",
-            "avg_dataset_size_in_rses(TB)": "avg size in rses(TB)",
+            "max_dataset_size_in_rses(TB)": "max size in RSEs [TB]",
+            "min_dataset_size_in_rses(TB)": "min size in RSEs [TB]",
+            "avg_dataset_size_in_rses(TB)": "avg size in RSEs [TB]",
             "last_create_time_of_dataset_in_all_rses": "last creation in all RSEs UTC",
         }
     ).copy(deep=True)
@@ -563,14 +563,14 @@ def prep_pd_df_not_read_since_for_sub_htmls(df_pd_sub_not_read_since):
     # Rename
     df_pd_sub_not_read_since = df_pd_sub_not_read_since.rename(
         columns={
-            'dataset_size_in_rse_tb': "dataset size(TB)",
+            'dataset_size_in_rse_tb': "dataset size [TB]",
             '#distinct_files_of_dataset_in_rse': "number of distinct files of dataset",
             'last_access_time_of_dataset_in_rse': "last access msec UTC",
         }
     )
     # Change order
     df_pd_sub_not_read_since = df_pd_sub_not_read_since[[
-        "dataset", "RSE name", "dataset size(TB)", "last access UTC", "last access msec UTC",
+        "dataset", "RSE name", "dataset size [TB]", "last access UTC", "last access msec UTC",
         "number of distinct files of dataset",
     ]]
 
@@ -585,7 +585,7 @@ def prep_pd_df_not_read_since_for_main_html(df_pd_main_not_read_since):
     # Filter columns
     df_pd_main_not_read_since = df_pd_main_not_read_since[[
         "dataset", "max_dataset_size_in_rses(TB)", "min_dataset_size_in_rses(TB)", "avg_dataset_size_in_rses(TB)",
-        "last_access_time_of_dataset_in_all_rses", "RSEs",
+        "last_access_time_of_dataset_in_all_rses", "RSE(s)",
     ]]
     #
     df_pd_main_not_read_since = df_pd_main_not_read_since \
@@ -598,9 +598,9 @@ def prep_pd_df_not_read_since_for_main_html(df_pd_main_not_read_since):
     # Rename and return
     return df_pd_main_not_read_since.rename(
         columns={
-            "max_dataset_size_in_rses(TB)": "max size in rses(TB)",
-            "min_dataset_size_in_rses(TB)": "min size in rses(TB)",
-            "avg_dataset_size_in_rses(TB)": "avg size in rses(TB)",
+            "max_dataset_size_in_rses(TB)": "max size in RSEs [TB]",
+            "min_dataset_size_in_rses(TB)": "min size in RSEs [TB]",
+            "avg_dataset_size_in_rses(TB)": "avg size in RSEs [TB]",
             "last_access_time_of_dataset_in_all_rses": "last access in all RSEs",
         }
     ).copy(deep=True)
@@ -778,7 +778,7 @@ def main(static_html_dir=None, output_dir=None, rses_pickle=None, min_tb_limit=N
                                         sub_folder=f"rses_{n_months_filter}_months",
                                         main_html_file_name=f"datasets_not_read_since_{n_months_filter}_months.html",
                                         min_tb_limit=min_tb_limit,
-                                        title_replace_str=f"are not read since {n_months_filter} months",
+                                        title_replace_str=f"have not been read since {n_months_filter} months",
                                         )
 
     # Create htmls for datasets never read
@@ -796,7 +796,7 @@ def main(static_html_dir=None, output_dir=None, rses_pickle=None, min_tb_limit=N
                                 sub_folder="rses_never",
                                 main_html_file_name=f"datasets_never_read.html",
                                 min_tb_limit=min_tb_limit,
-                                title_replace_str=f"never read",
+                                title_replace_str=f"were never read",
                                 )
 
 
