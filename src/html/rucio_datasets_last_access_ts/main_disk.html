@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.20/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.4/css/dataTables.bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.2.2/css/buttons.bootstrap.min.css">
+
+<style>
+    body {
+	    font-family: 'Trebuchet MS', sans-serif;
+    }
+    #dataframe_filter input{
+      border: 5px solid Tomato;
+      width: 400px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    /* dataset */
+    table tr td:nth-child(1) {
+        text-align: left;
+    }
+    /* max */
+    table tr td:nth-child(2) {
+        text-align: right;
+        white-space:nowrap;
+    }
+    /* min */
+    table tr td:nth-child(3) {
+        text-align: right;
+        white-space:nowrap;
+    }
+    /* avg */
+    table tr td:nth-child(4) {
+        text-align: right;
+        white-space:nowrap;
+    }
+    /* sum */
+    table tr td:nth-child(5) {
+        text-align: right;
+        white-space:nowrap;
+    }
+    /* time */
+    table tr td:nth-child(6) {
+        text-align: right;
+        white-space:nowrap;
+    }
+    /* RSEs */
+    table tr td:nth-child(7) {
+        background-color: #FFFDEA;
+        width: 15%;
+    }
+    /* details */
+    table tr td:nth-child(8) {
+        white-space:nowrap;
+    }
+    /* button */
+    div.dt-buttons {
+      float: right;
+    }
+</style>
+</head>
+<body>
+    <div class="cms">
+        <img src="https://cds.cern.ch/record/1306150/files/cmsLogo_image.jpg"
+            alt="CMS" style="width: 5%; float:left">
+        <h3 style="width: 100%;">
+            Rucio __PAGE_TITLE__ and have size greater than __TB_LIMIT__TB in disk
+        </h3>
+        <small>Last Update: __UPDATE_TIME__ UTC</small>
+    </div>
+    <div class="w3-container" style="margin-left: 3%;">
+        <button style="font-size: 14px; background-color: white; color: black; border: 3px solid #f9ccac;">
+            <a href="https://monit-grafana.cern.ch/d/TLCEgzb7k/rucio-monitoring-static-web-pages?orgId=11"> < Back to main page</a>
+        </button>
+        <button style="font-size: 14px; background-color: white; color: black; border: 3px solid #f9ccac;" onclick="explainFunction()">How to interpret this table</button>
+    </div>
+
+    <div id="explanations" style="display: none; margin-top: 2%;">
+        Source code: <a href="https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/rucio_datasets_last_access_ts.py">
+               	CMSSpark/rucio_datasets_last_access_ts.py</a>
+        <pre>
+
+---- Assumptions ----
+    Why Assumptions:
+        - It's certain that final result is not 100% correct with below assumptions, but without below assumptions, ...
+          ... it's almost impossible to produce any result.
+
+    Assumptions for datasets not accessed since N months:
+        1. Ignore files which do not have: dataset name, accessed_at, size
+        2. Datasets are calculated even if they have single file with access time and other have NULL acccess time
+        3. Get only datasets with desired size to filter so many small datasets
+        4. We may miss some datasets even if they obey the above assumptions, ...
+          ... because of filtering the last access time in all RSEs. An example for dataset X:
+          - in RSE A: last access is 14 months ago, in RSE B: last access is 1 months ago
+          - dataset X will not appear in the main page because it's overall last access is 1 month ago.
+
+    Assumptions for datasets never read:
+        1. Ignore files which do not have: dataset name, accessed_at, size
+        3. Get only datasets such that all files of it has NULL access time
+        4. Get only datasets with desired size to filter so many small datasets
+
+---- DBS vs Rucio terminology ---
+        - file:    [F]ile in Rucio
+        - block:   [D]ataset in Rucio
+        - dataset: [C]ontainer in Rucio
+    !!!We used DBS terminology in this script otherwise specified implicitly!!
+
+---- Rucio and DBS tables and what we assumed to get ----
+    --  Data origins in Rucio tables: --
+       - ACCESSED_AT (last access time)                     : greatest of DIDS' and REPLICAS' ACCESSED_AT
+       - CREATED_AT (creation time)                         : greatest of DIDS' and REPLICAS' CREATED_AT
+       - BYTES (file size)                                  : DIDS and REPLICAS (equal for same files)
+       - RSE ID - FILE relation                             : comes from REPLICAS
+       - file-dataset membership/ownership                  : comes from DBS' FILES and DATASETS tables
+
+    1. CMS_DBS3_PROD_GLOBAL.DATASETS and FILES
+        Includes file dataset relationship
+        FILES provides dataset id of file
+        DATASETS provides dataset id and dataset name
+        Used columns:
+            FILES: f_logical_file_name, f_dataset_id
+            DATASETS: d_dataset_id, d_dataset
+
+    2. CMS_RUCIO_PROD.DIDS
+        Provides all files in CMS scope
+        Provides file last access time
+        Provides file size (compatibility with Rucio REPLICAS table is checked and they provide same values)
+        Only files are selected: DID_TYPE=F
+        Used columns: SCOPE, DID_TYPE, NAME, ACCESSED_AT, BYTES
+
+    3. CMS_RUCIO_PROD.REPLICAS
+        Provides files that exist in Disk RSEs, in CMS scope.
+        Provides file sizes in in Disk RSEs (same with DIDS)
+        Provides file last access time
+        Only Disk RSE_IDs are selected
+        Used columns: SCOPE, RSE_ID BYTES NAME
+
+---- Logical Steps ----
+    Steps of datasets not read since N months:
+        - Main aim is to get Datasets, their RSEs, last access times and sizes in RSEs.
+        - All filters depends on above assumptions
+        - Steps:
+            1. Get files in disk RSEs, their accessed_at(DIDS and REPLICAS) and size (DIDS and REPLICAS)
+            2. Get dataset names of files in RSEs from DBS's FILES and DATASETS join
+            3. Calculate last access time of datasets (max accessed_at of all files)
+            4. Get datasets' max,min,avg sizes in all RSEs, the RSEs that it belongs to
+            5. Create sub htmls for details of dataset in a single RSE
+
+    Steps of datasets never read:
+        - Mostly same for the steps in "datasets not read since N months"
+        - Different filtering is used as explained in the assumptions
+        - Instead of accessed_at, created_at provided in the result
+
+Reference
+ - Sqoop jobs that dumps Rucio tables to hdfs: https://github.com/dmwm/CMSKubernetes/tree/master/docker/sqoop/scripts
+
+        </pre>
+    </div>
+    <div class="container" style="display:block; width:100%">
+
+
+    ____MAIN_BLOCK____
+
+
+    </div>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/1.11.4/js/jquery.dataTables.min.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/1.11.4/js/dataTables.bootstrap.min.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.2.2/js/dataTables.buttons.min.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.bootstrap.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.html5.min.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.print.min.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.colVis.min.js"></script>
+    <script>
+        function explainFunction() {
+          var x = document.getElementById("explanations");
+          if (x.style.display === "none") {
+            x.style.display = "block";
+          } else {
+            x.style.display = "none";
+          }
+        }
+    </script>
+    <script>
+        $(document).ready(function () {
+            //
+            function toggleDetails(){
+                var tr = $(this).closest("tr");
+                sel_name = $(tr).find("td a.selname").text()
+                dataset_name = $(tr).find("td a.dataset").text()
+                d_class="details-show"
+                row = dt.row(tr)
+                if(!row.child.isShown())
+                {
+                    // html file name of a dataset name includes slash replaced with -_-,
+                    // so use that convention to reach fil name from dataset name
+                    sel_name_replaced = sel_name.replaceAll(/\//g, "-_-");
+                    $(tr).addClass(d_class)
+                    row.child("<div id='details_"+sel_name_replaced+"'>loading</div>").show()
+                    row.child("<div id='details_"+sel_name_replaced+"'>loading</div>").show()
+                    folder = "__SUB_FOLDER_NAME__"
+                    $.get(folder+"/dataset_"+sel_name_replaced+".html", function (response){
+                        var html = response;
+                        $("#details_"+sel_name_replaced).html(html);
+                    });
+                }else{
+                    $(tr).removeClass(d_class)
+                    row.child.hide()
+                }
+            }
+            $('table#dataframe thead tr').append('<th>Details</th>');
+            $('table#dataframe tbody tr').append('<td><button class="btn-details" style="border-color:#E5B6B6;">Show details</button></td>');
+            //
+            var url = new URL(window.location.href);
+            var searchString = url.searchParams.get("search");
+            if (searchString == null){
+              searchString = ''
+            }
+            var dt = $('#dataframe').DataTable( {
+                // To set total row to first
+                "orderCellsTop": true,
+                "dom": "fBrtpli",
+                "order": [[ 3, "desc" ]],
+                "pageLength" : 10,
+                "scrollX": false,
+                "oSearch": { "sSearch": searchString },
+                language: {
+                    search: "_INPUT_",
+                    searchPlaceholder: "Search by Dataset or RSE...",
+                },
+                buttons: [
+                  'copy',
+                  'excel',
+                  'pdf',
+                  'colvis',
+                  {
+                        text: 'Copy search link to clipboard',
+                        action: function ( e, dt, node, config ) {
+                          url.searchParams.set('search', dt.search());
+                          //window.location.replace(url.href);
+                          navigator.clipboard.writeText(url.href);
+                        }
+                    }
+                ]
+            });
+            //
+            $('table#dataframe tbody tr').on('click','td button.btn-details',toggleDetails)
+            //
+            dt.on('draw', function(){
+                $('table#dataframe tbody tr').off('click').on('click','td button.btn-details',toggleDetails)
+            })
+            dt.buttons().container().appendTo( '#example_wrapper .col-sm-4:eq(0)' );
+            //
+        });
+    </script>
+</body>
+<!-- final -->
+</html>
