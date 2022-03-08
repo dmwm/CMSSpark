@@ -57,7 +57,7 @@ if ! klist -s; then
 fi
 
 # Arg 1
-OUTPUT_DIR="${1:-/eos/user/c/cmsmonit/www/rucio}"
+OUTPUT_DIR="${1:-/eos/user/c/cmsmonit/www/rucio_datasets}"
 STATIC_HTML_DIR="$script_dir"/../src/html/rucio_datasets_last_access_ts
 RSES_PICKLE_DIR="$script_dir"/../static/rucio/rses.pickle
 
@@ -95,7 +95,7 @@ main() {
         "$script_dir/../src/python/CMSSpark/rucio_datasets_last_access_ts.py" "${py_input_args[@]}"
 }
 
-echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Run for Disk"
+#echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Run for Disk"
 main --disk 1 >>"$LOG_FILE".disk.log 2>&1
-echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Run for Tape"
+#echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Run for Tape"
 main --tape 10 >>"$LOG_FILE".tape.log 2>&1
