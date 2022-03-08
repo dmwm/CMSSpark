@@ -33,7 +33,7 @@ from pyspark.sql.types import (
 from CMSSpark import schemas as cms_schemas
 
 TODAY = datetime.today().strftime('%Y-%m-%d')
-HDFS_RUCIO_DIDS = '/project/awg/cms/rucio_dids/{}/part*.avro'.format(TODAY)
+HDFS_RUCIO_DIDS = '/project/awg/cms/rucio/{}/dids/part*.avro'.format(TODAY)
 HDFS_RUCIO_REPLICAS = '/project/awg/cms/rucio/{}/replicas/part*.avro'.format(TODAY)
 HDFS_DBS_FILES = '/project/awg/cms/CMS_DBS3_PROD_GLOBAL/old/FILES/part-m-00000'
 HDFS_DBS_DATASETS = '/project/awg/cms/CMS_DBS3_PROD_GLOBAL/old/DATASETS/part-m-00000'
