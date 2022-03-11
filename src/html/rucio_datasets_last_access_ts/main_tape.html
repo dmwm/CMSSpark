@@ -66,7 +66,7 @@
         <img src="https://cds.cern.ch/record/1306150/files/cmsLogo_image.jpg"
             alt="CMS" style="width: 5%; float:left">
         <h3 style="width: 100%;">
-            Rucio __PAGE_TITLE__ and have size greater than __TB_LIMIT__TB in tape [in-review]
+            Rucio __PAGE_TITLE__ and have size greater than __TB_LIMIT__TB on tape [in-review]
         </h3>
         <small>Last Update: __UPDATE_TIME__ UTC</small>
     </div>
@@ -131,8 +131,8 @@
         Used columns: SCOPE, DID_TYPE, NAME, ACCESSED_AT, BYTES
 
     3. CMS_RUCIO_PROD.REPLICAS
-        Provides files that exist in Tape RSEs, in CMS scope.
-        Provides file sizes in in Tape RSEs (same with DIDS)
+        Provides files that exist on Tape RSEs, in CMS scope.
+        Provides file sizes on Tape RSEs (same with DIDS)
         Provides file last access time
         Only Tape RSE_IDs are selected
         Used columns: SCOPE, RSE_ID BYTES NAME
@@ -142,7 +142,7 @@
         - Main aim is to get Datasets, their RSEs, last access times and sizes in RSEs.
         - All filters depends on above assumptions
         - Steps:
-            1. Get files in Tape RSEs, their accessed_at(DIDS and REPLICAS) and size (DIDS and REPLICAS)
+            1. Get files on Tape RSEs, their accessed_at(DIDS and REPLICAS) and size (DIDS and REPLICAS)
             2. Get dataset names of files in RSEs from DBS's FILES and DATASETS join
             3. Calculate last access time of datasets (max accessed_at of all files)
             4. Get datasets' max,min,avg sizes in all RSEs, the RSEs that it belongs to
