@@ -91,10 +91,10 @@
         1. Ignore files which do not have: dataset name, accessed_at, size
         2. Datasets are calculated even if they have single file with access time and other have NULL acccess time
         3. Get only datasets with desired size to filter so many small datasets
-        4. We may miss some datasets even if they obey the above assumptions, ...
-          ... because of filtering the last access time in all RSEs. An example for dataset X:
-          - in RSE A: last access is 14 months ago, in RSE B: last access is 1 months ago
-          - dataset X will not appear in the main page because it's overall last access is 1 month ago.
+        4. Only datasets which are not accessed since N months in !all RSEs! will be appear in the main page.
+            To be clear, an example for dataset X:
+          - in RSE A: last access of X is 14 months ago, in RSE B: last access of X is 1 months ago
+          - dataset X will not appear in the main page because it's overall last access in all RSEs is 1 month ago.
 
     Assumptions for datasets never read:
         1. Ignore files which do not have: dataset name, accessed_at, size
