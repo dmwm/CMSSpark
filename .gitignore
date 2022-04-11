@@ -79,7 +79,7 @@ celerybeat-schedule
 .env
 
 # virtualenv
-venv/
+venv*
 ENV/
 
 # Spyder project settings
@@ -110,3 +110,9 @@ part-*
 
 # Default log directory
 logs
+
+# Zip files
+*.zip
+
+# AMQ credentials
+creds-prod.json
