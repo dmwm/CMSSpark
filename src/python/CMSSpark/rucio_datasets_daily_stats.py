@@ -9,8 +9,12 @@
 #    - Specific branch of dmwm/CMSMonitoring will be provided with spark-submit as zip file
 #    - creds json file should be provided which contains AMQ and MONIT credentials and configurations
 #
-# Ref: https://github.com/vkuznet/log-clustering/blob/master/workflow/workflow.py
-# Ref: https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/cern_monit.py
+# Assumptions:
+#    - No Scope filter, assumed all of them is of cms scope
+#
+# References:
+#   - https://github.com/vkuznet/log-clustering/blob/master/workflow/workflow.py
+#   - https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/cern_monit.py
 
 import json
 import logging
@@ -20,13 +24,15 @@ import time
 from datetime import datetime, timezone
 
 import click
-from pyspark import SparkContext, SparkFiles
+from pyspark import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, lit, lower, when,
     count as _count,
+    first as _first,
     hex as _hex,
     max as _max,
+    split as _split,
     sum as _sum,
 )
 from pyspark.sql.types import (
@@ -39,16 +45,11 @@ except ImportError:
     print("ERROR: Could not import StompAMQ")
     sys.exit(1)
 
-BASE_HDFS_DIR = f"/tmp/cmssqoop/rucio_daily_stats-{datetime.utcnow().strftime('%Y-%m-%d')}"
-HDFS_RUCIO_CONTENTS = BASE_HDFS_DIR + '/CONTENTS/part*.avro'
-HDFS_RUCIO_REPLICAS = BASE_HDFS_DIR + '/REPLICAS/part*.avro'
-HDFS_RUCIO_RSES = BASE_HDFS_DIR + '/RSES/part*.avro'
-HDFS_DBS_FILES = BASE_HDFS_DIR + '/FILES/part*.avro'
-HDFS_DBS_DATASETS = BASE_HDFS_DIR + '/DATASETS/part*.avro'
-HDFS_DBS_DT = BASE_HDFS_DIR + '/DATA_TIERS/part*.avro'
-HDFS_DBS_PG = BASE_HDFS_DIR + '/PHYSICS_GROUPS/part*.avro'
-HDFS_DBS_AE = BASE_HDFS_DIR + '/ACQUISITION_ERAS/part*.avro'
-HDFS_DBS_DAT = BASE_HDFS_DIR + '/DATASET_ACCESS_TYPES/part*.avro'
+TABLES = ['REPLICAS', 'CONTENTS', 'RSES', 'FILES', 'DATASETS', 'DATA_TIERS', 'PHYSICS_GROUPS',
+          'ACQUISITION_ERAS', 'DATASET_ACCESS_TYPES']
+
+# Used to set string value for "is dataset from rucio or dbs"
+BOOL_STR = {True: 'True', False: 'False'}
 
 # Specifies that individually for Rucio and DBS if they have the information of all files of that dataset.
 #   all: it(Rucio or DBS) has all files of that dataset
@@ -56,156 +57,270 @@ HDFS_DBS_DAT = BASE_HDFS_DIR + '/DATASET_ACCESS_TYPES/part*.avro'
 #   none: it(Rucio or DBS) does not have any files of that dataset
 IS_ALL_DATASET_FILES_EXISTS = {'a': 'all', 'p': 'partial', 'n': 'none'}
 
+# Used to set dataset is locked or dynamic
+IS_DATASET_LOCKED = {True: 'locked', False: 'dynamic'}
+
 # Null string type column values will be replaced with
 NULL_STR_TYPE_COLUMN_VALUE = 'UNKNOWN'
 
-# Fill null columns of string type. Reason:
+# To fill null columns of string type. Reason:
 #   {"find": "terms", "field": "data.data_tier_name"} kind of ES queries do not return Null values.
-STR_TYPE_COLUMNS = ['dataset', 'prep_id', 'data_tier_name', 'physics_group_name', 'acquisition_era_name',
-                    'dataset_access_type', 'rse_type']
+STR_TYPE_COLUMNS = ['all_f_in_dbs', 'all_f_in_rucio', 'rucio_has_ds_name', 'dbs_has_ds_name', 'rucio_is_d_locked',
+                    'dbs_is_d_locked', 'joint_is_d_locked', 'dataset_id', 'is_dataset_valid', 'primary_ds_id',
+                    'processed_ds_id', 'prep_id', 'data_tier_id', 'data_tier_name', 'physics_group_id',
+                    'physics_group_name', 'acquisition_era_id', 'acquisition_era_name', 'dataset_access_type_id',
+                    'dataset_access_type', 'rse', 'rse_type', 'rse_tier', 'rse_country', 'rse_kind', ]
 
 
-def get_spark_session(pyfiles=None):
+def get_spark_session():
     """Get or create the spark context and session."""
     sc = SparkContext(appName="cms-monitoring-rucio-daily-stats")
-    if pyfiles:
-        for f in pyfiles:
-            sc.addPyFile(SparkFiles.get(f))
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
-def create_main_df(spark):
-    # Get RSES id, name and type from RSES table dump
-    df_rses = spark.read.format("com.databricks.spark.avro").load(HDFS_RUCIO_RSES) \
-        .withColumn('replica_rse_id', lower(_hex(col('ID')))) \
-        .withColumnRenamed('RSE', 'rse') \
-        .withColumnRenamed('RSE_TYPE', 'rse_type') \
-        .select(['replica_rse_id', 'rse', 'rse_type'])
-    #
+def create_main_df(spark, hdfs_paths):
     # UTC timestamp of start hour of spark job
     ts_current_hour = int(datetime.utcnow().replace(minute=0, second=0, microsecond=0,
                                                     tzinfo=timezone.utc).timestamp() * 1000)
-    #
+    # -----------------------------------------------------------------------------------------------------------------
+    #                -- ==================  Prepare main Spark dataframes  ===========================
+
+    # Get RSES id, name, type, tier, country, kind from RSES table dump
+    df_rses = spark.read.format("com.databricks.spark.avro").load(hdfs_paths['RSES']) \
+        .filter(col('DELETED_AT').isNull()) \
+        .withColumn('replica_rse_id', lower(_hex(col('ID')))) \
+        .withColumnRenamed('RSE', 'rse') \
+        .withColumnRenamed('RSE_TYPE', 'rse_type') \
+        .withColumn('rse_tier', _split(col('rse'), '_').getItem(0)) \
+        .withColumn('rse_country', _split(col('rse'), '_').getItem(1)) \
+        .withColumn('rse_kind',
+                    when(col("rse").endswith('Temp'), 'temp')
+                    .when(col("rse").endswith('Test'), 'test')
+                    .otherwise('prod')
+                    ) \
+        .select(['replica_rse_id', 'rse', 'rse_type', 'rse_tier', 'rse_country', 'rse_kind'])
+
     # Rucio Dataset(D) refers to dbs block, so we used DBS terminology from the beginning
-    df_contents_f_to_b = spark.read.format("com.databricks.spark.avro").load(HDFS_RUCIO_CONTENTS) \
+    df_contents_f_to_b = spark.read.format("com.databricks.spark.avro").load(hdfs_paths['CONTENTS']) \
+        .filter(col("SCOPE") == "cms") \
         .filter(col("DID_TYPE") == "D") \
         .filter(col("CHILD_TYPE") == "F") \
         .withColumnRenamed("NAME", "block") \
         .withColumnRenamed("CHILD_NAME", "file") \
-        .select(["scope", "block", "file"])
-    #
+        .select(["block", "file"])
+
     # Rucio Dataset(D) refers to dbs block; Rucio Container(C) refers to dbs dataset.
     # We used DBS terminology from the beginning
-    df_contents_b_to_d = spark.read.format("com.databricks.spark.avro").load(HDFS_RUCIO_CONTENTS) \
+    df_contents_b_to_d = spark.read.format("com.databricks.spark.avro").load(hdfs_paths['CONTENTS']) \
+        .filter(col("SCOPE") == "cms") \
         .filter(col("DID_TYPE") == "C") \
         .filter(col("CHILD_TYPE") == "D") \
         .withColumnRenamed("NAME", "dataset") \
         .withColumnRenamed("CHILD_NAME", "block") \
-        .select(["scope", "dataset", "block"])
-    #
+        .select(["dataset", "block"])
+
     # Get file to dataset map
-    df_contents_f_d = df_contents_f_to_b.join(df_contents_b_to_d, ["scope", "block"], how="left") \
-        .withColumnRenamed('dataset', 'contents_dataset') \
+    df_contents_ds_files = df_contents_f_to_b.join(df_contents_b_to_d, ["block"], how="left") \
         .filter(col('file').isNotNull()) \
-        .filter(col('contents_dataset').isNotNull()) \
-        .select(["contents_dataset", "file"])
-    #
-    dbs_files = spark.read.format('avro').load(HDFS_DBS_FILES) \
+        .filter(col('dataset').isNotNull()) \
+        .withColumnRenamed('dataset', 'contents_dataset') \
+        .withColumn('is_d_name_from_rucio', lit(BOOL_STR[True])) \
+        .select(["contents_dataset", "file", "is_d_name_from_rucio"])
+
+    dbs_files = spark.read.format('avro').load(hdfs_paths['FILES']) \
         .withColumnRenamed('LOGICAL_FILE_NAME', 'file') \
         .withColumnRenamed('DATASET_ID', 'dbs_file_ds_id') \
         .withColumnRenamed('FILE_SIZE', 'dbs_file_size') \
         .select(['file', 'dbs_file_ds_id', 'dbs_file_size'])
-    #
-    dbs_datasets = spark.read.format('avro').load(HDFS_DBS_DATASETS)
-    #
-    df_dbs_f_d = dbs_files.join(dbs_datasets.select(['DATASET_ID', 'DATASET']),
-                                dbs_files.dbs_file_ds_id == dbs_datasets.DATASET_ID, how='left') \
+
+    dbs_datasets = spark.read.format('avro').load(hdfs_paths['DATASETS'])
+
+    df_dbs_ds_files = dbs_files.join(dbs_datasets.select(['DATASET_ID', 'DATASET']),
+                                     dbs_files.dbs_file_ds_id == dbs_datasets.DATASET_ID, how='left') \
+        .filter(col('file').isNotNull()) \
+        .filter(col('DATASET').isNotNull()) \
         .withColumnRenamed('dbs_file_ds_id', 'dbs_dataset_id') \
         .withColumnRenamed('DATASET', 'dbs_dataset') \
-        .select(['file', 'dbs_dataset']) \
-        .filter(col('file').isNotNull()) \
-        .filter(col('dbs_dataset').isNotNull())
-    #
-    df_replicas = spark.read.format('avro').load(HDFS_RUCIO_REPLICAS) \
+        .withColumn('is_d_name_from_dbs', lit(BOOL_STR[True])) \
+        .select(['file', 'dbs_dataset', 'is_d_name_from_dbs'])
+
+    # Prepare replicas
+    df_replicas = spark.read.format('avro').load(hdfs_paths['REPLICAS']) \
+        .filter(col("SCOPE") == "cms") \
         .withColumn('replica_rse_id', lower(_hex(col('RSE_ID')))) \
         .withColumn('replica_file_size', col('BYTES').cast(LongType())) \
         .withColumnRenamed('NAME', 'file') \
         .withColumnRenamed('ACCESSED_AT', 'replica_accessed_at') \
         .withColumnRenamed('CREATED_AT', 'replica_created_at') \
-        .select(['scope', 'file', 'replica_rse_id', 'replica_file_size', 'replica_accessed_at', 'replica_created_at'])
-    #
+        .withColumnRenamed('LOCK_CNT', 'lock_cnt') \
+        .withColumnRenamed('STATE', 'state') \
+        .select(['file', 'replica_rse_id', 'replica_file_size',
+                 'replica_accessed_at', 'replica_created_at', 'lock_cnt'])
+
     # Create enriched file df which adds dbs file size to replicas files. Left join select only replicas files
-    df_files_enr = df_replicas \
+    df_files_enriched_with_dbs = df_replicas \
         .join(dbs_files.select(['file', 'dbs_file_size']), ['file'], how='left') \
-        .select(['file', 'scope', 'replica_rse_id', 'replica_file_size', 'replica_accessed_at', 'replica_created_at',
-                 'dbs_file_size'])
-    #
+        .withColumn('joint_file_size',
+                    when(col('replica_file_size').isNotNull(), col('replica_file_size'))
+                    .when(col('dbs_file_size').isNotNull(), col('dbs_file_size'))
+                    ) \
+        .select(['file', 'replica_rse_id', 'replica_accessed_at', 'replica_created_at', 'lock_cnt',
+                 'replica_file_size', 'dbs_file_size', 'joint_file_size'])
+
+    # -----------------------------------------------------------------------------------------------------------------
+    #            -- ==================  only Rucio: Replicas and Contents  ======================= --
+
+    df_only_from_rucio = df_replicas \
+        .join(df_contents_ds_files, ['file'], how='left') \
+        .select(['contents_dataset', 'file', 'replica_rse_id', 'replica_file_size',
+                 'replica_accessed_at', 'replica_created_at', 'is_d_name_from_rucio', 'lock_cnt'])
+
+    # Use them in outer join
+    # _max(col('replica_accessed_at')).alias('rucio_last_accessed_at'),
+    # _max(col('replica_created_at')).alias('rucio_last_created_at'),
+
+    df_only_from_rucio = df_only_from_rucio \
+        .groupby(['replica_rse_id', 'contents_dataset']) \
+        .agg(_sum(col('replica_file_size')).alias('rucio_size'),
+             _count(lit(1)).alias('rucio_n_files'),
+             _sum(
+                 when(col('replica_accessed_at').isNull(), 0)
+                     .otherwise(1)
+             ).alias('rucio_n_accessed_files'),
+             _first(col("is_d_name_from_rucio")).alias("is_d_name_from_rucio"),
+             _sum(col('lock_cnt')).alias('rucio_locked_files')
+             ) \
+        .withColumn('rucio_is_d_locked',
+                    when(col('rucio_locked_files') > 0, IS_DATASET_LOCKED[True])
+                    .otherwise(IS_DATASET_LOCKED[False])
+                    ) \
+        .select(['contents_dataset', 'replica_rse_id', 'rucio_size', 'rucio_n_files', 'rucio_n_accessed_files',
+                 'is_d_name_from_rucio', 'rucio_locked_files', 'rucio_is_d_locked', ])
+
+    # -----------------------------------------------------------------------------------------------------------------
+    #             -- =================  only DBS: Replicas, Files, Datasets  ====================== --
+
+    # Of course only files from Replicas processed, select only dbs related fields
+    df_only_from_dbs = df_files_enriched_with_dbs \
+        .select(['file', 'replica_rse_id', 'dbs_file_size', 'replica_accessed_at', 'lock_cnt']) \
+        .join(df_dbs_ds_files, ['file'], how='left') \
+        .filter(col('dbs_dataset').isNotNull()) \
+        .select(['file', 'dbs_dataset', 'replica_rse_id', 'dbs_file_size', 'replica_accessed_at',
+                 'is_d_name_from_dbs', 'lock_cnt'])
+
+    df_only_from_dbs = df_only_from_dbs \
+        .groupby(['replica_rse_id', 'dbs_dataset']) \
+        .agg(_sum(col('dbs_file_size')).alias('dbs_size'),
+             _count(lit(1)).alias('dbs_n_files'),
+             _sum(
+                 when(col('replica_accessed_at').isNull(), 0)
+                     .otherwise(1)
+             ).alias('dbs_n_accessed_files'),
+             _first(col("is_d_name_from_dbs")).alias("is_d_name_from_dbs"),
+             _sum(col('lock_cnt')).alias('dbs_locked_files')
+             ) \
+        .withColumn('dbs_is_d_locked',
+                    when(col('dbs_locked_files') > 0, IS_DATASET_LOCKED[True])
+                    .otherwise(IS_DATASET_LOCKED[False])
+                    ) \
+        .select(['dbs_dataset', 'replica_rse_id', 'dbs_size', 'dbs_n_files', 'dbs_n_accessed_files',
+                 'is_d_name_from_dbs', 'dbs_locked_files', 'dbs_is_d_locked'])
+
     # Full outer join of Rucio and DBS to get all dataset-file maps
-    df_dataset_file_map_enr = df_contents_f_d.join(df_dbs_f_d, ['file'], how='full')
-    # df_dataset_file_enr.filter(col("contents_dataset").isNull() & col("dbs_dataset").isNull()).count()
-    # 1245 files do not have dataset name.
-    #
+    df_dataset_file_map_enr = df_contents_ds_files.join(df_dbs_ds_files, ['file'], how='full')
+
+    # -----------------------------------------------------------------------------------------------------------------
+    #               -- ======  check files do not have dataset name  ============ --
+
+    # Check Replicas files do not have dataset name in Contents, DBS or both
+    x = df_replicas.join(df_dataset_file_map_enr, ['file'], how='left') \
+        .select(['contents_dataset', 'dbs_dataset', 'file'])
+
+    y_contents = x.filter(col('contents_dataset').isNull())
+    z_dbs = x.filter(col('dbs_dataset').isNull())
+    t_both = x.filter(col('contents_dataset').isNull() & col('dbs_dataset').isNull())
+    print("[INFO] Replicas files do not have dataset name in Contents",
+          y_contents.select('file').distinct().count())
+    print("[INFO] Replicas files do not have dataset name in DBS",
+          z_dbs.select('file').distinct().count())
+    print("[INFO] Replicas files do not have dataset name neither in Contents nor DBS",
+          t_both.select('file').distinct().count())
+    del x, y_contents, z_dbs, t_both
+
+    # -----------------------------------------------------------------------------------------------------------------
+    #              -- ======  joint Rucio and DBS: Replicas, Contents, Files, Datasets  ============ --
+
+    # Main aim is to get all datasets of files
     df_dataset_file_map_enr = df_dataset_file_map_enr \
         .withColumn("dataset",
                     when(col("contents_dataset").isNotNull(), col("contents_dataset"))
                     .when(col("dbs_dataset").isNotNull(), col("dbs_dataset"))
                     ) \
-        .withColumn("is_ds_from_dbs", when(col("dbs_dataset").isNotNull(), 1).otherwise(0)) \
-        .withColumn("is_ds_from_rucio", when(col("contents_dataset").isNotNull(), 1).otherwise(0)) \
+        .withColumn("is_ds_from_rucio", when(col("is_d_name_from_rucio").isNotNull(), 1).otherwise(0)) \
+        .withColumn("is_ds_from_dbs", when(col("is_d_name_from_dbs").isNotNull(), 1).otherwise(0)) \
         .select(['dataset', 'file', 'is_ds_from_dbs', 'is_ds_from_rucio'])
-    # df_dataset_file_map_enr.select('file').distinct().count()
-    # df_dataset_file_map_enr.count()
-    #
-    df_files_w_ds = df_files_enr \
-        .join(df_dataset_file_map_enr, ['file'], how='left')
-    # df_files_w_ds.filter(col("dataset").isNull()).count()
-    #
-    # df_files_w_ds.groupBy('file', 'replica_rse_id', 'dataset').count().filter("count > 1").head()
-    # NO data, we're good. It means 1 file is only 1 dataset-rse couple
-    #
-    df_files_w_ds = df_files_w_ds.filter(col('dataset').isNotNull())
-    df_main = df_files_w_ds \
+
+    df_joint_ds_files = df_files_enriched_with_dbs \
+        .select(['file', 'replica_rse_id', 'replica_accessed_at', 'replica_created_at',
+                 'joint_file_size', 'lock_cnt']) \
+        .join(df_dataset_file_map_enr, ['file'], how='left') \
+        .filter(col('dataset').isNotNull()) \
+        .select(['dataset', 'file', 'is_ds_from_dbs', 'is_ds_from_rucio',
+                 'replica_rse_id', 'replica_accessed_at', 'replica_created_at', 'joint_file_size', 'lock_cnt'])
+
+    df_joint_main = df_joint_ds_files \
         .groupby(['replica_rse_id', 'dataset']) \
-        .agg(_sum(col('replica_file_size')).alias('d_rucio_size'),
-             _sum(col('dbs_file_size')).alias('d_dbs_size'),
-             _max(col('replica_accessed_at')).alias('d_last_accessed_at'),
-             _max(col('replica_created_at')).alias('d_last_created_at'),
-             _sum(col('is_ds_from_dbs')).alias('n_files_in_dbs'),
-             _sum(col('is_ds_from_rucio')).alias('n_files_in_rucio'),
-             _count(lit(1)).alias('n_files'),
+        .agg(_sum(col('joint_file_size')).alias('joint_size'),
+             _max(col('replica_accessed_at')).alias('joint_last_accessed_at'),
+             _max(col('replica_created_at')).alias('joint_last_created_at'),
+             _sum(col('is_ds_from_dbs')).alias('joint_dbs_n_files'),
+             _sum(col('is_ds_from_rucio')).alias('joint_rucio_n_files'),
+             _count(lit(1)).alias('joint_n_files'),
              _sum(
                  when(col('replica_accessed_at').isNull(), 0).otherwise(1)
-             ).alias('n_accessed_files')
+             ).alias('joint_n_accessed_files'),
+             _sum(col('lock_cnt')).alias('joint_locked_files')
              ) \
         .withColumn('all_f_in_dbs',
-                    when(col('n_files_in_dbs') == 0, IS_ALL_DATASET_FILES_EXISTS['n'])
-                    .when(col('n_files_in_dbs') == col('n_files'), IS_ALL_DATASET_FILES_EXISTS['a'])
-                    .when(col('n_files_in_dbs') > 0, IS_ALL_DATASET_FILES_EXISTS['p'])
+                    when((col('joint_dbs_n_files') == 0) & (col('joint_dbs_n_files').isNull()),
+                         IS_ALL_DATASET_FILES_EXISTS['n'])
+                    .when(col('joint_dbs_n_files') == col('joint_n_files'), IS_ALL_DATASET_FILES_EXISTS['a'])
+                    .when(col('joint_dbs_n_files') > 0, IS_ALL_DATASET_FILES_EXISTS['p'])
                     ) \
         .withColumn('all_f_in_rucio',
-                    when(col('n_files_in_rucio') == 0, IS_ALL_DATASET_FILES_EXISTS['n'])
-                    .when(col('n_files_in_rucio') == col('n_files'), IS_ALL_DATASET_FILES_EXISTS['a'])
-                    .when(col('n_files_in_rucio') > 0, IS_ALL_DATASET_FILES_EXISTS['p'])
+                    when((col('joint_rucio_n_files') == 0) & (col('joint_rucio_n_files').isNull()),
+                         IS_ALL_DATASET_FILES_EXISTS['n'])
+                    .when(col('joint_rucio_n_files') == col('joint_n_files'), IS_ALL_DATASET_FILES_EXISTS['a'])
+                    .when(col('joint_rucio_n_files') > 0, IS_ALL_DATASET_FILES_EXISTS['p'])
                     ) \
+        .withColumn('joint_is_d_locked',
+                    when(col('joint_locked_files') > 0, IS_DATASET_LOCKED[True])
+                    .otherwise(IS_DATASET_LOCKED[False])
+                    ) \
+        .withColumnRenamed("replica_rse_id", "rse_id") \
         .select(['dataset',
-                 'replica_rse_id',
-                 'd_rucio_size',
-                 'd_dbs_size',
-                 'd_last_accessed_at',
-                 'd_last_created_at',
-                 'n_files',
-                 'n_accessed_files',
-                 'n_files_in_dbs',
-                 'n_files_in_rucio',
+                 'rse_id',
+                 'joint_size',
+                 'joint_last_accessed_at',
+                 'joint_last_created_at',
+                 'joint_dbs_n_files',
+                 'joint_rucio_n_files',
+                 'joint_n_files',
+                 'joint_n_accessed_files',
                  'all_f_in_dbs',
                  'all_f_in_rucio',
+                 'joint_locked_files',
+                 'joint_is_d_locked'
                  ])
+    # -----------------------------------------------------------------------------------------------------------------
+    #          -- ============  Dataset enrichment with Dataset tags  ============ --
+
     # Enrich dbs dataset with names from id properties of other tables
-    dbs_data_tiers = spark.read.format('avro').load(HDFS_DBS_DT)
-    dbs_physics_group = spark.read.format('avro').load(HDFS_DBS_PG)
-    dbs_acquisition_era = spark.read.format('avro').load(HDFS_DBS_AE)
-    dbs_dataset_access_type = spark.read.format('avro').load(HDFS_DBS_DAT)
-    #
+    dbs_data_tiers = spark.read.format('avro').load(hdfs_paths['DATA_TIERS'])
+    dbs_physics_group = spark.read.format('avro').load(hdfs_paths['PHYSICS_GROUPS'])
+    dbs_acquisition_era = spark.read.format('avro').load(hdfs_paths['ACQUISITION_ERAS'])
+    dbs_dataset_access_type = spark.read.format('avro').load(hdfs_paths['DATASET_ACCESS_TYPES'])
+
     dbs_datasets_enr = dbs_datasets \
         .join(dbs_data_tiers, ['data_tier_id'], how='left') \
         .join(dbs_physics_group, ['physics_group_id'], how='left') \
@@ -216,21 +331,56 @@ def create_main_df(spark):
                  'physics_group_id', 'physics_group_name',
                  'acquisition_era_id', 'acquisition_era_name',
                  'dataset_access_type_id', 'dataset_access_type'])
-    #
+
+    # -----------------------------------------------------------------------------------------------------------------
+    #                       -- ============  Main: join all  ============ --
+
+    cond_with_only_rucio = [df_joint_main.dataset == df_only_from_rucio.contents_dataset,
+                            df_joint_main.rse_id == df_only_from_rucio.replica_rse_id]
+
+    cond_with_only_dbs = [df_joint_main.dataset == df_only_from_dbs.dbs_dataset,
+                          df_joint_main.rse_id == df_only_from_dbs.replica_rse_id]
+
+    # Left joins: since df_join_main has outer join, should have all datasets of both Rucio and DBS
+    df_main = df_joint_main.join(df_only_from_rucio, cond_with_only_rucio, how='left').drop('replica_rse_id')
+    df_main = df_main.join(df_only_from_dbs, cond_with_only_dbs, how='left').drop('replica_rse_id')
+
+    df_main = df_main \
+        .withColumn('rucio_has_ds_name',
+                    when(col('is_d_name_from_rucio').isNotNull(), col('is_d_name_from_rucio'))
+                    .otherwise(BOOL_STR[False])) \
+        .withColumn('dbs_has_ds_name',
+                    when(col('is_d_name_from_dbs').isNotNull(), col('is_d_name_from_dbs'))
+                    .otherwise(BOOL_STR[False]))
+
+    # Remove unneeded columns by selecting specific ones
+    df_main = df_main.select(['dataset', 'rse_id', 'joint_size', 'joint_last_accessed_at',
+                              'joint_last_created_at', 'joint_dbs_n_files', 'joint_rucio_n_files', 'joint_n_files',
+                              'joint_n_accessed_files', 'all_f_in_dbs', 'all_f_in_rucio',
+                              'rucio_size', 'rucio_n_files', 'rucio_n_accessed_files', 'rucio_has_ds_name',
+                              'dbs_size', 'dbs_n_files', 'dbs_n_accessed_files', 'dbs_has_ds_name',
+                              'rucio_locked_files', 'rucio_is_d_locked', 'dbs_locked_files', 'dbs_is_d_locked',
+                              'joint_locked_files', 'joint_is_d_locked'])
+
     # Add DBS dataset enrichment's to main df
     df_main = df_main.join(dbs_datasets_enr, ['dataset'], how='left')
-    df_main = df_main.join(df_rses, ['replica_rse_id'], how='left').drop('replica_rse_id')
-    #
-    # UTC timestamp of mid of the day
+
+    # Add RSES name, type, tier, country, kind to dataset
+    df_main = df_main \
+        .join(df_rses, df_main.rse_id == df_rses.replica_rse_id, how='left') \
+        .drop('rse_id', 'replica_rse_id')
+
+    # UTC timestamp of start hour of the spark job
     df_main = df_main.withColumn('tstamp_hour', lit(ts_current_hour))
+
     # Fill null values of string type columns. Null values is hard to handle in ES queries.
     df_main = df_main.fillna(value=NULL_STR_TYPE_COLUMN_VALUE, subset=STR_TYPE_COLUMNS)
     return df_main
 
 
-# ============================================================================
+# =====================================================================================================================
 #                     Send data with STOMP AMQ
-# ============================================================================
+# =====================================================================================================================
 def credentials(f_name):
     if os.path.exists(f_name):
         return json.load(open(f_name))
@@ -283,13 +433,16 @@ def send_to_amq(data, confs, batch_size):
 
 @click.command()
 @click.option("--creds", required=True, help="secrets/cms-rucio-dailystats/creds.json")
-@click.option("--stomp_zip", required=True, help="stomp.zip that includes specific version of stomp.py")
-@click.option("--cmsmonit_zip", required=True, help="CMSMonit.zip that includes specific version of CMSMonit")
+@click.option("--base_hdfs_dir", required=True, help="Base HDFS path that includes Sqoop dumps")
 @click.option("--amq_batch_size", type=click.INT, required=False, help="AMQ transaction batch size")
-def main(creds=None, stomp_zip=None, cmsmonit_zip=None, amq_batch_size=100):
-    spark = get_spark_session(pyfiles=[stomp_zip, cmsmonit_zip])
+def main(creds=None, base_hdfs_dir=None, amq_batch_size=100):
+    tables_hdfs_paths = {}
+    for table in TABLES:
+        tables_hdfs_paths[table] = f"{base_hdfs_dir}/{table}/part*.avro"
+
+    spark = get_spark_session()
     creds_json = credentials(f_name=creds)
-    df = create_main_df(spark)
+    df = create_main_df(spark=spark, hdfs_paths=tables_hdfs_paths)
     print('Schema:')
     df.printSchema()
     total_size = 0
