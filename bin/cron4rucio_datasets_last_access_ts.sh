@@ -1,8 +1,6 @@
 #!/bin/bash
 set -e
 
-# TODO fix checks
-
 ##H cron4rucio_datasets_last_access_ts.sh
 ##H    Cron job of rucio_datasets_last_access_ts.py
 ##H    This cron job produce html pages of datasets not read since N months using Rucio table dumps in hdfs
