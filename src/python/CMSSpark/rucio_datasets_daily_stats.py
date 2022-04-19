@@ -78,7 +78,28 @@ def get_spark_session():
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
-def create_main_df(spark, hdfs_paths):
+def write_stats_to_eos(base_eos_dir, stats_dict):
+    """Writes some Spark job statistics about datasets of DBS and Rucio to EOS file in html format"""
+    html_tr_template = '''<tr><td>{KEY}</td><td>{VALUE}</td></tr>'''
+    html = '<table style="color: #34568b; font-size: 14px;"><tbody>'
+    for k, v in stats_dict.items():
+        html += html_tr_template.format(KEY=k, VALUE=v)
+        print(f"[INFO] {k}: {v}")  # for logging to k8s
+    html += '</tbody></table>'
+
+    # It'll be used in Grafana info panel: ${__to:date:YYYY-MM-DD}.html
+    f_with_ext = datetime.today().strftime('%Y-%m-%d') + ".html"
+    html_file = os.path.join(base_eos_dir, f_with_ext)
+    try:
+        if not os.path.exists(base_eos_dir):
+            os.makedirs(base_eos_dir)
+        with open(html_file, 'w+') as f:
+            f.write(html)
+    except OSError as e:
+        print("[ERROR] Could not write statistics to EOS, error:", str(e))
+
+
+def create_main_df(spark, hdfs_paths, base_eos_dir):
     # UTC timestamp of start hour of spark job
     ts_current_hour = int(datetime.utcnow().replace(minute=0, second=0, microsecond=0,
                                                     tzinfo=timezone.utc).timestamp() * 1000)
@@ -239,12 +260,12 @@ def create_main_df(spark, hdfs_paths):
     y_contents = x.filter(col('contents_dataset').isNull())
     z_dbs = x.filter(col('dbs_dataset').isNull())
     t_both = x.filter(col('contents_dataset').isNull() & col('dbs_dataset').isNull())
-    print("[INFO] Replicas files do not have dataset name in Contents",
-          y_contents.select('file').distinct().count())
-    print("[INFO] Replicas files do not have dataset name in DBS",
-          z_dbs.select('file').distinct().count())
-    print("[INFO] Replicas files do not have dataset name neither in Contents nor DBS",
-          t_both.select('file').distinct().count())
+    stats_dict = {
+        "Replicas files do not have dataset name in Contents": y_contents.select('file').distinct().count(),
+        "Replicas files do not have dataset name in DBS": z_dbs.select('file').distinct().count(),
+        "Replicas files do not have dataset name neither in Contents nor DBS": t_both.select('file').distinct().count()
+    }
+    write_stats_to_eos(base_eos_dir, stats_dict)
     del x, y_contents, z_dbs, t_both
 
     # -----------------------------------------------------------------------------------------------------------------
@@ -434,15 +455,18 @@ def send_to_amq(data, confs, batch_size):
 @click.command()
 @click.option("--creds", required=True, help="secrets/cms-rucio-dailystats/creds.json")
 @click.option("--base_hdfs_dir", required=True, help="Base HDFS path that includes Sqoop dumps")
-@click.option("--amq_batch_size", type=click.INT, required=False, help="AMQ transaction batch size")
-def main(creds=None, base_hdfs_dir=None, amq_batch_size=100):
+@click.option("--base_eos_dir", required=True, help="Base EOS path to write Spark job statistics",
+              default="/eos/user/c/cmsmonit/www/rucio_daily_ds_stats", )
+@click.option("--amq_batch_size", type=click.INT, required=False, help="AMQ transaction batch size",
+              default=100)
+def main(creds, base_hdfs_dir, base_eos_dir, amq_batch_size):
     tables_hdfs_paths = {}
     for table in TABLES:
         tables_hdfs_paths[table] = f"{base_hdfs_dir}/{table}/part*.avro"
 
     spark = get_spark_session()
     creds_json = credentials(f_name=creds)
-    df = create_main_df(spark=spark, hdfs_paths=tables_hdfs_paths)
+    df = create_main_df(spark=spark, hdfs_paths=tables_hdfs_paths, base_eos_dir=base_eos_dir)
     print('Schema:')
     df.printSchema()
     total_size = 0
