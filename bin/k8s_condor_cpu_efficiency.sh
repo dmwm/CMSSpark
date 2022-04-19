@@ -53,6 +53,7 @@ spark_confs=(
     --conf "spark.driver.host=${MY_NODE_NAME}"
     --conf "spark.driver.port=${CONDOR_CPU_EFF_SERVICE_PORT_PORT_0}"
     --conf "spark.driver.blockManager.port=${CONDOR_CPU_EFF_SERVICE_PORT_PORT_1}"
+    --conf spark.ui.showConsoleProgress=false
     --conf "spark.executor.memory=8g"
     --conf "spark.executor.instances=30"
     --conf "spark.executor.cores=4"
