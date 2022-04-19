@@ -2,10 +2,16 @@
 # Creates StepChain cpu efficiency static web site
 #
 # This script is intended to be used as cron job in kubernetes.
+export SPARK_LOCAL_IP=127.0.0.1
+export PYTHONPATH=$SCRIPT_DIR/../src/python:$PYTHONPATH
 
-echo '==================================================================================================='
-echo '_.~"~._.~"~._.~"~._.~"~._  StepChain CPU Efficiency cron job is starting  _.~"~._.~"~._.~"~._.~"~._'
-echo '==================================================================================================='
+# seconds to h, m, s format used in logging
+secs_to_human() {
+    # Ref https://stackoverflow.com/a/59096583/6123088
+    echo "$((${1} / 3600))h $(((${1} / 60) % 60))m $((${1} % 60))s"
+}
+TZ=UTC
+START_TIME=$(date +%s)
 
 # Check output path is given
 [[ -z "$1" || -z $2 ]] && {
@@ -38,22 +44,15 @@ if [ $? == 1 ]; then
 fi
 klist -k "$keytab"
 
-# Start crond if it is not runing
-if [ -z "$(pgrep crond)" ]; then
-    crond -n &
-fi
-
 currentDir=$(
     cd "$(dirname "$0")" && pwd
 )
 
-spark_submit=/usr/hdp/spark-2.4/bin/spark-submit
 spark_confs=(
     --conf "spark.driver.bindAddress=0.0.0.0"
     --conf "spark.driver.host=${MY_NODE_NAME}"
     --conf "spark.driver.port=${CONDOR_CPU_EFF_SERVICE_PORT_PORT_0}"
     --conf "spark.driver.blockManager.port=${CONDOR_CPU_EFF_SERVICE_PORT_PORT_1}"
-    --conf "spark.driver.extraClassPath=${WDIR}/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar"
     --conf "spark.executor.memory=8g"
     --conf "spark.executor.instances=30"
     --conf "spark.executor.cores=4"
@@ -63,8 +62,8 @@ spark_confs=(
 OUTPUT_DIR="${1}/stepchain"
 LAST_N_DAYS="${2}"
 
-echo "Starting spark job for stepchain cpu efficiencies, folder: ${OUTPUT_DIR}"
-$spark_submit \
+echo "$(date --rfc-3339=seconds)" "[INFO] Starting spark job for step chain cpu efficiencies, folder: ${OUTPUT_DIR}"
+spark-submit \
     --master yarn \
     "${spark_confs[@]}" \
     "$currentDir/../src/python/CMSSpark/stepchain_cpu_eff.py" \
@@ -76,7 +75,4 @@ echo "Deleting html and png files older than 60 days in dir: ${OUTPUT_DIR}"
 find "$OUTPUT_DIR" -type f \( -name '*.html' -o -name '*.png' \) -mtime +60 -delete
 echo -ne "\nDeletion is finished\n"
 
-echo '==================================================================================================='
-echo '_.~"~._.~"~._.~"~._.~"~._  StepChain CPU Efficiency cron job is finished  _.~"~._.~"~._.~"~._.~"~._'
-echo '==================================================================================================='
-echo -en "\n\n\n"
+echo "$(date --rfc-3339=seconds)" "[INFO] StepChain finished. Time spent: $(secs_to_human "$(($(date +%s) - START_TIME))")"
