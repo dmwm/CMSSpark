@@ -49,7 +49,7 @@ if ! klist -s; then
 fi
 
 # Arg 1
-OUTPUT_DIR="${1:-/eos/user/c/cmsmonit/www/hpc_monthly}"
+OUTPUT_DIR="${1:-/eos/user/c/cmsmonit/www/hpc_usage}"
 # Arg 2, default is 19 months
 LAST_N_MONTHS="${2:-19}"
 
@@ -59,6 +59,7 @@ echo "output directory: ${OUTPUT_DIR}"
 py_input_args=(
     --output_dir "$OUTPUT_DIR"
     --last_n_months "$LAST_N_MONTHS"
+    --url_prefix "https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage"
 )
 spark_submit_args=(
     --master yarn
