@@ -30,6 +30,11 @@ from pyspark.sql.types import (
     LongType,
 )
 
+# For Jupyter/SWAN notebook
+#    Do not use main function, customize it according to your needs. Leaving it to your taste.
+#    Delete "spark = get_spark_session()" line in main function
+#    Run: !git clone https://github.com/dmwm/CMSSpark.git
+#    Use: from CMSSpark.src.python.CMSSpark import schemas as cms_schemas  # Comment out next line
 from CMSSpark import schemas as cms_schemas
 
 TODAY = datetime.today().strftime('%Y-%m-%d')
