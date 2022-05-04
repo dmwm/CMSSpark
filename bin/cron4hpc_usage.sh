@@ -1,15 +1,17 @@
 #!/bin/bash
 set -e
 
-##H hpc_running_cores_and_corehr.py
+##H cron4hpc_usage.sh
 ##H    Cron job of hpc_running_cores_and_corehr.py
 ##H    This cron job produce plots in html pages of for running cores and CoreHr monthly stats of HPC
 ##H
 ##H Usage:
-##H    cron4hpc_monthly_stats.sh <OUTPUT_DIR> <LAST_N_MONTHS>
+##H    cron4hpc_usage.sh <OUTPUT_DIR> <LAST_N_MONTHS> <URL_PREFIX>
 ##H
 ##H Script arguments:
 ##H    OUTPUT_DIR        Directory that output html files will be written
+##H    LAST_N_MONTHS     without providing start end date, selecting last N months data coverage
+##H    URL_PREFIX        CernBox EOS folder url link
 ##H
 
 # help definition
@@ -25,8 +27,8 @@ script_dir="$(
 )"
 
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
-mkdir -p "$script_dir"/../logs/cron4hpc_monthly
-LOG_FILE=$script_dir/../logs/cron4hpc_monthly/$(date +%Y%m%d)
+mkdir -p "$script_dir"/../logs/cron4hpc_usage
+LOG_FILE=$script_dir/../logs/cron4hpc_usage/$(date +%Y%m%d)
 
 # Setup envs for hadoop and spark. Tested with LCG_98python3
 source /cvmfs/sft.cern.ch/lcg/views/LCG_98python3/x86_64-centos7-gcc8-opt/setup.sh
@@ -52,6 +54,8 @@ fi
 OUTPUT_DIR="${1:-/eos/user/c/cmsmonit/www/hpc_usage}"
 # Arg 2, default is 19 months
 LAST_N_MONTHS="${2:-19}"
+# Arg 3
+URL_PREFIX="${1:-https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage}"
 
 echo "output directory: ${OUTPUT_DIR}"
 
@@ -59,7 +63,7 @@ echo "output directory: ${OUTPUT_DIR}"
 py_input_args=(
     --output_dir "$OUTPUT_DIR"
     --last_n_months "$LAST_N_MONTHS"
-    --url_prefix "https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage"
+    --url_prefix "$URL_PREFIX"
 )
 spark_submit_args=(
     --master yarn
