@@ -263,7 +263,7 @@ def handle_monthly_results(df_tmp_core_hr, df_tmp_running_cores, month, output_d
 
 
 def create_main_html(df_core_hr_monthly, html_template, output_dir):
-    """Creates index.html that shows monthly CoreHrs sums and embedded plots using datatable"""
+    """Creates main.html that shows monthly CoreHrs sums and embedded plots using datatable"""
     # Rows to columns
     df = pd.pivot_table(df_core_hr_monthly, values='sum CoreHr', index=['month'],
                         columns=['site'])
@@ -290,7 +290,7 @@ def create_main_html(df_core_hr_monthly, html_template, output_dir):
     current_date = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     main_html = template.replace("___UPDATE_TIME___", current_date).replace("____MAIN_BLOCK____", html)
 
-    with open(os.path.join(output_dir, 'index.html'), "w+") as f:
+    with open(os.path.join(output_dir, 'main.html'), "w+") as f:
         f.write(main_html)
 
 
