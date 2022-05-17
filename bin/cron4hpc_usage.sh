@@ -56,6 +56,7 @@ OUTPUT_DIR="${1:-/eos/user/c/cmsmonit/www/hpc_usage}"
 LAST_N_MONTHS="${2:-19}"
 # Arg 3
 URL_PREFIX="${1:-https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage}"
+HTML_TEMPLATE="$script_dir"/../src/html/hpc/html_template.html
 
 echo "output directory: ${OUTPUT_DIR}"
 
@@ -64,16 +65,15 @@ py_input_args=(
     --output_dir "$OUTPUT_DIR"
     --last_n_months "$LAST_N_MONTHS"
     --url_prefix "$URL_PREFIX"
+    --html_template "$HTML_TEMPLATE"
 )
 spark_submit_args=(
     --master yarn
-    --conf spark.driver.extraClassPath='/eos/project/s/swan/public/hadoop-mapreduce-client-core-2.6.0-cdh5.7.6.jar'
     --conf spark.executor.memory=4g
     --conf spark.executor.instances=30
     --conf spark.executor.cores=4
     --conf spark.driver.memory=4g
     --conf spark.ui.showConsoleProgress=false
-    --packages org.apache.spark:spark-avro_2.11:2.4.3
 )
 
 # Run
