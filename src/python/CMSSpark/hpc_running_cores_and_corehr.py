@@ -1,8 +1,15 @@
-import os
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+#
+# HPC sites' CoreHrs sum and Running cores calculations.
 
 import click
-import plotly.express as px
+import os
 from datetime import datetime, date, timedelta
+
+import pandas as pd
+import plotly.express as px
 from dateutil.relativedelta import relativedelta
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
@@ -231,6 +238,62 @@ def get_fig_core_hr_monthly_all(df_all, sites_stack_order, sorted_months, csv_fn
     return fig
 
 
+def handle_monthly_results(df_tmp_core_hr, df_tmp_running_cores, month, output_dir):
+    """Writes raw csv data to file, creates plots in html with raw data link"""
+    core_hr_csv_fname = month + '_core_hr.csv'
+    r_cores_csv_fname = month + '_running_cores.csv'
+
+    core_hr_csv_path = os.path.join(output_dir, core_hr_csv_fname)
+    r_cores_csv_path = os.path.join(output_dir, r_cores_csv_fname)
+
+    # Write to csv
+    df_tmp_core_hr.sort_values(by=['month', 'dayofmonth', 'site']).to_csv(core_hr_csv_path, index=False)
+    df_tmp_running_cores.sort_values(by=['month', 'dayofmonth', 'site']).to_csv(r_cores_csv_path, index=False)
+
+    # Get figures
+    fig1 = get_fig_core_hr_one_month(df_tmp_core_hr, month, HPC_SITES_STACK_ORDER, core_hr_csv_fname)
+    fig2 = get_fig_running_cores_one_month(df_tmp_running_cores, month, HPC_SITES_STACK_ORDER, r_cores_csv_fname)
+
+    # to show CoreHr and running cores plots side-by-side on X-axis
+    html_head = '<head><style>#plot1, #plot2 {display: inline-block;width: 49%;}</style></head>'
+    fig1_div = '<div id="plot1">{}</div>'.format(fig1.to_html(full_html=False, include_plotlyjs='cdn'))
+    fig2_div = '<div id="plot2">{}</div>'.format(fig2.to_html(full_html=False, include_plotlyjs='cdn'))
+    with open(os.path.join(output_dir, month + '.html'), 'w') as f:
+        f.write(html_head + fig1_div + fig2_div)
+
+
+def create_main_html(df_core_hr_monthly, html_template, output_dir):
+    """Creates index.html that shows monthly CoreHrs sums and embedded plots using datatable"""
+    # Rows to columns
+    df = pd.pivot_table(df_core_hr_monthly, values='sum CoreHr', index=['month'],
+                        columns=['site'])
+    # Remove column level
+    df = df.reset_index()
+    # Remove named column
+    df.columns.name = None
+
+    main_column = df.month
+    # To define selected column in JS, we need specific class name
+    _formatted_col = '<a class="selname">' + main_column + '</a>'
+    df['month'] = _formatted_col
+
+    html = df.to_html(escape=False, index=False)
+    html = html.replace(
+        'table border="1" class="dataframe"',
+        'table id="dataframe" class="display compact" style="width:100%;"',
+    )
+    html = html.replace('style="text-align: right;"', "")
+
+    with open(html_template) as f:
+        template = f.read()
+
+    current_date = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    main_html = template.replace("___UPDATE_TIME___", current_date).replace("____MAIN_BLOCK____", html)
+
+    with open(os.path.join(output_dir, 'index.html'), "w+") as f:
+        f.write(main_html)
+
+
 @click.command()
 @click.option("--start_date", type=click.DateTime(VALID_DATE_FORMATS))
 @click.option("--end_date", type=click.DateTime(VALID_DATE_FORMATS))
@@ -238,7 +301,9 @@ def get_fig_core_hr_monthly_all(df_all, sites_stack_order, sorted_months, csv_fn
 @click.option("--last_n_months", type=int, default=19, help="Last n months data will be used")
 @click.option("--url_prefix", default="https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage",
               help="CernBox eos folder link, will be used in plots to point to csv source data")
-def main(start_date, end_date, output_dir, last_n_months, url_prefix):
+@click.option('--html_template', default=None, type=str, required=True,
+              help='Path of htmltemplate.html file: ~/CMSSpark/src/html/hpc/htmltemplate.html')
+def main(start_date, end_date, output_dir, last_n_months, url_prefix, html_template):
     global URL_PREFIX
     URL_PREFIX = url_prefix.strip("/")  # no slash at the end
     spark = get_spark_session()
@@ -268,23 +333,12 @@ def main(start_date, end_date, output_dir, last_n_months, url_prefix):
 
     # Write plots that have daily granularity for each month
     for month in sorted_months:
-        core_hr_csv_fname = month + '_core_hr.csv'
-        core_hr_csv_path = os.path.join(output_dir, core_hr_csv_fname)
-        r_cores_csv_fname = month + '_running_cores.csv'
-        r_cores_csv_path = os.path.join(output_dir, r_cores_csv_fname)
-
         # Get temporary data frames
         df_tmp_core_hr = df_core_hr_daily[df_core_hr_daily['month'] == month]
         df_tmp_running_cores = df_running_cores_daily[df_running_cores_daily['month'] == month]
-        # Write to csv
-        df_tmp_core_hr.sort_values(by=['month', 'dayofmonth', 'site']).to_csv(core_hr_csv_path, index=False)
-        df_tmp_running_cores.sort_values(by=['month', 'dayofmonth', 'site']).to_csv(r_cores_csv_path, index=False)
-        # Get figures
-        fig1 = get_fig_core_hr_one_month(df_tmp_core_hr, month, HPC_SITES_STACK_ORDER, core_hr_csv_fname)
-        fig2 = get_fig_running_cores_one_month(df_tmp_running_cores, month, HPC_SITES_STACK_ORDER, r_cores_csv_fname)
-        with open(os.path.join(output_dir, month + '.html'), 'w') as f:
-            f.write(fig1.to_html(full_html=False, include_plotlyjs='cdn'))
-            f.write(fig2.to_html(full_html=False, include_plotlyjs='cdn'))
+        #
+        handle_monthly_results(df_tmp_core_hr, df_tmp_running_cores, month, output_dir)
+
     # Write whole core hr and running cores daily data to csv
     df_core_hr_daily.sort_values(by=['month', 'dayofmonth', 'site']) \
         .to_csv(os.path.join(output_dir, 'all_core_hours.csv'), index=False)
@@ -299,6 +353,9 @@ def main(start_date, end_date, output_dir, last_n_months, url_prefix):
                                        monthly_core_hr_fname_prefix + '.csv')
     with open(os.path.join(output_dir, monthly_core_hr_path_prefix + '.html'), 'w') as f:
         f.write(fig3.to_html(full_html=True, include_plotlyjs='cdn'))
+
+    # Create main html
+    create_main_html(df_core_hr_monthly, html_template, output_dir)
 
 
 if __name__ == "__main__":
