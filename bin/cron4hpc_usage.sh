@@ -10,7 +10,8 @@ set -e
 ##H
 ##H Script arguments:
 ##H    OUTPUT_DIR        Directory that output html files will be written
-##H    LAST_N_MONTHS     without providing start end date, selecting last N months data coverage
+##H    START_DATE        Start date of processed data
+##H    END_DATE          End date of processed data
 ##H    URL_PREFIX        CernBox EOS folder url link
 ##H
 
@@ -52,20 +53,24 @@ fi
 
 # Arg 1
 OUTPUT_DIR="${1:-/eos/user/c/cmsmonit/www/hpc_usage}"
-# Arg 2, default is 19 months
-LAST_N_MONTHS="${2:-19}"
-# Arg 3
-URL_PREFIX="${1:-https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage}"
+# Arg 2, start date
+START_DATE="${2:-2020-01-01}"
+# Arg 3, end date
+END_DATE="${3:-$(date +"%Y-%m-%d")}"
+# Arg 4
+URL_PREFIX="${4:-https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage}"
 HTML_TEMPLATE="$script_dir"/../src/html/hpc/html_template.html
 
 echo "output directory: ${OUTPUT_DIR}"
 
 # PySpark job args
 py_input_args=(
+    --start_date "$START_DATE"
+    --end_date "$END_DATE"
     --output_dir "$OUTPUT_DIR"
-    --last_n_months "$LAST_N_MONTHS"
     --url_prefix "$URL_PREFIX"
     --html_template "$HTML_TEMPLATE"
+    # --save_pickle default is True
 )
 spark_submit_args=(
     --master yarn
@@ -74,6 +79,7 @@ spark_submit_args=(
     --conf spark.executor.cores=4
     --conf spark.driver.memory=4g
     --conf spark.ui.showConsoleProgress=false
+    --conf spark.sql.session.timeZone=UTC
 )
 
 # Run
