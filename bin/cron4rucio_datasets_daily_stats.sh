@@ -293,10 +293,10 @@ function run_spark() {
     export PYTHONPATH=$SCRIPT_DIR/../src/python:$PYTHONPATH
     spark_submit_args=(
         --master yarn
-        --conf spark.executor.memory=4g
+        --conf spark.executor.memory=8g
         --conf spark.executor.instances=30
         --conf spark.executor.cores=4
-        --conf spark.driver.memory=4g
+        --conf spark.driver.memory=8g
         --conf spark.ui.showConsoleProgress=false
         --packages org.apache.spark:spark-avro_2.12:3.2.1
         --py-files "${CMSMONITORING_ZIP},${STOMP_ZIP}"
