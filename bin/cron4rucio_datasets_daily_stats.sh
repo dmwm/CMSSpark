@@ -37,7 +37,7 @@ onFailExit() {
     exit 1
 }
 usage() {
-    perl -ne '/^##H/ && do { s/^##H ?//; print }' <"$0"
+    grep "^##H" <"$0" | sed -e "s,##H,,g"
     exit 1
 }
 # seconds to h, m, s format used in logging
