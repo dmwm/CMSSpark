@@ -6,30 +6,17 @@
 
 import click
 import os
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import plotly.express as px
-from dateutil.relativedelta import relativedelta
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, concat_ws, format_string, from_unixtime, lit, unix_timestamp, when,
-    avg as _avg,
-    dayofmonth as _dayofmonth,
-    max as _max,
-    month as _month,
-    round as _round,
-    sum as _sum,
-    year as _year,
+    avg as _avg, dayofmonth as _dayofmonth, max as _max, month as _month, round as _round, sum as _sum, year as _year,
 )
-from pyspark.sql.types import (
-    StructType,
-    LongType,
-    StringType,
-    StructField,
-    DoubleType,
-)
+from pyspark.sql.types import StructType, LongType, StringType, StructField, DoubleType
 
 DEFAULT_HDFS_FOLDER = '/project/monitoring/archive/condor/raw/metric'
 
@@ -39,6 +26,8 @@ VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 CSV_DIR = 'csv'
 HTML_DIR = 'html'
 SITES_HTML_DIR = 'site_htmls'
+YEARS_DIR = 'years'
+PICKLE_DIR = 'pickles'
 
 
 def get_spark_session():
@@ -52,8 +41,8 @@ def get_candidate_files(
     start_date, end_date, spark, base=DEFAULT_HDFS_FOLDER,
 ):
     """Returns a list of hdfs folders that can contain data for the given dates."""
-    st_date = start_date - timedelta(days=1)
-    ed_date = end_date + timedelta(days=1)
+    st_date = start_date - timedelta(days=2)
+    ed_date = end_date + timedelta(days=2)
     days = (ed_date - st_date).days
     sc = spark.sparkContext
     # The candidate files are the folders to the specific dates,
@@ -72,6 +61,7 @@ def get_candidate_files(
 
 
 def _get_schema():
+    """Returns only required fields"""
     return StructType(
         [
             StructField(
@@ -83,12 +73,8 @@ def _get_schema():
                         StructField("Status", StringType(), nullable=True),
                         StructField("Site", StringType(), nullable=True),
                         StructField("CoreHr", DoubleType(), nullable=True),
-                        StructField("WallClockHr", DoubleType(), nullable=False),
-                        StructField("CpuTimeHr", DoubleType(), nullable=True),
                         StructField("RequestCpus", DoubleType(), nullable=True),
-                        StructField("GLIDEIN_Site", StringType(), nullable=True),
                         StructField("MachineAttrCMSSubSiteName0", StringType(), nullable=True),
-                        StructField("MachineAttrCMSProcessingSiteName0", StringType(), nullable=True),
                     ]
                 ),
             ),
@@ -96,7 +82,7 @@ def _get_schema():
     )
 
 
-def process_and_get_pd_dfs(spark, start_date, end_date):
+def get_pandas_dfs(spark, start_date, end_date):
     schema = _get_schema()
     raw_df = (
         spark.read.option(
@@ -106,7 +92,8 @@ def process_and_get_pd_dfs(spark, start_date, end_date):
         ).select(
             'data.*'
         ).filter(
-            col("RecordTime").between(f"{start_date.timestamp() * 1000}", f"{end_date.timestamp() * 1000}")
+            (col("RecordTime") >= (start_date.replace(tzinfo=timezone.utc).timestamp() * 1000)) &
+            (col("RecordTime") < (end_date.replace(tzinfo=timezone.utc).timestamp() * 1000))
         ).filter(
             (col('Site') == 'T3_US_ANL') |  # ANL
             (col('Site') == 'T3_US_NERSC') |  # NERSC
@@ -176,7 +163,7 @@ def process_and_get_pd_dfs(spark, start_date, end_date):
     return df_core_hr_daily.toPandas(), df_running_cores_daily.toPandas(), df_core_hr_monthly.toPandas()
 
 
-def get_fig_core_hr_daily_of_a_month(df_month, month, output_dir, url_prefix):
+def get_figure_of_daily_core_hr_for_one_month(df_month, month, output_dir, url_prefix):
     """Creates plotly figure from one month of data for daily core hours and write csv"""
     csv_fname = month + '_core_hr.csv'
     csv_output_path = os.path.join(os.path.join(output_dir, CSV_DIR), csv_fname)
@@ -203,7 +190,7 @@ def get_fig_core_hr_daily_of_a_month(df_month, month, output_dir, url_prefix):
     return fig
 
 
-def get_fig_running_cores_daily_of_a_month(df_month, month, output_dir, url_prefix):
+def get_figure_of_daily_running_cores_for_one_month(df_month, month, output_dir, url_prefix):
     """Creates plotly figure from one month of data for daily running cores and write csv"""
     csv_fname = month + '_running_cores.csv'
     csv_output_path = os.path.join(os.path.join(output_dir, CSV_DIR), csv_fname)
@@ -230,13 +217,15 @@ def get_fig_running_cores_daily_of_a_month(df_month, month, output_dir, url_pref
     return fig
 
 
-def write_2_daily_plots_to_single_html_each_month(df_tmp_core_hr, df_tmp_running_cores, month, output_dir, url_prefix):
+def html_join_core_hr_and_running_cores_for_one_month(df_tmp_core_hr, df_tmp_running_cores, month, output_dir,
+                                                      url_prefix):
     """Joins core_hr and running_cores plots in a single html side by side"""
     # Get figures
-    fig1 = get_fig_core_hr_daily_of_a_month(df_month=df_tmp_core_hr, month=month, output_dir=output_dir,
-                                            url_prefix=url_prefix)
-    fig2 = get_fig_running_cores_daily_of_a_month(df_month=df_tmp_running_cores, month=month, output_dir=output_dir,
-                                                  url_prefix=url_prefix)
+    fig1 = get_figure_of_daily_core_hr_for_one_month(df_month=df_tmp_core_hr, month=month, output_dir=output_dir,
+                                                     url_prefix=url_prefix)
+    fig2 = get_figure_of_daily_running_cores_for_one_month(df_month=df_tmp_running_cores, month=month,
+                                                           output_dir=output_dir,
+                                                           url_prefix=url_prefix)
     # Join 2 plots in one html to show CoreHr and running cores plots side-by-side on X-axis
     html_head = '<head><style>#plot1, #plot2 {display: inline-block;width: 49%;}</style></head>'
     fig1_div = '<div id="plot1">{}</div>'.format(fig1.to_html(full_html=False, include_plotlyjs='cdn'))
@@ -247,7 +236,7 @@ def write_2_daily_plots_to_single_html_each_month(df_tmp_core_hr, df_tmp_running
         f.write(html_head + fig1_div + fig2_div)
 
 
-def handle_core_hr_monthly_sum_of_all(df_core_hr_monthly, sorted_months, output_dir, url_prefix):
+def produce_monthly_core_hr_of_all_years(df_core_hr_monthly, sorted_months, output_dir, url_prefix):
     """Creates plotly figure from all data with monthly granularity for core hours"""
     # Name is join of first and last month names of the used data
     fname_pre = 'all_monthly_core_hr'
@@ -279,7 +268,49 @@ def handle_core_hr_monthly_sum_of_all(df_core_hr_monthly, sorted_months, output_
     df_core_hr_monthly.sort_values(by=['month', 'site']).to_csv(csv_output_path, index=False)
 
 
-def handle_core_hr_monthly_sum_of_all_for_each_site(df_core_hr_monthly, sorted_months, output_dir):
+def get_full_path(output_dir, fname, extension):
+    """Returns full path of file"""
+    if not isinstance(fname, str):
+        fname = str(fname)
+    return os.path.join(output_dir, fname + "." + extension)
+
+
+def produce_monthly_core_hr_for_each_year(df_core_hr_monthly, sorted_months, output_dir, url_prefix):
+    """Creates plotly figures from all data with monthly granularity for core hours for each year"""
+    # Write years results to specific directory
+    output_dir = os.path.join(output_dir, YEARS_DIR)
+
+    # get unique years
+    years = sorted(set(datetime.strptime(m, "%Y-%m").year for m in sorted_months))
+
+    for year in years:
+        # Filter for that year
+        df_tmp_year = df_core_hr_monthly[df_core_hr_monthly.month.str.startswith(str(year) + "-")]
+        csv_link = f"{url_prefix}/{YEARS_DIR}/{year}.csv"
+        fig = px.bar(df_tmp_year, x="month", y="sum CoreHr", color='site',
+                     category_orders={
+                         'site': HPC_SITES_STACK_ORDER,
+                         'month': sorted_months,
+                     },
+                     title=f'CoreHrs - monthly sum - {year}'
+                           + f'<b><a href="{csv_link}">[Source]</a></b>',
+                     labels={
+                         'sum CoreHr': 'CoreHr',
+                         'month': 'date'
+                     },
+                     width=800, height=600,
+                     )
+        fig.update_xaxes(dtick="M1", tickangle=300)
+        fig.update_yaxes(automargin=True, tickformat=".2f")
+        fig.update_layout(hovermode='x')
+        # Write html
+        with open(get_full_path(output_dir, year, "html"), 'w') as f:
+            f.write(fig.to_html(full_html=True, include_plotlyjs='cdn'))
+        # Write source csv
+        df_tmp_year.sort_values(by=['month', 'site']).to_csv(get_full_path(output_dir, year, "csv"), index=False)
+
+
+def process_monthly_core_hr_for_each_site(df_core_hr_monthly, sorted_months, output_dir):
     """Creates plotly figure from all data with monthly granularity for core hours of each individual site"""
     for site in HPC_SITES_STACK_ORDER:
         df_tmp = df_core_hr_monthly[df_core_hr_monthly['site'] == site]
@@ -305,7 +336,7 @@ def handle_core_hr_monthly_sum_of_all_for_each_site(df_core_hr_monthly, sorted_m
             f.write(fig.to_html(full_html=True, include_plotlyjs='cdn'))
 
 
-def prepare_site_urls(url_prefix):
+def prepare_site_urls_html_div(url_prefix):
     """Prepares site plot links"""
     html_div_site_links_block = ""
     for site in HPC_SITES_STACK_ORDER:
@@ -313,6 +344,20 @@ def prepare_site_urls(url_prefix):
         html_a_template = f'<a href="{site_plot_url}" target="_blank">{site}</a> '
         html_div_site_links_block += html_a_template
     return html_div_site_links_block
+
+
+def prepare_year_urls_html_div(url_prefix, sorted_months):
+    """Prepares year plot links"""
+    html_div_year_links_block = ""
+    years = sorted(set(datetime.strptime(m, "%Y-%m").year for m in sorted_months))
+    for year in years:
+        year_plot_url = f"{url_prefix}/{YEARS_DIR}/{year}.html"
+        html_a_template = f'<a href="{year_plot_url}" target="_blank">{year}</a> '
+        html_div_year_links_block += html_a_template
+    all_core_hr_url = f"{url_prefix}/all_monthly_core_hr.html"
+    html_a_template = f'<a href="{all_core_hr_url}" target="_blank">All Core Hr</a> '
+    html_div_year_links_block += html_a_template
+    return html_div_year_links_block
 
 
 def add_footer(html):
@@ -332,8 +377,9 @@ def add_footer(html):
     return html
 
 
-def create_main_html(df_core_hr_monthly, html_template, output_dir, url_prefix):
+def create_main_html(df_core_hr_monthly, html_template, output_dir, url_prefix, sorted_months):
     """Creates main.html that shows monthly CoreHrs sums and embedded plots using datatable"""
+    global HPC_SITES_STACK_ORDER
     # Rows to columns
     df = pd.pivot_table(df_core_hr_monthly, values='sum CoreHr', index=['month'],
                         columns=['site'])
@@ -342,6 +388,9 @@ def create_main_html(df_core_hr_monthly, html_template, output_dir, url_prefix):
     # Remove named column
     df.columns.name = None
 
+    # Drop columns not in default HPC site list
+    not_exist = set(HPC_SITES_STACK_ORDER) - set(df.columns)
+    HPC_SITES_STACK_ORDER = [e for e in HPC_SITES_STACK_ORDER if e not in not_exist]
     # Convert columns to integer values.
     df[HPC_SITES_STACK_ORDER] = df[HPC_SITES_STACK_ORDER].astype(int)
 
@@ -366,60 +415,68 @@ def create_main_html(df_core_hr_monthly, html_template, output_dir, url_prefix):
 
     current_date = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     main_html = template.replace("___UPDATE_TIME___", current_date) \
-        .replace("____SITE_PLOT_URLS____", prepare_site_urls(url_prefix)) \
+        .replace("____SITE_PLOT_URLS____", prepare_site_urls_html_div(url_prefix)) \
+        .replace("____YEAR_PLOT_URLS____", prepare_year_urls_html_div(url_prefix, sorted_months)) \
         .replace("____MAIN_BLOCK____", html)
 
     with open(os.path.join(output_dir, 'main.html'), "w+") as f:
         f.write(main_html)
 
 
+def dates_iterative():
+    """Iteratively arrange start date and end date according"""
+    today = datetime.today()
+    end_date = datetime(today.year, today.month, 1)  # First day of this month
+
+    prev_month_date = today - timedelta(days=25)  # Some days ago
+    start_date = datetime(prev_month_date.year, prev_month_date.month, 1)  # First day of last month
+    return start_date, end_date
+
+
 @click.command()
 @click.option("--output_dir", required=True, default="./www/hpc_monthly", help="local output directory")
 @click.option("--start_date", required=False, type=click.DateTime(VALID_DATE_FORMATS))
 @click.option("--end_date", required=False, type=click.DateTime(VALID_DATE_FORMATS))
-@click.option("--last_n_months", required=False, type=int, default=19, help="Last n months data will be used")
+@click.option("--iterative", required=False, type=bool, default=False,
+              help="Iterative start and end date setting. Please set your cron job later than 3rd day of the month")
 @click.option("--url_prefix", default="https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage",
               help="CernBox eos folder link, will be used in plots to point to csv source data")
 @click.option('--html_template', required=True, default=None, type=str,
               help='Path of htmltemplate.html file: ~/CMSSpark/src/html/hpc/htmltemplate.html')
 @click.option('--save_pickle', required=False, default=True, type=bool,
               help='Stores df_core_hr_daily, df_running_cores_daily, df_core_hr_monthly to output_dir as pickle')
-def main(start_date, end_date, output_dir, last_n_months, url_prefix, html_template, save_pickle):
-    # Create subdirectories if does not exist
-    os.makedirs(os.path.join(output_dir, CSV_DIR), exist_ok=True)
-    os.makedirs(os.path.join(output_dir, HTML_DIR), exist_ok=True)
-    os.makedirs(os.path.join(output_dir, SITES_HTML_DIR), exist_ok=True)
+def main(start_date, end_date, output_dir, iterative, url_prefix, html_template, save_pickle):
+    """
+        Creates HPC resource usage in https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage/main.html
 
-    url_prefix = url_prefix.strip("/")  # no slash at the end
-    spark = get_spark_session()
-    # Set TZ as UTC. Also set in the spark-submit confs.
-    spark.conf.set("spark.sql.session.timeZone", "UTC")
+        Please investigate how it is run in bin/cron4hpc_usage.sh because pages are produced in iterative mode to not
+        run Spark Job on a couple of years data
+    """
+    # Create subdirectories if it does not exist
+    for d in [CSV_DIR, HTML_DIR, SITES_HTML_DIR, YEARS_DIR, PICKLE_DIR]:
+        os.makedirs(os.path.join(output_dir, d), exist_ok=True)
 
-    # HDFS .tmp folders can be in 1 day ago, so 2 days ago is selected for latest end date
-    _2_days_ago = datetime.combine(date.today() - timedelta(days=2), datetime.min.time())
-    if not (start_date or end_date):
-        end_date = _2_days_ago
-        n_months_ago = _2_days_ago - relativedelta(months=last_n_months)
-        start_date = datetime(year=n_months_ago.year, month=n_months_ago.month, day=1)  # day=1 is 1st day of the month
-    elif not start_date:
-        n_months_ago = end_date - relativedelta(months=last_n_months)
-        start_date = datetime(year=n_months_ago.year, month=n_months_ago.month, day=1)
-    elif not end_date:
-        end_date = _2_days_ago
-    if start_date > end_date:
-        raise ValueError(
-            f"start date ({start_date}) should be earlier than end date({end_date})"
-        )
+    if iterative:
+        start_date, end_date = dates_iterative()
     print("Data will be processed between", start_date, "-", end_date)
 
+    url_prefix = url_prefix.rstrip("/")  # no slash at the end
+    output_dir = output_dir.rstrip("/")  # no slash at the end
+
+    # Set TZ as UTC. Also set in the spark-submit confs.
+    spark = get_spark_session()
+    spark.conf.set("spark.sql.session.timeZone", "UTC")
+
     # Get pandas dataframes
-    df_core_hr_daily, df_running_cores_daily, df_core_hr_monthly = process_and_get_pd_dfs(spark, start_date, end_date)
+    df_core_hr_daily, df_running_cores_daily, df_core_hr_monthly = get_pandas_dfs(spark, start_date, end_date)
 
     # Save pickle files
     if save_pickle:
-        df_core_hr_daily.to_pickle('core_hr_daily.pkl')
-        df_running_cores_daily.to_pickle('running_cores_daily.pkl')
-        df_core_hr_monthly.to_pickle('core_hr_monthly.pkl')
+        tsmonth = datetime.today().strftime('%Y-%m')
+        os.makedirs(os.path.join(output_dir, os.path.join(PICKLE_DIR, tsmonth)), exist_ok=True)
+        df_core_hr_daily.to_pickle(f'{output_dir}/{PICKLE_DIR}/{tsmonth}/core_hr_daily.pkl')
+        df_running_cores_daily.to_pickle(f'{output_dir}/{PICKLE_DIR}/{tsmonth}/running_cores_daily.pkl')
+        df_core_hr_monthly.to_pickle(f'{output_dir}/{PICKLE_DIR}/{tsmonth}/core_hr_monthly.pkl')
         # df_core_hr_daily = pd.read_pickle("core_hr_daily.pkl")
 
     # Set date order of yyyy-mm month strings
@@ -430,19 +487,33 @@ def main(start_date, end_date, output_dir, last_n_months, url_prefix, html_templ
         # Get temporary data frames
         df_tmp_core_hr = df_core_hr_daily[df_core_hr_daily['month'] == month]
         df_tmp_running_cores = df_running_cores_daily[df_running_cores_daily['month'] == month]
-        write_2_daily_plots_to_single_html_each_month(df_tmp_core_hr=df_tmp_core_hr,
-                                                      df_tmp_running_cores=df_tmp_running_cores,
-                                                      month=month, output_dir=output_dir, url_prefix=url_prefix)
+        html_join_core_hr_and_running_cores_for_one_month(df_tmp_core_hr=df_tmp_core_hr,
+                                                          df_tmp_running_cores=df_tmp_running_cores,
+                                                          month=month, output_dir=output_dir, url_prefix=url_prefix)
 
     # Full data of monthly sum core hr
-    handle_core_hr_monthly_sum_of_all(df_core_hr_monthly=df_core_hr_monthly, sorted_months=sorted_months,
-                                      output_dir=output_dir, url_prefix=url_prefix)
+    produce_monthly_core_hr_of_all_years(df_core_hr_monthly=df_core_hr_monthly,
+                                         sorted_months=sorted_months,
+                                         output_dir=output_dir,
+                                         url_prefix=url_prefix)
+
     # Create individual plots for each site
-    handle_core_hr_monthly_sum_of_all_for_each_site(df_core_hr_monthly=df_core_hr_monthly, sorted_months=sorted_months,
-                                                    output_dir=output_dir)
+    process_monthly_core_hr_for_each_site(df_core_hr_monthly=df_core_hr_monthly,
+                                          sorted_months=sorted_months,
+                                          output_dir=output_dir)
+
+    # Create individual plots for each year
+    produce_monthly_core_hr_for_each_year(df_core_hr_monthly=df_core_hr_monthly,
+                                          sorted_months=sorted_months,
+                                          output_dir=output_dir,
+                                          url_prefix=url_prefix)
+
     # Create main html
-    create_main_html(df_core_hr_monthly=df_core_hr_monthly, html_template=html_template, output_dir=output_dir,
-                     url_prefix=url_prefix)
+    create_main_html(df_core_hr_monthly=df_core_hr_monthly,
+                     html_template=html_template,
+                     output_dir=output_dir,
+                     url_prefix=url_prefix,
+                     sorted_months=sorted_months)
 
     # Write whole core hr and running cores daily data to csv
     df_core_hr_daily.sort_values(by=['month', 'dayofmonth', 'site']) \
