@@ -3,7 +3,7 @@
 
 
 
-# This function exits 0 when file exists, is smaller than specified treshold and was modified during last N seconds.
+# This function exits 0 when file exists, is smaller than specified treshold and was modified during last N seconds (Unix time).
 #arg1: file path
 #arg2: time treshold in seconds
 #arg3: size treshold in bytes
@@ -20,7 +20,7 @@ function check_file_status {
     FILETIME=$(stat $1 -c %Y)
     TIMEDIFF=$(expr $CURTIME - $FILETIME)
 
-    if [ $TIMEDIFF -lt $2 ]; then
+    if [ $TIMEDIFF -gt $2 ]; then
         exit 1
     fi
 
@@ -39,7 +39,7 @@ function check_file_status {
 #arg3: ES index time extension (e.g. RecordTime/timestamp)
 #arg4: minimum number of documents to compare
 
-function cmp_es_hits {
+function check_cmp_es_hits {
     # get monit if it doesn't exist
     # path is subject to change
     if [ ! -f /tmp/monit ]; then
@@ -55,8 +55,24 @@ function cmp_es_hits {
     if [ $JQ_RESULT -lt $4 ]; then
         exit 1
     fi
-    exit 0
+}
 
+
+# This function exits 0 when specified file was modified during last N seconds (Unix time).
+#arg1: hdfs directory and file
+#arg2: time treshold in seconds
+function check_hdfs_mod_date {
+
+    CURTIME=$(date +%s)
+    # convert milliseconds to seconds
+    FILETIME=$(expr $(hadoop fs -stat "%Y" $1) / 1000 )
+    TIMEDIFF=$(expr $CURTIME - $FILETIME)
+
+    if [ $TIMEDIFF -gt $2 ]; then
+        # amount of time before last modification is bigger than specified treshold
+        # -> file wasn't modified during last $2 seconds
+        exit 1
+    fi
 }
 
 "$@"
