@@ -3,7 +3,7 @@
 
 
 
-# This function exits 0 when file exists, is smaller than specified treshold and was modified during last N seconds (Unix time).
+# This function exits 0 when file exists, is bigger than specified treshold and was modified during last N seconds (Unix time).
 #arg1: file path
 #arg2: time treshold in seconds
 #arg3: size treshold in bytes
@@ -26,7 +26,7 @@ function check_file_status {
 
     FILESIZE=$(stat -c%s "$1")
     if [ $FILESIZE -lt $3 ]; then
-        # file is smaller than specified size
+        # file is smaller than specified size treshold
         exit 210
     fi
 }
@@ -60,15 +60,21 @@ function check_es_hits {
 }
 
 
-# This function exits 0 when specified file was modified during last N seconds (Unix time).
+# This function exits 0 if specified file is bigger than treshold and was modified during last N seconds (Unix time).
 #arg1: hdfs directory and file
 #arg2: time treshold in seconds
-function check_hdfs_mod_date {
+#arg3: size threshold in bytes
+function check_hdfs {
 
     CURTIME=$(date +%s)
-    # convert milliseconds to seconds
-    FILETIME=$(expr $(hadoop fs -stat "%Y" $1) / 1000 )
+    FILETIME=$(expr $(hadoop fs -stat "%Y" $1) / 1000 ) # convert ms to s
+    FILESIZE=($(hadoop fs -du -s $1)%% *) # remove data after space (returns '{size} {path}')
     TIMEDIFF=$(expr $CURTIME - $FILETIME)
+
+    if [ $FILESIZE -lt $3 ]; then
+        # file is smaller than specified treshold
+        exit 210
+    fi
 
     if [ $TIMEDIFF -gt $2 ]; then
         # file wasn't modified during last $2 seconds
