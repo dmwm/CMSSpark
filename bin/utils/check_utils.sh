@@ -10,50 +10,52 @@
 
 function check_file_status {
 
-    # exit 2 if file doesn't exist
     if [ ! -f $1 ]; then
-        exit 2
+        # file doesn't exist
+        exit 210
     fi
 
-    # exit 1 if file was modified before specified time
     CURTIME=$(date +%s)
     FILETIME=$(stat $1 -c %Y)
     TIMEDIFF=$(expr $CURTIME - $FILETIME)
 
     if [ $TIMEDIFF -gt $2 ]; then
-        exit 1
+        # file wasn't modified during last $2 seconds
+        exit 210
     fi
 
-    # exit 1 if file smaller than treshold
     FILESIZE=$(stat -c%s "$1")
     if [ $FILESIZE -lt $3 ]; then
-        exit 1
+        # file is smaller than specified size
+        exit 210
     fi
 }
 
 
 
 # This function exits 0 when amount of ES entries is bigger than given value in a specified index.
-#arg1: Grafana access token
-#arg2: ES index (e.g. monit_es_condor)
-#arg3: ES index time extension (e.g. RecordTime/timestamp)
-#arg4: minimum number of documents to compare
+#arg1: monit path
+#arg2: Grafana access token
+#arg3: ES index (e.g. monit_es_condor)
+#arg4: ES index time extension (e.g. RecordTime/timestamp)
+#arg5: minimum number of documents to compare
 
-function check_cmp_es_hits {
+function check_es_hits {
     # get monit if it doesn't exist
-    # path is subject to change
-    if [ ! -f /tmp/monit ]; then
+    DIR="$(dirname "$1")"
+    if [ ! -f $1 ]; then
         curl -LJO https://github.com/dmwm/CMSMonitoring/releases/latest/download/cmsmon-tools.tar.gz
         tar -xvzf cmsmon-tools.tar.gz
-        cp cmsmon-tools/monit /tmp/
+        cp cmsmon-tools/monit $DIR
         rm -rf cmsmon-tools*
     fi
 
-    TIME_EXT=$3
+    TIME_EXT=$4
     BASE_QUERY=$(echo '{"query":{"range":{"data.$TIME_EXT":{"gte":"now-1h"}}}}' | sed -e "s/\$TIME_EXT/$TIME_EXT/g")
-    JQ_RESULT=$(exec /tmp/monit -token $1 -query=$BASE_QUERY -dbname=$2 -esapi=_count | jq -re '.count')
-    if [ $JQ_RESULT -lt $4 ]; then
-        exit 1
+    JQ_RESULT=$(exec /tmp/monit -token $2 -query=$BASE_QUERY -dbname=$3 -esapi=_count | jq -re '.count')
+    if [ $JQ_RESULT -lt $5 ]; then
+        # ES contains less entries than specified
+        exit 210
     fi
 }
 
@@ -69,9 +71,8 @@ function check_hdfs_mod_date {
     TIMEDIFF=$(expr $CURTIME - $FILETIME)
 
     if [ $TIMEDIFF -gt $2 ]; then
-        # amount of time before last modification is bigger than specified treshold
-        # -> file wasn't modified during last $2 seconds
-        exit 1
+        # file wasn't modified during last $2 seconds
+        exit 210
     fi
 }
 
