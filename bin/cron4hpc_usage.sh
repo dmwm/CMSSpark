@@ -2,17 +2,15 @@
 set -e
 
 ##H cron4hpc_usage.sh
-##H    Cron job of hpc_running_cores_and_corehr.py
+##H    Cron job of hpc_running_cores_and_corehr.py with --iterative option
 ##H    This cron job produce plots in html pages of for running cores and CoreHr monthly stats of HPC
 ##H
 ##H Usage:
-##H    cron4hpc_usage.sh <OUTPUT_DIR> <URL_PREFIX> <START_DATE> <END_DATE>
+##H    cron4hpc_usage.sh <OUTPUT_DIR> <URL_PREFIX>
 ##H
 ##H Script arguments:
 ##H    OUTPUT_DIR        EOS directory that output html files will be written
 ##H    URL_PREFIX        CernBox EOS folder url link, i.e.: https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage
-##H    START_DATE        Start date of processed data in YYYY-MM-DD format
-##H    END_DATE          End date of processed data YYYY-MM-DD format
 ##H
 
 # help definition
@@ -31,18 +29,15 @@ script_dir="$(
 OUTPUT_DIR="${1}"
 # Arg 2, url prefix
 URL_PREFIX="${2}"
-# Arg 3, start date
-START_DATE="${3}"
-# Arg 4, end date
-END_DATE="${4}"
+
 HTML_TEMPLATE="$script_dir"/../src/html/hpc/html_template.html
 
-if [[ -z $OUTPUT_DIR || -z $URL_PREFIX || -z $START_DATE || -z $END_DATE ]]; then
+if [[ -z $OUTPUT_DIR || -z $URL_PREFIX ]]; then
     echo '[ERROR] One or more parameters are not set'
     echo "[ERROR] 1: ${OUTPUT_DIR} , 2: ${START_DATE} , 3: ${END_DATE} , 4: ${URL_PREFIX}"
     exit 1
 else
-    echo "[INFO] OUTPUT_DIR: ${OUTPUT_DIR} , START_DATE: ${START_DATE} , END_DATE: ${END_DATE} , URL_PREFIX: ${URL_PREFIX}"
+    echo "[INFO] OUTPUT_DIR: ${OUTPUT_DIR} , URL_PREFIX: ${URL_PREFIX}"
 fi
 
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
@@ -73,12 +68,10 @@ echo "output directory: ${OUTPUT_DIR}"
 
 # PySpark job args
 py_input_args=(
-    --start_date "$START_DATE"
-    --end_date "$END_DATE"
     --output_dir "$OUTPUT_DIR"
     --url_prefix "$URL_PREFIX"
     --html_template "$HTML_TEMPLATE"
-    # --save_pickle default is True
+    --iterative
 )
 spark_submit_args=(
     --master yarn

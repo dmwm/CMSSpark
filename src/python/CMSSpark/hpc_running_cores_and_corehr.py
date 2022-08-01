@@ -3,11 +3,19 @@
 # Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
 #
 # HPC sites' CoreHrs sum and Running cores calculations.
+#
+# How "--iterative" works
+#   - previous pandas dataframes saved in pickles/new directory
+#   - in new run, Spark job runs for the data between 1st day of previous month and 2 days ago of current day
+#   - saved dataframes(pickles) read and last 2 month rows dropped them
+#   - final dataframe created by concatenation of new partial one and saved(last 2 months dropped) one
 
-import click
+
 import os
+import shutil
 from datetime import datetime, timedelta, timezone
 
+import click
 import pandas as pd
 import plotly.express as px
 from pyspark import SparkContext
@@ -41,8 +49,8 @@ def get_candidate_files(
     start_date, end_date, spark, base=DEFAULT_HDFS_FOLDER,
 ):
     """Returns a list of hdfs folders that can contain data for the given dates."""
-    st_date = start_date - timedelta(days=2)
-    ed_date = end_date + timedelta(days=2)
+    st_date = start_date - timedelta(days=2)  # 2 days safety for hdfs files, not date filter
+    ed_date = end_date + timedelta(days=2)  # 2 days safety for hdfs files, not date filter
     days = (ed_date - st_date).days
     sc = spark.sparkContext
     # The candidate files are the folders to the specific dates,
@@ -164,7 +172,7 @@ def get_pandas_dfs(spark, start_date, end_date):
 
 
 def get_figure_of_daily_core_hr_for_one_month(df_month, month, output_dir, url_prefix):
-    """Creates plotly figure from one month of data for daily core hours and write csv"""
+    """Creates plotly figure from one month of data for daily core hours and write to csv"""
     csv_fname = month + '_core_hr.csv'
     csv_output_path = os.path.join(os.path.join(output_dir, CSV_DIR), csv_fname)
     csv_link = f"{url_prefix}/{CSV_DIR}/{csv_fname}"
@@ -425,19 +433,23 @@ def create_main_html(df_core_hr_monthly, html_template, output_dir, url_prefix, 
 
 def dates_iterative():
     """Iteratively arrange start date and end date according"""
-    today = datetime.today()
-    end_date = datetime(today.year, today.month, 1)  # First day of this month
-
-    prev_month_date = today - timedelta(days=25)  # Some days ago
-    start_date = datetime(prev_month_date.year, prev_month_date.month, 1)  # First day of last month
-    return start_date, end_date
+    # end date is 2 days ago
+    end_date = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=2)
+    # start date is first day of previous month
+    last_day_of_prev_month = datetime.today().replace(day=1) - timedelta(days=1)
+    start_date = last_day_of_prev_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # current month string
+    curr_month_str = datetime.today().strftime('%Y-%m')
+    # previous month string
+    prev_month_str = last_day_of_prev_month.strftime('%Y-%m')
+    return start_date, end_date, curr_month_str, prev_month_str
 
 
 @click.command()
 @click.option("--output_dir", required=True, default="./www/hpc_monthly", help="local output directory")
 @click.option("--start_date", required=False, type=click.DateTime(VALID_DATE_FORMATS))
 @click.option("--end_date", required=False, type=click.DateTime(VALID_DATE_FORMATS))
-@click.option("--iterative", required=False, type=bool, default=False,
+@click.option("--iterative", required=False, is_flag=True, show_default=True, default=False,
               help="Iterative start and end date setting. Please set your cron job later than 3rd day of the month")
 @click.option("--url_prefix", default="https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage",
               help="CernBox eos folder link, will be used in plots to point to csv source data")
@@ -451,33 +463,64 @@ def main(start_date, end_date, output_dir, iterative, url_prefix, html_template,
 
         Please investigate how it is run in bin/cron4hpc_usage.sh because pages are produced in iterative mode to not
         run Spark Job on a couple of years data
+
+        Iterative:
+            The aim of iterative is not to lost old data even HDFS folders are deleted. In each run, Spark job will
+            not run over all 3+ years of data. Spark job will run over last 2 months of data, and it will be concat with
+            saved dataframe(in pickle format). Hence, final dataframes will consist of all data till 2 days ago.
     """
-    # Create subdirectories if it does not exist
-    for d in [CSV_DIR, HTML_DIR, SITES_HTML_DIR, YEARS_DIR, PICKLE_DIR]:
-        os.makedirs(os.path.join(output_dir, d), exist_ok=True)
-
-    if iterative:
-        start_date, end_date = dates_iterative()
-    print("Data will be processed between", start_date, "-", end_date)
-
-    url_prefix = url_prefix.rstrip("/")  # no slash at the end
-    output_dir = output_dir.rstrip("/")  # no slash at the end
-
     # Set TZ as UTC. Also set in the spark-submit confs.
     spark = get_spark_session()
     spark.conf.set("spark.sql.session.timeZone", "UTC")
 
-    # Get pandas dataframes
-    df_core_hr_daily, df_running_cores_daily, df_core_hr_monthly = get_pandas_dfs(spark, start_date, end_date)
+    url_prefix = url_prefix.rstrip("/")  # no slash at the end
+    output_dir = output_dir.rstrip("/")  # no slash at the end
 
-    # Save pickle files
-    if save_pickle:
-        tsmonth = datetime.today().strftime('%Y-%m')
-        os.makedirs(os.path.join(output_dir, os.path.join(PICKLE_DIR, tsmonth)), exist_ok=True)
-        df_core_hr_daily.to_pickle(f'{output_dir}/{PICKLE_DIR}/{tsmonth}/core_hr_daily.pkl')
-        df_running_cores_daily.to_pickle(f'{output_dir}/{PICKLE_DIR}/{tsmonth}/running_cores_daily.pkl')
-        df_core_hr_monthly.to_pickle(f'{output_dir}/{PICKLE_DIR}/{tsmonth}/core_hr_monthly.pkl')
-        # df_core_hr_daily = pd.read_pickle("core_hr_daily.pkl")
+    # Create subdirectories if they do not exist
+    for d in [CSV_DIR, HTML_DIR, SITES_HTML_DIR, YEARS_DIR,
+              os.path.join(PICKLE_DIR, 'new'), os.path.join(PICKLE_DIR, 'old'),
+              os.path.join(PICKLE_DIR, 'raw')]:
+        # PICKLE/raw : if not iterative, start and end time provided by user, then saves pickles to raw
+        # PICKLE/new : if iterative, saves new dataframes as pickle to new
+        # PICKLE/old : if iterative, saves previous run's dataframes as pickle to old
+        os.makedirs(os.path.join(output_dir, d), exist_ok=True)
+
+    if iterative:
+        print("[INFO] Iterative process is starting...")
+        start_date, end_date, curr_month_str, prev_month_str = dates_iterative()
+
+        # Read existing pickle files and get df
+        prev_df_chd = pd.read_pickle(f'{output_dir}/{PICKLE_DIR}/new/core_hr_daily.pkl')
+        prev_df_rcd = pd.read_pickle(f'{output_dir}/{PICKLE_DIR}/new/running_cores_daily.pkl')
+        prev_df_chm = pd.read_pickle(f'{output_dir}/{PICKLE_DIR}/new/core_hr_monthly.pkl')
+
+        # drop last 2 months
+        prev_df_core_hr_daily = prev_df_chd[~ prev_df_chd.month.isin([curr_month_str, prev_month_str])]
+        prev_df_running_cores_daily = prev_df_rcd[~ prev_df_rcd.month.isin([curr_month_str, prev_month_str])]
+        prev_df_core_hr_monthly = prev_df_chm[~ prev_df_chm.month.isin([curr_month_str, prev_month_str])]
+
+        print("[INFO]", curr_month_str, "and", prev_month_str, "months are dropped from saved dataframes")
+        print("[INFO] Data will be processed between", start_date, "-", end_date)
+
+        # RUN spark for new data
+        df_core_hr_daily, df_running_cores_daily, df_core_hr_monthly = get_pandas_dfs(spark, start_date, end_date)
+
+        # Concat them with old dataframe data
+        df_core_hr_daily = pd.concat([prev_df_core_hr_daily, df_core_hr_daily], ignore_index=True)
+        df_running_cores_daily = pd.concat([prev_df_running_cores_daily, df_running_cores_daily], ignore_index=True)
+        df_core_hr_monthly = pd.concat([prev_df_core_hr_monthly, df_core_hr_monthly], ignore_index=True)
+        print("[INFO] New dataframes are concatted with previous dataframes")
+        print("[INFO] df_core_hr_daily shape:", df_core_hr_daily.shape)
+        print("[INFO] df_running_cores_daily shape:", df_running_cores_daily.shape)
+        print("[INFO] df_core_hr_monthly shape:", df_core_hr_monthly.shape)
+    else:
+        # RUN spark
+        df_core_hr_daily, df_running_cores_daily, df_core_hr_monthly = get_pandas_dfs(spark, start_date, end_date)
+        # Save pickle files
+        if save_pickle:
+            df_core_hr_daily.to_pickle(f'{output_dir}/{PICKLE_DIR}/raw/core_hr_daily.pkl')
+            df_running_cores_daily.to_pickle(f'{output_dir}/{PICKLE_DIR}/raw/running_cores_daily.pkl')
+            df_core_hr_monthly.to_pickle(f'{output_dir}/{PICKLE_DIR}/raw/core_hr_monthly.pkl')
 
     # Set date order of yyyy-mm month strings
     sorted_months = sorted(df_core_hr_daily.month.unique(), key=lambda m: datetime.strptime(m, "%Y-%m"))
@@ -520,6 +563,17 @@ def main(start_date, end_date, output_dir, iterative, url_prefix, html_template,
         .to_csv(os.path.join(output_dir, 'all_core_hr_daily.csv'), index=False)
     df_running_cores_daily.sort_values(by=['month', 'dayofmonth', 'site']) \
         .to_csv(os.path.join(output_dir, 'all_running_cores_daily.csv'), index=False)
+
+    if iterative:
+        # This should be run as a last step,
+        # because we don't want to lost current pickle by replacing it with the new problematic df
+        for pkl in ['core_hr_daily.pkl', 'running_cores_daily.pkl', 'core_hr_monthly.pkl']:
+            shutil.copy2(f'{output_dir}/{PICKLE_DIR}/new/{pkl}', f'{output_dir}/{PICKLE_DIR}/old/{pkl}')
+
+        # Save current dataframes to "pickles/new" directory
+        df_core_hr_daily.to_pickle(f'{output_dir}/{PICKLE_DIR}/new/core_hr_daily.pkl')
+        df_running_cores_daily.to_pickle(f'{output_dir}/{PICKLE_DIR}/new/running_cores_daily.pkl')
+        df_core_hr_monthly.to_pickle(f'{output_dir}/{PICKLE_DIR}/new/core_hr_monthly.pkl')
 
 
 if __name__ == "__main__":
