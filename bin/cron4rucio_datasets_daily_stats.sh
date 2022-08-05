@@ -173,7 +173,7 @@ KERBEROS_USER=$(echo "$PRINCIPAL" | grep -o '^[^@]*')
 # Requires kerberos ticket to reach the EOS directory
 if [ ! -d "$EOS_DIR" ]; then
     echo "$(date --rfc-3339=seconds)" "[ERROR] EOS directory does not exist: ${EOS_DIR}}"
-    exit 1
+    # exit 1, do not exit till we solve the problem in K8s magnum-eos pods which always cause trouble in each 40-50 days
 fi
 # -------------------------------------------------------------------------------------------------------------- TABLES
 # The tables of which split-by column set as Null and -m=1 are so small tables, no need to do parallel import

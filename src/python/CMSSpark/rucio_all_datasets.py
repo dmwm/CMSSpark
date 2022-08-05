@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+#
+# This Spark job creates datasets summary results by aggregating Rucio&DBS tables and
+#    save result to HDFS directory as a source to MongoDB of go web service
 
 from datetime import datetime
 
@@ -9,7 +12,7 @@ import pandas as pd
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
-    col, collect_list, concat_ws, first, from_unixtime, greatest, lit, lower, when,
+    col, collect_list, concat_ws, countDistinct, first, from_unixtime, greatest, lit, lower, when,
     avg as _avg,
     count as _count,
     hex as _hex,
@@ -26,13 +29,10 @@ TODAY = datetime.today().strftime('%Y-%m-%d')
 HDFS_RUCIO_RSES = f'/tmp/cmsmonit/rucio_daily_stats-{TODAY}/RSES/part*.avro'
 HDFS_RUCIO_REPLICAS = f'/tmp/cmsmonit/rucio_daily_stats-{TODAY}/REPLICAS/part*.avro'
 HDFS_RUCIO_DIDS = f'/project/awg/cms/rucio/{TODAY}/dids/part*.avro'
-HDFS_RUCIO_DATASET_LOCKS = f'/project/awg/cms/rucio/{TODAY}/dataset_locks/part*.avro'
 # DBS
 HDFS_DBS_DATASETS = f'/tmp/cmsmonit/rucio_daily_stats-{TODAY}/DATASETS/part*.avro'
 HDFS_DBS_BLOCKS = f'/tmp/cmsmonit/rucio_daily_stats-{TODAY}/BLOCKS/part*.avro'
 HDFS_DBS_FILES = f'/tmp/cmsmonit/rucio_daily_stats-{TODAY}/FILES/part*.avro'
-TB_DENOMINATOR = 10 ** 12
-FLT_N_TB_DGTS = 8
 
 pd.options.display.float_format = '{:,.2f}'.format
 pd.set_option('display.max_colwidth', None)
@@ -66,13 +66,6 @@ def get_df_rses(spark):
 
 def get_df_replicas(spark):
     """Create main replicas dataframe by selecting only Disk or Tape RSEs in Rucio REPLICAS table
-
-    Columns selected:
-        - f_name: file name
-        - f_size_replicas: represents size of a file in REPLICAS table
-        - rse_id
-        - rep_accessed_at
-        - rep_created_at
     """
     # List of all RSE id list
     # rse_id_list = df_pd_rses['replica_rse_id'].to_list()
@@ -114,16 +107,6 @@ def get_df_dids_files(spark):
         .select(['f_name', 'f_size_dids', 'dids_accessed_at', 'dids_created_at'])
 
 
-def get_df_ds_locks(spark):
-    """Create dataset locks dataframe"""
-    return spark.read.format('avro').load(HDFS_RUCIO_DATASET_LOCKS) \
-        .filter(col('SCOPE') == 'cms') \
-        .withColumn('rse_id', lower(_hex(col('RSE_ID')))) \
-        .withColumnRenamed('NAME', 'b_name_ds_locks') \
-        .withColumnRenamed('ACCOUNT', 'account_ds_locks') \
-        .select(['b_name_ds_locks', 'account_ds_locks', 'rse_id'])
-
-
 def get_df_dbs_f_d(spark):
     """Create a dataframe for FILE-DATASET membership/ownership map
 
@@ -142,6 +125,19 @@ def get_df_dbs_f_d(spark):
         .withColumnRenamed('d_dataset', 'dataset') \
         .select(['dataset_id', 'f_name', 'dataset'])
     return df_dbs_f_d
+
+
+def get_df_ds_general_info(spark):
+    """Calculate real size and total file counts of dataset: RealSize, TotalFileCnt
+    """
+    dbs_files = spark.read.format('avro').load(HDFS_DBS_FILES).select(['DATASET_ID', 'FILE_SIZE', 'LOGICAL_FILE_NAME'])
+    dbs_datasets = spark.read.format('avro').load(HDFS_DBS_DATASETS).select(['DATASET_ID'])
+    return dbs_datasets.join(dbs_files, ['DATASET_ID'], how='left') \
+        .groupby('DATASET_ID') \
+        .agg(_sum('FILE_SIZE').alias('RealSize'),
+             countDistinct(col('LOGICAL_FILE_NAME')).alias('TotalFileCnt')
+             ) \
+        .withColumnRenamed('DATASET_ID', 'Id').select(['Id', 'RealSize', 'TotalFileCnt'])
 
 
 def get_df_replicas_j_dids(df_replicas, df_dids_files):
@@ -271,13 +267,13 @@ def get_df_sub_rse_details(df_enr_with_rse_info):
                  'LastAccessInRse', 'FileCnt', 'AccessedFileCnt', ])
 
 
-def get_df_main_datasets(df_sub_rse_details):
+def get_df_main_datasets(df_sub_rse_details, df_ds_general_info):
     """Get dataframe of datasets not read since N months for main htmls.
 
     Get last access of dataframe in all RSE(s)
     """
     # Order of the select is important
-    return df_sub_rse_details \
+    df = df_sub_rse_details \
         .groupby(['RseType', 'Dataset']) \
         .agg(_max(col('SizeInRseBytes')).cast(LongType()).alias('Max'),
              _min(col('SizeInRseBytes')).cast(LongType()).alias('Min'),
@@ -287,59 +283,12 @@ def get_df_main_datasets(df_sub_rse_details):
              concat_ws(', ', collect_list('RSE')).alias('RSEs'),
              first(col('dataset_id')).cast(LongType()).alias('Id'),
              ) \
-        .withColumn('LastAccess', from_unixtime(col("LastAccessMs") / 1000, "yyyy-MM-dd")) \
+        .withColumn('LastAccess', (col('LastAccessMs') / 1000).cast(LongType())) \
         .select(['Id', 'RseType', 'Dataset', 'LastAccess', 'Max', 'Min', 'Avg', 'Sum', 'RSEs'])
 
-
-def get_df_dbs_agg_blocks(spark, df_replicas):
-    dbs_files = spark.read.format('avro').load(HDFS_DBS_FILES) \
-        .withColumnRenamed('LOGICAL_FILE_NAME', 'f_dbs_name') \
-        .withColumnRenamed('DATASET_ID', 'f_dataset_id') \
-        .withColumnRenamed('BLOCK_ID', 'f_block_id') \
-        .withColumnRenamed('FILE_SIZE', 'f_dbs_size') \
-        .select(['f_dbs_name', 'f_dataset_id', 'f_block_id', 'f_dbs_size'])
-
-    df_files = df_replicas.join(dbs_files, df_replicas.f_name == dbs_files.f_dbs_name, how='left') \
-        .select(['f_name', 'f_size_replicas', 'f_dataset_id', 'f_block_id'])
-
-    dbs_blocks = spark.read.format('avro').load(HDFS_DBS_BLOCKS) \
-        .withColumnRenamed('DATASET_ID', 'b_dataset_id') \
-        .withColumnRenamed('BLOCK_ID', 'b_block_id') \
-        .withColumnRenamed('BLOCK_NAME', 'b_name') \
-        .withColumnRenamed('FILE_COUNT', 'b_file_cnt') \
-        .select(['b_name', 'b_block_id', 'b_dataset_id', 'b_file_cnt'])
-
-    df_dbs_b_agg = df_files.join(dbs_blocks, df_files.f_block_id == dbs_blocks.b_block_id, how='left') \
-        .groupby('b_block_id') \
-        .agg(_sum('f_size_replicas').alias('b_size'),
-             first('b_file_cnt').alias('b_file_cnt'),
-             first('b_name').alias('b_name'),
-             first('b_dataset_id').alias('b_dataset_id'),
-             ) \
-        .select(['b_block_id', 'b_name', 'b_dataset_id', 'b_size', 'b_file_cnt'])
-
-    return df_dbs_b_agg
-
-
-def get_df_dbs_main_ds_size(spark):
-    dbs_files = spark.read.format('avro').load(HDFS_DBS_FILES) \
-        .withColumnRenamed('LOGICAL_FILE_NAME', 'f_name') \
-        .withColumnRenamed('DATASET_ID', 'f_dataset_id') \
-        .withColumnRenamed('BLOCK_ID', 'f_block_id') \
-        .withColumnRenamed('FILE_SIZE', 'f_dbs_size') \
-        .select(['f_name', 'f_dataset_id', 'f_block_id', 'f_dbs_size'])
-    dbs_datasets = spark.read.format('avro').load(HDFS_DBS_DATASETS) \
-        .withColumnRenamed('DATASET_ID', 'd_dataset_id') \
-        .withColumnRenamed('DATASET', 'd_dataset') \
-        .select(['d_dataset_id', 'd_dataset'])
-    df_dbs_d_agg = dbs_files.join(dbs_datasets, dbs_files.f_dataset_id == dbs_datasets.d_dataset_id, how='left') \
-        .withColumnRenamed('f_dataset_id', 'dataset_id') \
-        .groupby('dataset_id') \
-        .agg(_sum('f_dbs_size').alias('d_dbs_size'),
-             first('d_dataset').alias('d_name')
-             ) \
-        .select(['dataset_id', 'd_name', 'd_dbs_size'])
-    return df_dbs_d_agg
+    return df.join(df_ds_general_info, ['Id'], how='left') \
+        .select(['Id', 'RseType', 'Dataset', 'LastAccess', 'Max', 'Min', 'Avg', 'Sum', 'RealSize',
+                 'TotalFileCnt', 'RSEs'])
 
 
 @click.command()
@@ -360,6 +309,7 @@ def main(hdfs_out_dir):
     # The reason that we have lots of functions that returns PySpark dataframes is mainly for code readability.
     df_rses = get_df_rses(spark)
     df_dbs_f_d = get_df_dbs_f_d(spark)
+    df_ds_general_info = get_df_ds_general_info(spark)
     df_replicas = get_df_replicas(spark)
     df_dids_files = get_df_dids_files(spark)
     df_replicas_j_dids = get_df_replicas_j_dids(df_replicas, df_dids_files)
@@ -367,8 +317,7 @@ def main(hdfs_out_dir):
     df_dataset_file_rse_ts_size = get_df_dataset_file_rse_ts_size(df_file_rse_ts_size, df_dbs_f_d)
     df_enr_with_rse_info = get_df_enr_with_rse_info(df_dataset_file_rse_ts_size, df_rses)
     df_sub_rse_details = get_df_sub_rse_details(df_enr_with_rse_info)
-    df_main_datasets = get_df_main_datasets(df_sub_rse_details)
-
+    df_main_datasets = get_df_main_datasets(df_sub_rse_details, df_ds_general_info)
     df_main_datasets.write.save(path=hdfs_out_dir, format=write_format, mode=write_mode)
 
 
