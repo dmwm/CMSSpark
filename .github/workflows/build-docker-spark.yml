@@ -1,24 +1,5 @@
 # Builds and publish spark/hadoop docker images
 
-#  How it works:
-#    Provided git tag will be used in the CMSSpark git checkout.
-#    Git tag message will provide more interactive management of GitHub actions.
-#    There are 2 conventions currently:
-#      1st: builds all docker images
-#      2nd: builds individual docker images
-#    Conventions and variables:
-#      - "Build docker all.*spark3[_-]date=(.+)":
-#          will build all docker images with provided "spark3[_-]date" cmsmon-hadoop-base image date tag
-#          Example: "Build docker all with spark3-date=20220819"
-#      - "Build docker [(](.+)[)].*spark3[_-]date=(.+)":
-#          will build individual docker images with "spark3[_-]date" cmsmon-hadoop-base image date tag
-#          however docker image name(s) should be provided between paranthesis.
-#          Examples:
-#            - "Build docker (cmsmon-rucio-ds) with spark3-date=20220819"
-#            - "Build docker (cmsmon-rucio-spark2mng, condor-cpu-eff) with spark3-date=20220819"
-#  spark3-date refers to YYYYMMDD suffix of registry.cern.ch/cmsmonitoring/cmsmon-hadoop-base:spark3-YYYYMMDD image
-#    which is used as base image all docker images that we build in this workflow.
-
 name: Build docker images
 on:
   push:
@@ -32,6 +13,7 @@ jobs:
       git_tag: ${{ steps.step1.outputs.git_tag }}
       action: ${{ steps.step1.outputs.action }}
       spark3_date: ${{ steps.step1.outputs.spark3_date }}
+      py_version: ${{ steps.step1.outputs.py_version }}
       docker_individual_images: ${{ steps.step1.outputs.individual_images }}
     steps:
       - uses: actions/checkout@v3
@@ -41,8 +23,10 @@ jobs:
       - id: step1
         run: |
           # Define git tag commit message regex rules that users should obey to use functionalities
-          REGEX_BUILD_ALL='Build docker all.*spark3[_-]date=(.+)'
-          REGEX_BUILD_INDIVIDUALS='Build docker [(](.+)[)].*spark3[_-]date=(.+)'
+          #    "\d" kind regex expressions does not work!
+          REGEX_BUILD_ALL='Build docker all.*py=([.0-9]+).*spark3[_-]date=(.*[0-9]+)'
+          REGEX_BUILD_HADOOP_BASE='Build docker hadoop base.*py=([.0-9]+).*spark3[_-]date=(.*[0-9]+)'
+          REGEX_BUILD_INDIVIDUALS='Build docker [(](.+)[)].*spark3[_-]date=(.*[0-9]+)'
           
           # Get git tag and set as "git_tag" variable
           echo "::set-output name=git_tag::${GITHUB_REF/refs\/tags\//}"
@@ -54,10 +38,20 @@ jobs:
           # Check that tag commit message obeys regex rules
  
           # Check all
-          if [[ $GIT_TAG_MSG =~ $REGEX_BUILD_ALL && ! -z "${BASH_REMATCH[1]}" ]]; then
-              echo "Action: all, spark3_date: ${BASH_REMATCH[1]}"
+          if [[ $GIT_TAG_MSG =~ $REGEX_BUILD_ALL && ! -z "${BASH_REMATCH[1]}" && ! -z "${BASH_REMATCH[2]}" ]]; then
+              echo "Action: all, py_version: ${BASH_REMATCH[1]}, spark3_date: ${BASH_REMATCH[2]}"
               echo "::set-output name=action::all"
-              echo "::set-output name=spark3_date::${BASH_REMATCH[1]}"
+              echo "::set-output name=py_version::${BASH_REMATCH[1]}"
+              echo "::set-output name=spark3_date::${BASH_REMATCH[2]}"
+              exit 0
+          fi
+
+          # Check hadoop base
+          if [[ $GIT_TAG_MSG =~ $REGEX_BUILD_HADOOP_BASE && ! -z "${BASH_REMATCH[1]}" && ! -z "${BASH_REMATCH[2]}" ]]; then
+              echo "Action: base, py_version: ${BASH_REMATCH[1]}, spark3_date: ${BASH_REMATCH[2]}"
+              echo "::set-output name=action::base"
+              echo "::set-output name=py_version::${BASH_REMATCH[1]}"
+              echo "::set-output name=spark3_date::${BASH_REMATCH[2]}"
               exit 0
           fi
 
@@ -71,12 +65,58 @@ jobs:
           fi
           
           # Fail message
-          echo "failure"
+          echo "failure, NO REGEX IS MATCHED WITH THE TAG MESSAGE"
+
+  build-cmsmon-hadoop-base:
+    runs-on: ubuntu-latest
+    needs: init-job
+    if: ${{ (needs.init-job.outputs.action == 'all') || (needs.init-job.outputs.action == 'base') }}
+    name: Build cmsmon-hadoop-base
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref }}
+      - name: Get cmsmon-hadoop-base Dockerfile
+        run: |
+          # Debug logs
+          echo PY_VERSION: ${{ needs.init-job.outputs.py_version }}
+          echo SPARK3_IMAGE_TAG: ${{ needs.init-job.outputs.spark3_date }}
+          #
+          # Download all files in the directory using git tarball and tar functionalities
+          curl -L https://api.github.com/repos/dmwm/CMSKubernetes/tarball/master | \
+          tar xvz --wildcards */docker/cmsmon-hadoop-base/* --strip-components 3 -C .
+          #
+          # Replacse Dockerfile with spark3 one
+          cp Dockerfile-spark3 Dockerfile
+      - name: Login to CERN GitLab
+        uses: docker/login-action@v2
+        with:
+          registry: gitlab-registry.cern.ch
+          username: ${{ secrets.GITLAB_USERNAME }}
+          password: ${{ secrets.GITLAB_PASSWORD }}
+      - name: Login to registry.cern.ch
+        uses: docker/login-action@v1
+        with:
+          registry: registry.cern.ch
+          username: ${{ secrets.CERN_LOGIN }}
+          password: ${{ secrets.CERN_TOKEN }}
+      - name: Publish cmsmon-hadoop-base image to registry.cern.ch
+        uses: docker/build-push-action@v2
+        with:
+          context: ./
+          file: ./Dockerfile
+          push: true
+          build-args: |
+            PY_VERSION=${{ needs.init-job.outputs.py_version }}
+          tags: registry.cern.ch/cmsmonitoring/cmsmon-hadoop-base:spark3-${{ needs.init-job.outputs.spark3_date }}
 
   build-cmsmon-rucio-ds:
     runs-on: ubuntu-latest
-    needs: init-job
-    if: ${{ (needs.init-job.outputs.action == 'all') || (contains(needs.init-job.outputs.docker_individual_images, 'cmsmon-rucio-ds')) }}
+    needs: [ init-job, build-cmsmon-hadoop-base ]
+    if: |
+      always() &&
+      (needs.build-cmsmon-hadoop-base.result == 'skipped' || needs.build-cmsmon-hadoop-base.result == 'success') &&
+      (needs.init-job.outputs.action == 'all' || contains(needs.init-job.outputs.docker_individual_images, 'cmsmon-rucio-ds'))
     name: Build cmsmon-rucio-ds
     steps:
       - uses: actions/checkout@v3
@@ -105,8 +145,11 @@ jobs:
 
   build-condor-cpu-eff:
     runs-on: ubuntu-latest
-    needs: init-job
-    if: ${{ (needs.init-job.outputs.action == 'all') || (contains(needs.init-job.outputs.docker_individual_images, 'condor-cpu-eff')) }}
+    needs: [ init-job, build-cmsmon-hadoop-base ]
+    if: |
+      always() &&
+      (needs.build-cmsmon-hadoop-base.result == 'skipped' || needs.build-cmsmon-hadoop-base.result == 'success') &&
+      (needs.init-job.outputs.action == 'all' || contains(needs.init-job.outputs.docker_individual_images, 'condor-cpu-eff'))
     name: Build condor-cpu-eff
     steps:
       - uses: actions/checkout@v3
@@ -135,8 +178,11 @@ jobs:
 
   build-cmsmon-rucio-spark2mng:
     runs-on: ubuntu-latest
-    needs: init-job
-    if: ${{ (needs.init-job.outputs.action == 'all') || (contains(needs.init-job.outputs.docker_individual_images, 'cmsmon-rucio-spark2mng')) }}
+    needs: [ init-job, build-cmsmon-hadoop-base ]
+    if: |
+      always() &&
+      (needs.build-cmsmon-hadoop-base.result == 'skipped' || needs.build-cmsmon-hadoop-base.result == 'success') &&
+      (needs.init-job.outputs.action == 'all' || contains(needs.init-job.outputs.docker_individual_images, 'cmsmon-rucio-spark2mng'))
     name: Build cmsmon-rucio-spark2mng
     steps:
       - uses: actions/checkout@v3
