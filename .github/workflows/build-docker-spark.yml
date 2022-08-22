@@ -22,7 +22,7 @@ jobs:
         run: |
           # Define git tag commit message regex rules that users should obey to use functionalities
           #    "\d" kind regex expressions does not work!
-          REGEX_BUILD_ALL='Build docker all'
+          REGEX_BUILD_ALL='Build docker all.*'
           REGEX_BUILD_INDIVIDUALS='Build docker [(](.+)[)].*'
           
           # Get git tag and set as "git_tag" variable
