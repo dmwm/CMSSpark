@@ -63,6 +63,11 @@ spark_confs=(
 OUTPUT_DIR="${1}/stepchain"
 LAST_N_DAYS="${2}"
 
+# ------------------------------------------------------------------------------------------ INITIALIZE ANALYTIX SPARK3
+hadoop-set-default-conf.sh analytix
+source hadoop-setconf.sh analytix 3.2 spark3
+# ---------------------------------------------------------------------------------------------------------------------
+
 echo "$(date --rfc-3339=seconds)" "[INFO] Starting spark job for step chain cpu efficiencies, folder: ${OUTPUT_DIR}"
 spark-submit \
     --master yarn \
