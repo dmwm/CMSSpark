@@ -69,6 +69,11 @@ OUTPUT_DIR="${1}/cpu_eff"
 OUTPUT_DIR_OUTLIER="${OUTPUT_DIR}_outlier"
 CMS_TYPES=("analysis" "production" "folding@home" "test")
 
+# ------------------------------------------------------------------------------------------ INITIALIZE ANALYTIX SPARK3
+hadoop-set-default-conf.sh analytix
+source hadoop-setconf.sh analytix 3.2 spark3
+# ---------------------------------------------------------------------------------------------------------------------
+
 echo "$(date --rfc-3339=seconds)" "[INFO] Condor cpu efficiency starts"
 for type in "${CMS_TYPES[@]}"; do
     SUB_FOLDER=$(echo "$type" | sed -e 's/[^[:alnum:]]/-/g' | tr -s '-' | tr '[:upper:]' '[:lower:]')
