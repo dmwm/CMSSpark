@@ -60,3 +60,12 @@ function func() {
 }
 
 $cmd >> $log 2>&1
+
+# ---------------------------------------------------------------------------------------------------------------- TEST
+# This cron job runs daily, so last modification date of the output should be within 12 hours
+time_threshold=43200
+size_threshold=25000000 # (25MB)
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+
+/bin/bash "$script_dir/utils/check_utils.sh" check_file_status "$odir/dbs_events.csv.gz" $time_threshold $size_threshold
+# Running commands after this point will change the exit code.
