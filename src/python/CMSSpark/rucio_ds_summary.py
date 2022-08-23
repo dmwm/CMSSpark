@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-#
-# This Spark job creates datasets summary results by aggregating Rucio&DBS tables and
-#    save result to HDFS directory as a source to MongoDB of go web service
-# It does not include RSE details part, each row represents a dataset and its aggregated results in RSEs.
+"""
+File        : rucio_ds_summary.py
+Author      : Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+Description : This Spark job creates datasets summary results by aggregating Rucio&DBS tables and
+                save result to HDFS directory as a source to MongoDB of go web service
 
+It does not include RSE details part, each row represents a dataset and its aggregated results in RSEs.
+"""
+
+# system modules
 import json
 import logging
 import os
@@ -28,12 +32,14 @@ from pyspark.sql.functions import (
 )
 from pyspark.sql.types import LongType
 
+# CMSMonitoring modules
 try:
     from CMSMonitoring.StompAMQ7 import StompAMQ7
 except ImportError:
     print("ERROR: Could not import StompAMQ")
     sys.exit(1)
 
+# global variables
 TODAY = datetime.today().strftime('%Y-%m-%d')
 
 # Rucio
@@ -57,7 +63,7 @@ STR_TYPE_COLUMNS = ['RseType', 'IsDatasetValid', 'TierName', 'PhysicsGroupName',
 NULL_STR_TYPE_COLUMN_VALUE = 'UNKNOWN'
 
 
-def get_spark_session(yarn=True, verbose=False):
+def get_spark_session():
     """Get or create the spark context and session.
     """
     sc = SparkContext(appName='cms-monitoring-rucio-datasets-for-mongo')

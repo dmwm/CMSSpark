@@ -1,28 +1,28 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: David Lange <david.lange AT cern [DOT] ch>
-
 """
-Rucio daily dumps. More explanation required!
+File        : rucio_daily.py
+Author      : David Lange <david.lange AT cern [DOT] ch>
+Description : Rucio daily dumps. More explanation required!
 """
 
-from __future__ import print_function
+# system modules
 import argparse
-import os
 import time
 import logging
-from datetime import timedelta, date, datetime
-from dateutil.relativedelta import relativedelta
+from datetime import date, datetime
 
-from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as fn
 import pyspark.sql.types as types
 
+# CMSSpark modules
 from CMSSpark import schemas
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
+
+# global variables
 RUCIO_HDFS_FOLDER = "/project/awg/cms/rucio/{fdate}/replicas/part*.avro"
 CMS_DBS_HDFS_FOLDER = "/project/awg/cms/CMS_DBS3_PROD_GLOBAL/old/FILES/part-m-00000"
 
@@ -86,7 +86,7 @@ def run(rucio_path, dbs_path, output, verbose):
     # rucio_info.show(5, False)
     dbs_files = csvreader.schema(schemas.schema_files()) \
         .load(dbs_path) \
-        .select("f_logical_file_name", "f_dataset_id")    
+        .select("f_logical_file_name", "f_dataset_id")
     # dbs_files.show(5, False)
     rucio_df = (rucio_info.withColumn("tmp1", fn.substring_index("filename", "/rucio/", -1))
                 .withColumn("tally_date", fn.substring_index("tmp1", "/", 1))
@@ -132,4 +132,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

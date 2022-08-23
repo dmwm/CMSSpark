@@ -84,3 +84,13 @@ Please follow instructions [these instructions](README_Leftovers.md).
 ### Citation
 Please use this paper for citation:
 [https://arxiv.org/abs/1811.04785](https://arxiv.org/abs/1811.04785)
+
+
+## Contribution suggestions
+
+- Create virtualenv in the current directory with `venv` name which is in .gitignore: `python3 -m venv ./venv`
+- Update pip to latest version: `python3 -m pip install --upgrade pip`
+- Run `pip install -r requirements.txt`
+- All set.
+- Please obey the conventions in other scripts, python import conventions, bash script wrapper script, etc.
+- All spark jobs use same Spark/Hadoop/Python versions. If a script requires update, please apply updates to all.

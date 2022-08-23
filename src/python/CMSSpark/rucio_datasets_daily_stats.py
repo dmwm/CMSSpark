@@ -1,21 +1,24 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-#
-# Sends aggregated DBS and Rucio table dump results to MONIT(ElasticSearch) via AMQ
-#
-# Requirements:
-#    - stomp.py version 7.0.0 will be provided with spark-submit as zip file
-#    - Specific branch of dmwm/CMSMonitoring will be provided with spark-submit as zip file
-#    - creds json file should be provided which contains AMQ and MONIT credentials and configurations
-#
-# Assumptions:
-#    - No Scope filter, assumed all of them is of cms scope
-#
-# References:
-#   - https://github.com/vkuznet/log-clustering/blob/master/workflow/workflow.py
-#   - https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/cern_monit.py
+"""
+File        : rucio_datasets_daily_stats.py
+Author      : Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+Description : Sends aggregated DBS and Rucio table dump results to MONIT(ElasticSearch) via AMQ
 
+Requirements:
+   - stomp.py version 7.0.0 will be provided with spark-submit as zip file
+   - Specific branch of dmwm/CMSMonitoring will be provided with spark-submit as zip file
+   - creds json file should be provided which contains AMQ and MONIT credentials and configurations
+
+Assumptions:
+   - No Scope filter, assumed all of them is of cms scope
+
+References:
+  - https://github.com/vkuznet/log-clustering/blob/master/workflow/workflow.py
+  - https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/cern_monit.py
+"""
+
+# system modules
 import json
 import logging
 import os
@@ -39,12 +42,16 @@ from pyspark.sql.types import (
     LongType,
 )
 
+# CMSMonitoring modules
 try:
     from CMSMonitoring.StompAMQ7 import StompAMQ7
 except ImportError:
     print("ERROR: Could not import StompAMQ")
     sys.exit(1)
 
+# global variables
+
+# used Oracle tables
 TABLES = ['REPLICAS', 'CONTENTS', 'RSES', 'FILES', 'DATASETS', 'DATA_TIERS', 'PHYSICS_GROUPS',
           'ACQUISITION_ERAS', 'DATASET_ACCESS_TYPES']
 
@@ -205,15 +212,13 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
         .agg(_sum(col('replica_file_size')).alias('rucio_size'),
              _count(lit(1)).alias('rucio_n_files'),
              _sum(
-                 when(col('replica_accessed_at').isNull(), 0)
-                     .otherwise(1)
+                 when(col('replica_accessed_at').isNull(), 0).otherwise(1)
              ).alias('rucio_n_accessed_files'),
              _first(col("is_d_name_from_rucio")).alias("is_d_name_from_rucio"),
              _sum(col('lock_cnt')).alias('rucio_locked_files')
              ) \
         .withColumn('rucio_is_d_locked',
-                    when(col('rucio_locked_files') > 0, IS_DATASET_LOCKED[True])
-                    .otherwise(IS_DATASET_LOCKED[False])
+                    when(col('rucio_locked_files') > 0, IS_DATASET_LOCKED[True]).otherwise(IS_DATASET_LOCKED[False])
                     ) \
         .select(['contents_dataset', 'replica_rse_id', 'rucio_size', 'rucio_n_files', 'rucio_n_accessed_files',
                  'is_d_name_from_rucio', 'rucio_locked_files', 'rucio_is_d_locked', ])
@@ -234,8 +239,7 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
         .agg(_sum(col('dbs_file_size')).alias('dbs_size'),
              _count(lit(1)).alias('dbs_n_files'),
              _sum(
-                 when(col('replica_accessed_at').isNull(), 0)
-                     .otherwise(1)
+                 when(col('replica_accessed_at').isNull(), 0).otherwise(1)
              ).alias('dbs_n_accessed_files'),
              _first(col("is_d_name_from_dbs")).alias("is_d_name_from_dbs"),
              _sum(col('lock_cnt')).alias('dbs_locked_files')

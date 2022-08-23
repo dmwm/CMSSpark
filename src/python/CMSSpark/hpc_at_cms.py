@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-"""Generates HPC@CMS Running Cores Hourly plot for C-RSG"""
+"""
+File        : hpc_at_cms.py
+Author      : Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+Description : Generates HPC@CMS Running Cores Hourly plot for C-RSG
+"""
+
+# system modules
 import os
 from datetime import timedelta
 import pandas as pd
@@ -18,13 +23,13 @@ from pyspark import SparkContext
 from pyspark.sql import SparkSession
 import click
 
-_BASE_INPUT_PATH = "/project/monitoring/archive/condor/raw/metric"
+# global variables
+_BASE_HDFS_CONDOR = "/project/monitoring/archive/condor/raw/metric"
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 
 
-def get_spark_session(yarn=True, verbose=False):
-    """
-        Get or create the spark context and session.
+def get_spark_session():
+    """Get or create the spark context and session
     """
     sc = SparkContext(appName="hpc-at-cms_plot")
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
@@ -52,11 +57,8 @@ def _get_schema():
     )
 
 
-def get_candidate_files(
-    start_date, end_date, spark, base=_BASE_INPUT_PATH,
-):
-    """
-        Returns a list of hdfs folders that can contain data for the given dates.
+def _get_candidate_files(start_date, end_date, spark, base=_BASE_HDFS_CONDOR):
+    """Returns a list of hdfs folders that can contain data for the given dates
     """
     st_date = start_date - timedelta(days=3)
     ed_date = end_date + timedelta(days=3)
@@ -66,25 +68,24 @@ def get_candidate_files(
         f"{base}/{(st_date + timedelta(days=i)).strftime('%Y/%m/%d')}"
         for i in range(0, days)
     ]
-    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
-    URI = sc._gateway.jvm.java.net.URI
-    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
-    fs = FileSystem.get(URI("hdfs:///"), sc._jsc.hadoopConfiguration())
-    candidate_files = [url for url in candidate_files if fs.globStatus(Path(url))]
+    fsystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    uri = sc._gateway.jvm.java.net.URI
+    path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    fs = fsystem.get(uri("hdfs:///"), sc._jsc.hadoopConfiguration())
+    candidate_files = [url for url in candidate_files if fs.globStatus(path(url))]
     return candidate_files
 
 
-def get_hpc_at_cms(start_date, end_date, base=_BASE_INPUT_PATH):
-    """
-        Get data of required sites with their specific conditions defined in CMSMONIT-341 Jira ticket
+def get_hpc_at_cms(start_date, end_date, base=_BASE_HDFS_CONDOR):
+    """Get data of required sites with their specific conditions defined in CMSMONIT-341 Jira ticket
     """
     schema = _get_schema()
-    spark = get_spark_session(yarn=True, verbose=False)
+    spark = get_spark_session()
     # start_date = datetime(2020, 11, 1)
     # end_date = datetime(2021, 1, 1)
     raw_df = (
         spark.read.option("basePath", base).json(
-            get_candidate_files(start_date, end_date, spark, base),
+            _get_candidate_files(start_date, end_date, spark, base),
             schema=schema,
         ).select("data.*").filter(
             f"""Status='Completed'
@@ -106,7 +107,8 @@ def get_hpc_at_cms(start_date, end_date, base=_BASE_INPUT_PATH):
 
     # Pandas part
     # Condition list for each Site and its conditions defined in CMSMONIT-341 Jira ticket
-    cond1 = ["CMSHTPC_T3_US_NERSC_Cori_SL7", "CMSHTPC_T3_US_NERSC_Cori", "CMSHTPC_T3_US_NERSC_Cori_SL7_PREM","CMSHTPC_T3_US_NERSC_Cori_SL6_PREM"]
+    cond1 = ["CMSHTPC_T3_US_NERSC_Cori_SL7", "CMSHTPC_T3_US_NERSC_Cori", "CMSHTPC_T3_US_NERSC_Cori_SL7_PREM",
+             "CMSHTPC_T3_US_NERSC_Cori_SL6_PREM"]
     cond2 = ["CMSHTPC_T3_US_NERSC_Cori_KNL_SL7", "CMSHTPC_T3_US_NERSC_Cori_KNL"]
     cond4 = "CMSHTPC_T3_US_SDSC_osg-comet"
     cond5 = "CMSHTPC_T3_US_SDSC-Expanse"
@@ -124,10 +126,12 @@ def get_hpc_at_cms(start_date, end_date, base=_BASE_INPUT_PATH):
     df3 = df[(df.Site == "T3_US_PSC")][["RecordTimeDT", "RequestCpus"]]
     df4 = df[(df.Site == "T3_US_SDSC") & (df.GLIDEIN_Entry_Name == cond4)][["RecordTimeDT", "RequestCpus"]]
     df5 = df[(df.Site == "T3_US_SDSC") & (df.GLIDEIN_Entry_Name == cond5)][["RecordTimeDT", "RequestCpus"]]
-    df6 = df[((df.Site == "T3_US_TACC") | (df.Site == "T3_US_OSG")) & (df.GLIDEIN_Entry_Name == cond6)][["RecordTimeDT", "RequestCpus"]]
+    df6 = df[((df.Site == "T3_US_TACC") | (df.Site == "T3_US_OSG")) & (df.GLIDEIN_Entry_Name == cond6)][
+        ["RecordTimeDT", "RequestCpus"]]
     df7 = df[(df.Site == "T3_US_TACC") & (df.GLIDEIN_Entry_Name.isin(cond7))][["RecordTimeDT", "RequestCpus"]]
     df8 = df[(df.Site == "T3_US_TACC") & (df.GLIDEIN_Entry_Name == cond8)][["RecordTimeDT", "RequestCpus"]]
-    df9 = df[((df.Site == "T1_IT_CNAF") & (df.RemoteHost.isna() | df.RemoteHost.str.endswith(cond9)))][["RecordTimeDT", "RequestCpus"]]
+    df9 = df[((df.Site == "T1_IT_CNAF") & (df.RemoteHost.isna() | df.RemoteHost.str.endswith(cond9)))][
+        ["RecordTimeDT", "RequestCpus"]]
 
     # Aggregations
     d1 = df1.groupby(pd.Grouper(key='RecordTimeDT', freq='1H')).sum()
@@ -200,13 +204,8 @@ def generate_plot(result_df, output_folder, filename):
 @click.argument("start_date", nargs=1, type=click.DateTime(_VALID_DATE_FORMATS))
 @click.argument("end_date", nargs=1, type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option("--output_folder", default="./output", help="local output directory")
-def main(
-    start_date,
-    end_date,
-    output_folder,
-):
-    """
-        Main function
+def main(start_date, end_date, output_folder):
+    """Main function
     """
     print("Start:", start_date, "End date:", end_date, "Output:", output_folder)
     result_df = get_hpc_at_cms(start_date, end_date)
@@ -218,4 +217,3 @@ def main(
 
 if __name__ == "__main__":
     main()
-

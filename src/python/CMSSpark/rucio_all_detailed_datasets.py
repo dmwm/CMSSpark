@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-#
-# This Spark job creates detailed datasets(in each RSEs) results by aggregating Rucio&DBS tables and
-#    save result to HDFS directory as a source to MongoDB of go web service
+"""
+File        : rucio_all_detailed_datasets.py
+Author      : Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+Description : This Spark job creates detailed datasets(in each RSEs) results by aggregating Rucio&DBS tables and
+                save result to HDFS directory as a source to MongoDB of go web service
+"""
 
+# system modules
 from datetime import datetime
 
 import click
@@ -29,6 +32,7 @@ from pyspark.sql.types import (
 pd.options.display.float_format = '{:,.2f}'.format
 pd.set_option('display.max_colwidth', None)
 
+# global variables
 TODAY = datetime.today().strftime('%Y-%m-%d')
 # Rucio
 HDFS_RUCIO_RSES = f'/tmp/cmsmonit/rucio_daily_stats-{TODAY}/RSES/part*.avro'
@@ -43,7 +47,7 @@ PROD_ACCOUNTS = ['transfer_ops', 'wma_prod', 'wmcore_output', 'wmcore_transferor
 SYNC_PREFIX = 'sync'
 
 
-def get_spark_session(yarn=True, verbose=False):
+def get_spark_session():
     """Get or create the spark context and session.
     """
     sc = SparkContext(appName='cms-monitoring-rucio-detailed-datasets-for-mongo')

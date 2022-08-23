@@ -1,0 +1,10 @@
+setuptools~=58.1.0
+CMSMonitoring==0.6.6
+click
+python-dateutil
+pandas
+pyspark
+matplotlib
+plotly
+seaborn
+unicode

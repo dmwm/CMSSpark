@@ -1,8 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-"""Generates StepChain tasks' CPU efficiency static web site"""
+"""
+File        : stepchain_cpu_eff.py
+Author      : Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+Description : Generates StepChain tasks' CPU efficiency static web site
+"""
 
+# system modules
 import os
 import time
 from datetime import date, datetime, timedelta
@@ -32,13 +36,13 @@ from pyspark.sql.types import (
 pd.options.display.float_format = "{:,.2f}".format
 pd.set_option("display.max_colwidth", None)
 
+# global variables
 _DEFAULT_HDFS_FOLDER = "/project/monitoring/archive/wmarchive/raw/metric"
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 
 
-def get_spark_session(yarn=True, verbose=False):
-    """
-    Get or create the spark context and session.
+def get_spark_session():
+    """Get or create the spark context and session.
     """
     sc = SparkContext(appName="cms-stepchain-cpu-eff")
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
@@ -61,11 +65,11 @@ def get_candidate_files(
         f"{base}/{(st_date + timedelta(days=i)).strftime('%Y/%m/%d')}{{,.tmp}}"
         for i in range(0, days)
     ]
-    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
-    URI = sc._gateway.jvm.java.net.URI
-    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
-    fs = FileSystem.get(URI("hdfs:///"), sc._jsc.hadoopConfiguration())
-    candidate_files = [url for url in candidate_files if fs.globStatus(Path(url))]
+    fsystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    uri = sc._gateway.jvm.java.net.URI
+    path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    fs = fsystem.get(uri("hdfs:///"), sc._jsc.hadoopConfiguration())
+    candidate_files = [url for url in candidate_files if fs.globStatus(path(url))]
     return candidate_files
 
 

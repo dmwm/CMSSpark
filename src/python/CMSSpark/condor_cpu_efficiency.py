@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Christian Ariza <christian.ariza AT gmail [DOT] com>
 """
-Generate a static site with information about workflows/requests
-cpu efficiency for the workflows/request matching the parameters.
+File        : condor_cpu_efficiency.py
+Author      : Christian Ariza <christian.ariza AT gmail [DOT] com>
+Description : Generate a static site with information about workflows/requests ...
+              ... cpu efficiency for the workflows/request matching the parameters.
 """
+
+# system modules
 import os
 import time
 from datetime import datetime, date, timedelta
@@ -30,9 +33,13 @@ from pyspark.sql.types import (
     IntegerType,
 )
 
+# CMSSpark modules
+from CMSSpark.spark_utils import get_candidate_files
+
+# global variables
 _VALID_TYPES = ["analysis", "production", "folding@home", "test"]
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
-_DEFAULT_HDFS_FOLDER = "/project/monitoring/archive/condor/raw/metric"
+_BASE_HDFS_CONDOR = "/project/monitoring/archive/condor/raw/metric"
 
 
 def wf_kibana_links():
@@ -77,7 +84,7 @@ def site_kibana_links():
             kibana_by_site_base_link_3, kibana_by_site_base_link_4]
 
 
-def get_spark_session(yarn=True, verbose=False):
+def get_spark_session():
     """
     Get or create the spark context and session.
     """
@@ -133,37 +140,6 @@ def get_tiers_html(grouped_tiers):
                                     'table id="dataframe-tiers" class="display compact" style="width:100%;"')
     html_tiers = html_tiers.replace('style="text-align: right;"', "")
     return html_tiers
-
-
-def get_candidate_files(
-    start_date, end_date, spark, base=_DEFAULT_HDFS_FOLDER,
-):
-    """
-    Returns a list of hdfs folders that can contain data for the given dates.
-    """
-    st_date = start_date - timedelta(days=1)
-    ed_date = end_date + timedelta(days=1)
-    days = (ed_date - st_date).days
-    pre_candidate_files = [
-        "{base}/{day}{{,.tmp}}".format(
-            base=base, day=(st_date + timedelta(days=i)).strftime("%Y/%m/%d")
-        )
-        for i in range(0, days)
-    ]
-    sc = spark.sparkContext
-    # The candidate files are the folders to the specific dates,
-    # but if we are looking at recent days the compaction procedure could
-    # have not run yet so we will considerate also the .tmp folders.
-    candidate_files = [
-        f"{base}/{(st_date + timedelta(days=i)).strftime('%Y/%m/%d')}{{,.tmp}}"
-        for i in range(0, days)
-    ]
-    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
-    URI = sc._gateway.jvm.java.net.URI
-    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
-    fs = FileSystem.get(URI("hdfs:///"), sc._jsc.hadoopConfiguration())
-    candidate_files = [url for url in candidate_files if fs.globStatus(Path(url))]
-    return candidate_files
 
 
 def _get_schema():
@@ -421,9 +397,9 @@ def generate_cpu_eff_site(
     spark = get_spark_session()
     schema = _get_schema()
     raw_df = (
-        spark.read.option("basePath", _DEFAULT_HDFS_FOLDER)
+        spark.read.option("basePath", _BASE_HDFS_CONDOR)
         .json(
-            get_candidate_files(start_date, end_date, spark, base=_DEFAULT_HDFS_FOLDER),
+            get_candidate_files(start_date, end_date, spark, base=_BASE_HDFS_CONDOR, day_delta=1),
             schema=schema,
         ).select("data.*")
         .filter(
@@ -516,18 +492,18 @@ def generate_cpu_eff_site(
         )
         site_wf.drop(columns="schedd")
         site_wf["@Kibana"] = (
-                site_klinks[0].format(START_DAY=(start_date + timedelta(seconds=time.altzone))
-                                      .strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                                      END_DAY=(end_date + timedelta(seconds=time.altzone))
-                                      .strftime('%Y-%m-%dT%H:%M:%S.000Z'))
-                + str(cpu_eff_outlier)
-                + site_klinks[1]
-                + site_wf["WMAgent_RequestName"]
-                + site_klinks[2]
-                + site_wf["Workflow"]
-                + site_klinks[3]
-                + site_wf["Site"]
-                + site_klinks[4]
+            site_klinks[0].format(START_DAY=(start_date + timedelta(seconds=time.altzone))
+                                  .strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                                  END_DAY=(end_date + timedelta(seconds=time.altzone))
+                                  .strftime('%Y-%m-%dT%H:%M:%S.000Z'))
+            + str(cpu_eff_outlier)
+            + site_klinks[1]
+            + site_wf["WMAgent_RequestName"]
+            + site_klinks[2]
+            + site_wf["Workflow"]
+            + site_klinks[3]
+            + site_wf["Site"]
+            + site_klinks[4]
         )
     site_wf = site_wf.set_index([*group_by_col, "Site"]).sort_index()
     # Create one file per worflow, so we don't have a big file collapsing the browser.

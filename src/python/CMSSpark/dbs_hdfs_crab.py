@@ -1,17 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Christian Ariza <christian.ariza AT gmail [DOT] com>
+# pylint: disable=wrong-import-position,C0330
+
 """
-Generate datasets and plots for CRAB data popularity
-based on condor data in hdfs. 
+File        : dbs_hdfs_crab.py
+Author      : Christian Ariza <christian.ariza AT gmail [DOT] com>
+Description : Generate datasets and plots for CRAB data popularity based on condor data in hdfs.
 """
+
+# system modules
 import os
-from datetime import datetime, timezone, timedelta
+
+import click
+import matplotlib.pyplot as plt
+import seaborn as sns
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, LongType, StringType, StructField
 from pyspark.sql.functions import (
-    input_file_name,
     regexp_extract,
     max as _max,
     min as _min,
@@ -21,50 +26,21 @@ from pyspark.sql.functions import (
     sum as _sum,
     countDistinct,
 )
-import matplotlib.pyplot as plt
-import seaborn as sns
-import click
+from pyspark.sql.types import StructType, LongType, StringType, StructField
 
-_BASE_PATH = "/project/monitoring/archive/condor/raw/metric"
+
+# CMSSpark modules
+from CMSSpark.spark_utils import get_candidate_files
+
+# global variables
+_BASE_HDFS_CONDOR = "/project/monitoring/archive/condor/raw/metric"
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 
 
-def get_spark_session(yarn=True, verbose=False):
-    """
-        Get or create the spark context and session.
-    """
+def get_spark_session():
+    """Get or create the spark context and session."""
     sc = SparkContext(appName="cms-crab-dataset")
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
-
-
-def _get_candidate_files(start_date, end_date, spark, base=_BASE_PATH):
-    st_date = start_date - timedelta(days=1)
-    ed_date = end_date + timedelta(days=1)
-    days = (ed_date - st_date).days
-    pre_candidate_files = [
-        "{base}/{day}{{,.tmp}}".format(
-            base=base, day=(st_date + timedelta(days=i)).strftime("%Y/%m/%d")
-        )
-        for i in range(0, days)
-    ]
-    sc = spark.sparkContext
-    # The candidate files (actually folders) are the folders to the specific dates,
-    # but if we are looking at recent days the compaction procedure could have not run yet
-    # so we will considerate also the .tmp folders.
-    candidate_files = [
-        "/project/monitoring/archive/condor/raw/metric/{}{{,.tmp}}".format(
-            (st_date + timedelta(days=i)).strftime("%Y/%m/%d")
-        )
-        for i in range(0, days)
-    ]
-    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
-    URI = sc._gateway.jvm.java.net.URI
-    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
-    fs = FileSystem.get(URI("hdfs:///"), sc._jsc.hadoopConfiguration())
-    candidate_files = [
-        url for url in candidate_files if fs.globStatus(Path(url))
-    ]
-    return candidate_files
 
 
 def _get_crab_condor_schema():
@@ -110,26 +86,24 @@ def _get_crab_condor_schema():
     return schema
 
 
-def get_crab_popularity_ds(
-    start_date, end_date, verbose=False, base=_BASE_PATH
-):
-    """
-    Query the hdfs data and returns a pandas dataframe with:
-    Datatier, Dataset, CMSPrimaryPrimaryDataset, job_count, workflow_count, ChirpCMSSWReadBytes
+def get_crab_popularity_ds(start_date, end_date, base=_BASE_HDFS_CONDOR):
+    """Query the hdfs data and returns a pandas dataframe
+
+    with, Datatier, Dataset, CMSPrimaryPrimaryDataset, job_count, workflow_count, ChirpCMSSWReadBytes
+
     args:
         - start_date datetime Start of the query period (RecordTime)
         - end_date datetime End of the query period
     """
     start = int(start_date.timestamp() * 1000)
     end = int(end_date.timestamp() * 1000)
-    spark = get_spark_session(yarn=True, verbose=verbose)
+    spark = get_spark_session()
 
     dfs_crabdb = (
         spark.read.option("basePath", base)
-        .json(
-            _get_candidate_files(start_date, end_date, spark, base=base),
-            schema=_get_crab_condor_schema(),
-        )
+        .json(get_candidate_files(start_date, end_date, spark, base=base, day_delta=1),
+              schema=_get_crab_condor_schema()
+              )
         .select("metadata.timestamp", "data.*")
         .filter(
             """Status in ('Completed', 'Removed') AND
@@ -142,11 +116,11 @@ def get_crab_popularity_ds(
         .repartition("CRAB_DataBlock")
         .drop_duplicates(["GlobalJobId"])
         .withColumnRenamed("CMSPrimaryPrimaryDataset", "PrimaryDataset")
-        .withColumn("Dataset", regexp_extract("CRAB_DataBlock","^(.*)/([^/]*)#.*$",1))
-        .withColumn("Datatier", regexp_extract("CRAB_DataBlock","^(.*)/([^/]*)#.*$",2))
+        .withColumn("Dataset", regexp_extract("CRAB_DataBlock", "^(.*)/([^/]*)#.*$", 1))
+        .withColumn("Datatier", regexp_extract("CRAB_DataBlock", "^(.*)/([^/]*)#.*$", 2))
     )
     dfs_crabdb = (
-        dfs_crabdb.groupBy("Datatier","PrimaryDataset","Dataset")
+        dfs_crabdb.groupBy("Datatier", "PrimaryDataset", "Dataset")
         .agg(
             _max(col("RecordTime")),
             _min(col("RecordTime")),
@@ -157,7 +131,7 @@ def get_crab_popularity_ds(
         .withColumnRenamed("count(1)", "job_count")
         .withColumnRenamed("count(DISTINCT CRAB_Workflow)", "workflow_count")
         .withColumnRenamed("sum(ChirpCMSSWReadBytes)", "ChirpCMSSWReadBytes")
-        .na.fill("Unknown",["Datatier","PrimaryDataset","Dataset"])
+        .na.fill("Unknown", ["Datatier", "PrimaryDataset", "Dataset"])
     )
     return dfs_crabdb.toPandas()
 
@@ -189,15 +163,8 @@ def generate_top_datasets_plot(pdf, output_folder, filename):
 @click.command()
 @click.argument("start_date", nargs=1, type=click.DateTime(_VALID_DATE_FORMATS))
 @click.argument("end_date", nargs=1, type=click.DateTime(_VALID_DATE_FORMATS))
-@click.option(
-    "--generate_plots",
-    default=False,
-    is_flag=True,
-    help="Additional to the csv, generate the plot(s)",
-)
-@click.option(
-    "--output_folder", default="./output", help="local output directory"
-)
+@click.option("--generate_plots", default=False, is_flag=True, help="Additional to the csv, generate the plot(s)")
+@click.option("--output_folder", default="./output", help="local output directory")
 def main(start_date, end_date, output_folder, generate_plots=False):
     cp_pdf = get_crab_popularity_ds(start_date, end_date)
     os.makedirs(output_folder, exist_ok=True)

@@ -1,75 +1,44 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Christian Ariza <christian.ariza AT gmail [DOT] com>
 """
-Generate datasets and plots for HS06 core hours
-either by week of year or by month for a given calendar year.
+File        : condor_hs06coreHrPlot.py
+Author      : Christian Ariza <christian.ariza AT gmail [DOT] com>
+Description : Generate datasets and plots for HS06 core hours ...
+              ... either by week of year or by month for a given calendar year.
 """
+
+# system modules
 import os
-from datetime import datetime, timezone, timedelta
+
+import click
+import matplotlib.pyplot as plt
+import seaborn as sns
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, LongType, StringType, StructField, DoubleType
 from pyspark.sql.functions import (
-    regexp_extract,
-    date_format,
     from_unixtime,
-    substring_index,
     col,
-    input_file_name,
-    concat,
     year,
     month,
     weekofyear,
-    lpad,
-    countDistinct,
 )
-import matplotlib.pyplot as plt
-import seaborn as sns
-import click
+from pyspark.sql.types import StructType, LongType, StringType, StructField, DoubleType
 
-_BASE_PATH = "/project/monitoring/archive/condor/raw/metric"
+# CMSSpark modules
+from CMSSpark.spark_utils import get_candidate_files
+
+# global variables
+_BASE_HDFS_CONDOR = "/project/monitoring/archive/condor/raw/metric"
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 _VALID_BY = ("weekofyear", "month")
 
 
-def get_spark_session(yarn=True, verbose=False):
+def get_spark_session():
     """
         Get or create the spark context and session.
     """
     sc = SparkContext(appName="cms-hs06corehrs_plot")
     return SparkSession.builder.config(conf=sc._conf).getOrCreate()
-
-
-def _get_candidate_files(start_date, end_date, spark, base=_BASE_PATH):
-    """
-    Returns a list of hdfs folders that can contain data for the given dates.
-    """
-    st_date = start_date - timedelta(days=1)
-    ed_date = end_date + timedelta(days=1)
-    days = (ed_date - st_date).days
-    pre_candidate_files = [
-        "{base}/{day}{{,.tmp}}".format(
-            base=base, day=(st_date + timedelta(days=i)).strftime("%Y/%m/%d")
-        )
-        for i in range(0, days)
-    ]
-    sc = spark.sparkContext
-    # The candidate files are the folders to the specific dates,
-    # but if we are looking at recent days the compaction procedure could
-    # have not run yet so we will considerate also the .tmp folders.
-    candidate_files = [
-        "/project/monitoring/archive/condor/raw/metric/{}{{,.tmp}}".format(
-            (st_date + timedelta(days=i)).strftime("%Y/%m/%d")
-        )
-        for i in range(0, days)
-    ]
-    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
-    URI = sc._gateway.jvm.java.net.URI
-    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
-    fs = FileSystem.get(URI("hdfs:///"), sc._jsc.hadoopConfiguration())
-    candidate_files = [url for url in candidate_files if fs.globStatus(Path(url))]
-    return candidate_files
 
 
 def _get_hs06_condor_schema():
@@ -101,8 +70,7 @@ def get_hs06CpuTImeHr(
     start_date,
     end_date,
     by="month",
-    verbose=False,
-    base=_BASE_PATH,
+    base=_BASE_HDFS_CONDOR,
     include_re="^T2_.*$",
     exclude_re=".*_CERN.*",
 ):
@@ -114,16 +82,15 @@ def get_hs06CpuTImeHr(
         - end_date datetime End of the query period
     """
     if by not in _VALID_BY:
-        raise ValueError("by must be one of %r." % _VALID_BY)
+        raise ValueError(f"by must be one of {_VALID_BY}")
     start = int(start_date.timestamp() * 1000)
     end = int(end_date.timestamp() * 1000)
-    spark = get_spark_session(yarn=True, verbose=verbose)
+    spark = get_spark_session()
 
     dfs_raw = (
         spark.read.option("basePath", base)
         .json(
-            _get_candidate_files(start_date, end_date, spark, base=base),
-            schema=_get_hs06_condor_schema(),
+            get_candidate_files(start_date, end_date, spark, base=base, day_delta=1), schema=_get_hs06_condor_schema()
         )
         .select("data.*")
         .filter(

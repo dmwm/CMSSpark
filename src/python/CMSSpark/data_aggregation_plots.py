@@ -1,16 +1,26 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+File        : data_aggregation_plots.py
+Author      : Justinas Rumševičius <justinas.rumsevicius AT gmail [DOT] com>
+Description : ...
+"""
+
+# system modules
 import matplotlib.pyplot as plt
 import csv
 import time
 import argparse
 
-class OptionParser():
+
+class OptionParser:
     def __init__(self):
-        "User based option parser"
+        """User based option parser"""
 
         self.parser = argparse.ArgumentParser(prog='PROG', description='')
 
         self.parser.add_argument('--input_filename', action='store',
-            dest='input_filename', default='', help='Input filename or path including filename')
+                                 dest='input_filename', default='', help='Input filename or path including filename')
 
 
 # Open a file and read everything into dictionaries according to first line (header) of file
@@ -23,7 +33,8 @@ def read_file(input_filename=''):
     with open(input_filename, 'r') as csvfile:
         plots = csv.reader(csvfile, delimiter=',')
         header = next(csvfile, None).strip().split(',')
-        # site_name, dataset_name, nacc, distinct_users, stream, timestamp, site_tier, cpu_time, primary_name, processing_name, data_tier
+        # site_name, dataset_name, nacc, distinct_users, stream, timestamp,
+        #    site_tier, cpu_time, primary_name, processing_name, data_tier
 
         print('CSV header ' + str(header))
 
@@ -36,7 +47,7 @@ def read_file(input_filename=''):
                 row_values[header[i]] = row[i]
 
             if 'timestamp' in row_values:
-                row_values['date'] = time.strftime('%Y-%m-%d', time.gmtime(int(row_values ['timestamp']) / 1000))
+                row_values['date'] = time.strftime('%Y-%m-%d', time.gmtime(int(row_values['timestamp']) / 1000))
             rows.append(row_values)
         print('Found ' + str(len(rows)) + ' records in file ' + str(input_filename))
     return rows
@@ -51,30 +62,30 @@ def number_of_access(rows, output_filename=None):
         key = row['date']
         value = int(row['nacc'])
         if key in values:
-            values[key]=values[key]+value
+            values[key] = values[key] + value
         else:
-            values[key]=value
+            values[key] = value
 
-    x=[]
-    y=[]
-    sum=0
+    x = []
+    y = []
+    sum_x = 0
 
     for t in sorted(values):
         x.append(t)
         y.append(values[t])
-        sum=sum+values[t]
+        sum_x = sum_x + values[t]
         # print(t + ' -> ' + str(values[t]))
 
-    print('Total number of accesses is ' + str(sum))
+    print('Total number of accesses is ' + str(sum_x))
 
-    plt.bar(range(len(x)),y, label='')
+    plt.bar(range(len(x)), y, label='')
     plt.xticks(range(len(x)), [label[5:] for label in x])
     plt.xlabel('Date')
     plt.ylabel('Number of access')
     ax = plt.gca()
     ax.get_yaxis().get_major_formatter().set_scientific(False)
     plt.xticks(rotation=45)
-    if output_filename == None:
+    if output_filename is None:
         plt.show()
     else:
         figure = plt.gcf()
@@ -112,7 +123,7 @@ def make_buckets(columns, entries, sum_column=None):
             result_buckets[bucket_key] = make_buckets(columns[1:], buckets[bucket_key], sum_column)
         return result_buckets
     else:
-        if sum_column == None:
+        if sum_column is None:
             return buckets
         else:
             return sum_array(buckets, sum_column)
@@ -124,13 +135,13 @@ def make_buckets(columns, entries, sum_column=None):
 def sum_array(buckets, column):
     result_buckets = {}
     for bucket_key in buckets:
-        sum = 0
+        sum_x = 0
         bucket = buckets[bucket_key]
         for entry in bucket:
             entry_value = float(entry[column])
             if entry_value > 0:
-                sum = sum + entry_value
-        result_buckets[bucket_key] = int(sum)
+                sum_x = sum_x + entry_value
+        result_buckets[bucket_key] = int(sum_x)
 
     return result_buckets
 
@@ -168,17 +179,17 @@ def draw_buckets(buckets, top_results=5, filename=None):
     print('Will draw only ' + str(top_results) + ' results')
 
     for i in range(0, top_results):
-        max = 0
+        max_x = 0
         max_key = None
         for y_key in ys:
             if y_key not in max_ys:
                 sum_of_values = sum(ys[y_key])
-                if sum_of_values > max or max_key == None:
-                    max = sum_of_values
+                if sum_of_values > max_x or max_key is None:
+                    max_x = sum_of_values
                     max_key = y_key
 
-        if max_key != None:
-            max_ys[max_key]=ys[max_key]
+        if max_key is not None:
+            max_ys[max_key] = ys[max_key]
 
     for y_key in max_ys:
         plt.plot(range(len(x)), max_ys[y_key], label=y_key)
@@ -190,7 +201,7 @@ def draw_buckets(buckets, top_results=5, filename=None):
     ax = plt.gca()
     ax.get_yaxis().get_major_formatter().set_scientific(False)
     plt.xticks(rotation=45)
-    if filename == None:
+    if filename is None:
         plt.show()
     else:
         figure = plt.gcf()
@@ -204,34 +215,34 @@ def draw_buckets(buckets, top_results=5, filename=None):
 # title1 and title 2 - column titles
 def make_table(bucket, title1, title2, limit_results=None, filename=None):
     sorted_bucket_keys = sorted(bucket, key=bucket.get, reverse=True)
-    sum = 0
+    sum_x = 0
     for key in sorted_bucket_keys:
-        sum += int(bucket[key])
+        sum_x += int(bucket[key])
 
-    if limit_results != None:
+    if limit_results is not None:
         sorted_bucket_keys = sorted_bucket_keys[0:limit_results]
 
     sum_of_table = 0
-    csv = '"' + title1 + '","' + title2 + '","Percentage of all"\n'
+    csv_x = '"' + title1 + '","' + title2 + '","Percentage of all"\n'
     for key in sorted_bucket_keys:
         sum_of_table += bucket[key]
 
-        csv += '"' + key +'",'
-        csv += '"' + str((bucket[key])) + '",'
-        csv += '"' + "{0:.4f}".format(100.0 * bucket[key] / sum) + '"'
-        csv += '\n'
+        csv_x += '"' + key + '",'
+        csv_x += '"' + str((bucket[key])) + '",'
+        csv_x += '"' + "{0:.4f}".format(100.0 * bucket[key] / sum_x) + '"'
+        csv_x += '\n'
 
-    if sum == 0:
-        csv += '"Sum","' + str(sum_of_table) + '","-"'
+    if sum_x == 0:
+        csv_x += '"Sum","' + str(sum_of_table) + '","-"'
     else:
-        csv += '"Sum","' + str(sum_of_table) + '","' + "{0:.4f}".format(100.0 * sum_of_table / sum) + '"'
+        csv_x += '"Sum","' + str(sum_of_table) + '","' + "{0:.4f}".format(100.0 * sum_of_table / sum_x) + '"'
 
-    if filename != None:
+    if filename is not None:
         csv_file = open(filename, 'w')
-        csv_file.write(csv)
+        csv_file.write(csv_x)
         csv_file.close()
     else:
-        print (csv)
+        print(csv_x)
 
 
 # If record's value of 'column' is not in 'valid_values', change it to 'other_value'
@@ -260,14 +271,15 @@ def omit_values(records, column, valid_values):
 # https://stackoverflow.com/a/31809973
 def mkdir(mypath):
     from errno import EEXIST
-    from os import makedirs,path
+    from os import makedirs, path
 
     try:
         makedirs(mypath)
-    except OSError as exc: # Python >2.5
+    except OSError as exc:  # Python >2.5
         if exc.errno == EEXIST and path.isdir(mypath):
             pass
-        else: raise
+        else:
+            raise
 
 
 def run(input_file_name):
@@ -309,9 +321,12 @@ def run(input_file_name):
     grouped_by_dataset_eos = make_buckets(['dataset_name'], rows_eos, 'nacc')
     grouped_by_dataset_jm = make_buckets(['dataset_name'], rows_jm, 'nacc')
 
-    make_table(grouped_by_dataset_aaa, 'Dataset', 'Number of accesses', 10, output_directory + 'GroupedByDatasetAAA.csv')
-    make_table(grouped_by_dataset_cmssw, 'Dataset', 'Number of accesses', 10, output_directory + 'GroupedByDatasetCMSSW.csv')
-    make_table(grouped_by_dataset_eos, 'Dataset', 'Number of accesses', 10, output_directory + 'GroupedByDatasetEOS.csv')
+    make_table(grouped_by_dataset_aaa, 'Dataset', 'Number of accesses', 10,
+               output_directory + 'GroupedByDatasetAAA.csv')
+    make_table(grouped_by_dataset_cmssw, 'Dataset', 'Number of accesses', 10,
+               output_directory + 'GroupedByDatasetCMSSW.csv')
+    make_table(grouped_by_dataset_eos, 'Dataset', 'Number of accesses', 10,
+               output_directory + 'GroupedByDatasetEOS.csv')
     make_table(grouped_by_dataset_jm, 'Dataset', 'Number of accesses', 10, output_directory + 'GroupedByDatasetJM.csv')
 
     grouped_by_date_and_tier_aaa = make_buckets(['data_tier', 'date'], rows_aaa, 'nacc')
