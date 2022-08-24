@@ -7,39 +7,19 @@ Description : Spark script to join data from DBS and AAA, CMSSW, EOS, JM streams
 """
 
 # system modules
-import time
 import calendar
-import argparse
+import click
+import time
 
 from pyspark import StorageLevel
 from pyspark.sql import SQLContext
 
 # CMSSpark modules
+from CMSSpark import conf as c
 from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables, jm_tables
-from CMSSpark.spark_utils import spark_context, split_dataset
 from CMSSpark.spark_utils import delete_hadoop_directory
+from CMSSpark.spark_utils import spark_context, split_dataset
 from CMSSpark.utils import elapsed_time
-
-
-class OptionParser:
-    def __init__(self):
-        """User based option parser"""
-        desc = "Spark script to process DBS + [AAA, CMSSW, EOS, JM] metadata"
-
-        self.parser = argparse.ArgumentParser(prog='PROG', description=desc)
-
-        self.parser.add_argument("--inst", action="store",
-                                 dest="inst", default="global",
-                                 help='DBS instance on HDFS: global (default), phys01, phys02, phys03')
-        self.parser.add_argument("--date", action="store",
-                                 dest="date", default="", help='Select data for specific date (YYYYMMDD)')
-        self.parser.add_argument("--yarn", action="store_true",
-                                 dest="yarn", default=False,
-                                 help="Run job on analytics cluster via yarn resource manager")
-        self.parser.add_argument("--verbose", action="store_true",
-                                 dest="verbose", default=False, help="Verbose output")
-        self.parser.add_argument("--fout", action="store",
-                                 dest="fout", default="", help='Output directory path')
 
 
 def yesterday():
@@ -379,19 +359,17 @@ def run_jm(date, fout, ctx, sql_context, verbose=False):
         print('Finished JobMonitoring part')
 
 
-def main():
+@click.command()
+@c.common_options(c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+# Custom options
+@click.option("--inst", default="global", help="DBS instance on HDFS: global (default), phys01, phys02, phys03")
+def main(date, yarn, fout, verbose, inst):
     """Main function"""
-    optmgr = OptionParser()
-    opts = optmgr.parser.parse_args()
-
-    print("Input arguments: %s" % opts)
+    click.echo("data_collection")
+    click.echo("Spark script to process DBS + [AAA, CMSSW, EOS, JM] metadata")
+    click.echo(f'Input Arguments: date:{date}, yarn:{yarn}, verbose:{verbose}, fout:{fout}, inst:{inst}')
 
     start_time = time.time()
-    verbose = opts.verbose
-    yarn = opts.yarn
-    inst = opts.inst
-    date = opts.date
-    fout = opts.fout
 
     if inst.lower() in ['global', 'phys01', 'phys02', 'phys03']:
         inst = inst.upper()

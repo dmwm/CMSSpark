@@ -7,20 +7,11 @@ Description : ...
 """
 
 # system modules
-import matplotlib.pyplot as plt
+import click
 import csv
 import time
-import argparse
 
-
-class OptionParser:
-    def __init__(self):
-        """User based option parser"""
-
-        self.parser = argparse.ArgumentParser(prog='PROG', description='')
-
-        self.parser.add_argument('--input_filename', action='store',
-                                 dest='input_filename', default='', help='Input filename or path including filename')
+import matplotlib.pyplot as plt
 
 
 # Open a file and read everything into dictionaries according to first line (header) of file
@@ -348,15 +339,15 @@ def run(input_file_name):
     draw_buckets(grouped_by_date_and_site_tier_jm, 10, output_directory + 'GroupedByDateAndSiteTierJM.png')
 
 
-# Main function
-def main():
+@click.command()
+@click.option("--input_filename", default="", help="Input filename or path including filename")
+def main(input_filename):
+    """Main function"""
     start_time = time.time()
+    click.echo("data_aggregation_plots")
+    click.echo(f'Input Arguments: input_filename:{input_filename}')
 
-    option_parser = OptionParser()
-    options = option_parser.parser.parse_args()
-
-    print('Input arguments: %s' % options)
-    run(options.input_filename)
+    run(input_filename)
 
     end_time = time.time()
     print('Start time         : %s' % time.strftime('%Y-%m-%d %H:%M:%S GMT', time.gmtime(start_time)))

@@ -6,28 +6,27 @@ Author      : Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
 Description : module which holds configuration options
 """
 
-import argparse
+import click
 
 
-class OptionParser:
-    def __init__(self, name=''):
-        """User based option parser"""
-        desc = "Spark %s workflow" % name
-        self.parser = argparse.ArgumentParser(prog='PROG', description=desc)
-        msg = 'Location of CMS folders on HDFS'
-        self.parser.add_argument("--hdir", action="store",
-                                 dest="hdir", default="", help=msg)
-        self.parser.add_argument("--fout", action="store",
-                                 dest="fout", default="", help='Output file name')
-        self.parser.add_argument("--date", action="store",
-                                 dest="date", default="", help='Select CMSSW data for specific date (YYYYMMDD)')
-        self.parser.add_argument("--no-log4j", action="store_true",
-                                 dest="no-log4j", default=False, help="Disable spark log4j messages")
-        self.parser.add_argument("--yarn", action="store_true",
-                                 dest="yarn", default=False,
-                                 help="run job on analytix cluster via yarn resource manager")
-        self.parser.add_argument("--cvmfs", action="store_true",
-                                 dest="cvmfs", default=False,
-                                 help="run job on analytix cluster via lxplus7 cvmfs environment")
-        self.parser.add_argument("--verbose", action="store_true",
-                                 dest="verbose", default=False, help="verbose output")
+def common_options(*options):
+    """Common user arguments wrapper"""
+
+    def wrapper(function):
+        for option in reversed(options):
+            function = option(function)
+        return function
+
+    return wrapper
+
+
+ARG_HDIR = click.option("--hdir", default="", help="Location of CMS folders on HDFS")
+ARG_FOUT = click.option("--fout", default="", help="Output file name")
+ARG_FIN = click.option("--fin", default="", help="Input file name")
+ARG_DATE = click.option("--date", default="", help="Select CMSSW data for specific date (YYYYMMDD)")
+ARG_NO_LOG4J = click.option("--no-log4j", default=False, is_flag=True, help="Disable spark log4j messages")
+ARG_YARN = click.option("--yarn", default=False, is_flag=True,
+                        help="run job on analytix cluster via yarn resource manager")
+ARG_CVMFS = click.option("--cvmfs", default=False, is_flag=True,
+                         help="un job on analytix cluster via lxplus7 cvmfs environment")
+ARG_VERBOSE = click.option("--verbose", default=False, is_flag=True, help="verbose output")

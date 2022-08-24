@@ -1,24 +1,24 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-File        : condor_hs06coreHrPlot.py
+File        : data_aggregation.py
 Author      : Justinas Rumševičius <justinas.rumsevicius AT gmail [DOT] com>
 Description : Spark script to collect data from DBS and AAA, CMSSW, EOS, JM streams on HDFS and aggregate them into ...
               ... records that would be fed into MONIT system.
 """
 
 # system modules
-import argparse
+import click
 import hashlib
 import re
 import time
 
-from pyspark import SparkContext, StorageLevel
 from pyspark.sql import SQLContext
 from pyspark.sql.functions import desc
 from pyspark.sql.functions import split, col
 
 # CMSSpark modules
+from CMSSpark import conf as c
 from CMSSpark.data_collection import short_date_string, long_date_string, output_dataframe, run_query, \
     short_date_to_unix
 from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables_enr, eos_tables, jm_tables, phedex_tables
@@ -28,29 +28,6 @@ from CMSSpark.utils import elapsed_time
 # global variables
 LET_PAT = re.compile(r'^CN=[a-zA-Z]')
 NUM_PAT = re.compile(r'^CN=[0-9]')
-
-
-class OptionParser:
-    def __init__(self):
-        """User based option parser"""
-        description = "Spark script to process DBS + [AAA, CMSSW, EOS, JM] metadata"
-
-        self.parser = argparse.ArgumentParser(prog='PROG', description=description)
-
-        self.parser.add_argument("--inst", action="store",
-                                 dest="inst", default="global",
-                                 help='DBS instance on HDFS: global (default), phys01, phys02, phys03')
-        self.parser.add_argument("--date", action="store",
-                                 dest="date", default="", help='Select data for specific date (YYYYMMDD)')
-        self.parser.add_argument("--yarn", action="store_true",
-                                 dest="yarn", default=False,
-                                 help="Run job on analytics cluster via yarn resource manager")
-        self.parser.add_argument("--verbose", action="store_true",
-                                 dest="verbose", default=False, help="Verbose output")
-        self.parser.add_argument("--fout", action="store",
-                                 dest="fout", default="", help='Output directory path')
-        self.parser.add_argument("--aaa_hdir", action="store",
-                                 dest="aaa_hdir", default="", help='AAA input directory path')
 
 
 def run_agg_jm(date, ctx, sql_context, verbose=False):
@@ -459,22 +436,21 @@ def split_dataset_col(df, dcol):
     return ndf
 
 
-def main():
+@click.command()
+@c.common_options(c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+# Custom options
+@click.option("--inst", default="global", help="DBS instance on HDFS: global (default), phys01, phys02, phys03")
+@click.option("--aaa_hdir", default="", help="AAA input directory path")
+def main(date, yarn, fout, verbose, inst, aaa_hdir):
     """Main function"""
-    optmgr = OptionParser()
-    opts = optmgr.parser.parse_args()
-
-    print("Input arguments: %s" % opts)
+    click.echo("data_aggregation")
+    click.echo("Spark script to process DBS + [AAA, CMSSW, EOS, JM] metadata")
+    click.echo(f'Input Arguments: date:{date}, yarn:{yarn}, verbose:{verbose}, fout:{fout}, '
+               f'inst:{inst}, aaa_hdir:{aaa_hdir}')
 
     start_time = time.time()
-    verbose = opts.verbose
     # VK: turn verbose output for debugging purposes
     verbose = True
-    yarn = opts.yarn
-    inst = opts.inst
-    date = opts.date
-    fout = opts.fout
-    aaa_hdir = opts.aaa_hdir
 
     if inst.lower() in ['global', 'phys01', 'phys02', 'phys03']:
         inst = inst.upper()

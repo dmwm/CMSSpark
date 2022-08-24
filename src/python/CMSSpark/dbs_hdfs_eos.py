@@ -17,21 +17,14 @@ import matplotlib
 matplotlib.use("Agg")  # this should be called before use seaborn
 
 # from matplotlib.backends.backend_pdf import PdfPages
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import regexp_extract
 import seaborn as sns
 
 # CMSSpark modules
-from CMSSpark.spark_utils import spark_context, eos_tables, dbs_tables
+from CMSSpark.spark_utils import eos_tables, dbs_tables, get_spark_session
 
 # global variables
 DEFAULT_PARQUET_LOCATION = "hdfs:///cms/eos/full.parquet"
-
-
-def get_spark_session(yarn=True, verbose=False):
-    """Get or create the spark context and session"""
-    sc = spark_context("cms-eos-dataset", yarn, verbose)
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def generate_parquet(date, hdir="hdfs:///project/monitoring/archive/eos-report/logs/cms",
@@ -53,7 +46,7 @@ def generate_parquet(date, hdir="hdfs:///project/monitoring/archive/eos-report/l
     Notes: hdir="hdfs:///project/monitoring/archive/eos/logs/reports/cms", before 2020
     """
     if spark is None:
-        spark = get_spark_session(True, False)
+        spark = get_spark_session(app_name="cms-eos-dataset")
     # spark.conf.set('spark.sql.session.timeZone', 'UTC')
     tables = eos_tables(spark, date=date, verbose=verbose, hdir=hdir)
     df = tables["eos_df"]
@@ -77,7 +70,7 @@ def generate_dataset_totals_pandasdf(period=("20200101", "20200131"), is_cms_use
        For a full report you should use generate_dataset_file_days
     """
     if spark is None:
-        spark = get_spark_session(True, False)
+        spark = get_spark_session(app_name="cms-eos-dataset")
 
     eos_df = spark.read \
         .option("basePath", parquet_location) \
@@ -143,7 +136,7 @@ def generate_dataset_file_days(period=("20190101", "20190131"), app_filter=None,
     total_rt (read time), and  total_wt (write time)
     """
     if spark is None:
-        spark = get_spark_session(True, False)
+        spark = get_spark_session(app_name="cms-eos-dataset")
     df = spark.read.parquet(parquet_location).filter(
         "day between {} AND {}".format(*period)
     )
@@ -183,7 +176,7 @@ def generate_dataset_file_days(period=("20190101", "20190131"), app_filter=None,
 def cli(ctx, verbose, parquetlocation):
     """Main Click command"""
     ctx.obj["VERBOSE"] = verbose
-    ctx.obj["SPARK"] = get_spark_session()
+    ctx.obj["SPARK"] = get_spark_session(app_name="cms-eos-dataset")
     ctx.obj["PARQUET_LOCATION"] = parquetlocation
 
 

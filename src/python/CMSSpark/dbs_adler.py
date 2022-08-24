@@ -7,14 +7,14 @@ Description: Spark script to parse and aggregate DBS and PhEDEx records on HDFS.
 """
 
 # system modules
-from pyspark import SparkContext, StorageLevel
+import click
 from pyspark.sql import SQLContext
 
 # CMSSpark modules
+from CMSSpark import conf as c
 from CMSSpark.spark_utils import dbs_tables, phedex_tables, print_rows
 from CMSSpark.spark_utils import spark_context
 from CMSSpark.utils import info
-from CMSSpark.conf import OptionParser
 
 
 def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None, inst='GLOBAL'):
@@ -24,12 +24,12 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None, inst='G
     """
     # define spark context, it's main object which allow to communicate with spark
     ctx = spark_context('cms', yarn, verbose)
-    sqlContext = SQLContext(ctx)
+    sql_context = SQLContext(ctx)
 
     # read DBS and Phedex tables
     tables = {}
-    tables.update(dbs_tables(sqlContext, inst=inst, verbose=verbose))
-    tables.update(phedex_tables(sqlContext, verbose=verbose))
+    tables.update(dbs_tables(sql_context, inst=inst, verbose=verbose))
+    tables.update(phedex_tables(sql_context, verbose=verbose))
     phedex_df = tables['phedex_df']
     ddf = tables['ddf']
     fdf = tables['fdf']
@@ -43,7 +43,7 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None, inst='G
     # join tables
     stmt = 'SELECT %s FROM ddf JOIN fdf on ddf.d_dataset_id = fdf.f_dataset_id' % ','.join(cols)
     print(stmt)
-    joins = sqlContext.sql(stmt)
+    joins = sql_context.sql(stmt)
 
     # construct conditions
     adler = ['ad8f6ad2', '9c441343', 'f68d5dca', '81c90e2a', '471d2524', 'a3c1f077', '6f0018a0', '8bb03b60', 'd504882c',
@@ -65,26 +65,24 @@ def run(fout, yarn=None, verbose=None, patterns=None, antipatterns=None, inst='G
 
 
 @info
-def main():
+@click.command()
+@c.common_options(c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+# Custom options
+@click.option("--patterns", default="", help="Select datasets patterns")
+@click.option("--antipatterns", default="", help="Select datasets antipatterns")
+@click.option("--inst", default="global", help="DBS instance on HDFS: global (default), phys01, phys02, phys03")
+def main(yarn, fout, verbose, patterns, antipatterns, inst):
     """Main function"""
-    optmgr = OptionParser('dbs_adler')
-    optmgr.parser.add_argument("--patterns", action="store",
-                               dest="patterns", default="", help='Select datasets patterns')
-    optmgr.parser.add_argument("--antipatterns", action="store",
-                               dest="antipatterns", default="", help='Select datasets antipatterns')
-    msg = 'DBS instance on HDFS: global (default), phys01, phys02, phys03'
-    optmgr.parser.add_argument("--inst", action="store",
-                               dest="inst", default="global", help=msg)
-    opts = optmgr.parser.parse_args()
-    print("Input arguments: %s" % opts)
-    inst = opts.inst
+    click.echo('dbs_adler')
+    click.echo(f'Input Arguments: yarn:{yarn}, fout:{fout}, verbose:{verbose}, '
+               f'patterns:{patterns}, antipatterns:{antipatterns}, inst:{inst}')
     if inst in ['global', 'phys01', 'phys02', 'phys03']:
         inst = inst.upper()
     else:
         raise Exception('Unsupported DBS instance "%s"' % inst)
-    patterns = opts.patterns.split(',') if opts.patterns else []
-    antipatterns = opts.antipatterns.split(',') if opts.antipatterns else []
-    run(opts.fout, opts.yarn, opts.verbose, patterns, antipatterns, inst)
+    patterns = patterns.split(',') if patterns else []
+    antipatterns = antipatterns.split(',') if antipatterns else []
+    run(fout, yarn, verbose, patterns, antipatterns, inst)
 
 
 if __name__ == '__main__':

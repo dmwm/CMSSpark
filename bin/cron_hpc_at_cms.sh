@@ -24,6 +24,6 @@ START_DATE="${2:-$(date -d "$END_DATE -1 year" +%Y-%m-01)}"
 
 (echo >&2 "Plots from $START_DATE to $END_DATE")
 
-/bin/bash "$SCRIPT_DIR/run_hpc_at_cms.sh" --output_folder "$OUTPUT_DIR" "$START_DATE" "$END_DATE"
+/bin/bash "$SCRIPT_DIR/run_hpc_at_cms.sh" --output_folder "$OUTPUT_DIR" --start_date "$START_DATE" --end_date "$END_DATE"
 
 ln -s -f "$OUTPUT_DIR/HPC@CMS_Running_Cores_Hourly_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" "$OUTPUT_DIR/HPC@CMS_Running_Cores_Hourly_latest.png"

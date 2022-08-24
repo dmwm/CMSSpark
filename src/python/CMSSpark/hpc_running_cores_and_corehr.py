@@ -20,15 +20,17 @@ from datetime import datetime, timedelta, timezone
 import click
 import pandas as pd
 import plotly.express as px
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, concat_ws, format_string, from_unixtime, lit, unix_timestamp, when,
     avg as _avg, dayofmonth as _dayofmonth, max as _max, month as _month, round as _round, sum as _sum, year as _year,
 )
 from pyspark.sql.types import StructType, LongType, StringType, StructField, DoubleType
 
+# CMSSpark modules
+from CMSSpark.spark_utils import get_spark_session, get_candidate_files
+
 # global variables
+
 _BASE_HDFS_CONDOR = '/project/monitoring/archive/condor/raw/metric'
 
 # Bottom to top bar stack order which set same colors for same site always
@@ -39,35 +41,6 @@ _HTML_DIR = 'html'
 _SITES_HTML_DIR = 'site_htmls'
 _YEARS_DIR = 'years'
 _PICKLE_DIR = 'pickles'
-
-
-def get_spark_session():
-    """Get or create the spark context and session.
-    """
-    sc = SparkContext(appName='cms-monitoring-hpc-cpu-corehr')
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
-
-
-def get_candidate_files(start_date, end_date, spark, base=_BASE_HDFS_CONDOR):
-    """Returns a list of hdfs folders that can contain data for the given dates.
-    """
-    st_date = start_date - timedelta(days=2)  # 2 days safety for hdfs files, not date filter
-    ed_date = end_date + timedelta(days=2)  # 2 days safety for hdfs files, not date filter
-    days = (ed_date - st_date).days
-    sc = spark.sparkContext
-    # The candidate files are the folders to the specific dates,
-    # but if we are looking at recent days the compaction procedure could
-    # have not run yet, so we will consider also the .tmp folders.
-    candidate_files = [
-        f"{base}/{(st_date + timedelta(days=i)).strftime('%Y/%m/%d')}{{,.tmp}}"
-        for i in range(0, days)
-    ]
-    fsystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
-    uri = sc._gateway.jvm.java.net.URI
-    path = sc._gateway.jvm.org.apache.hadoop.fs.Path
-    fs = fsystem.get(uri("hdfs:///"), sc._jsc.hadoopConfiguration())
-    candidate_files = [url for url in candidate_files if fs.globStatus(path(url))]
-    return candidate_files
 
 
 def _get_schema():
@@ -98,7 +71,7 @@ def get_pandas_dfs(spark, start_date, end_date):
         spark.read.option(
             'basePath', _BASE_HDFS_CONDOR
         ).json(
-            get_candidate_files(start_date, end_date, spark, base=_BASE_HDFS_CONDOR), schema=schema,
+            get_candidate_files(start_date, end_date, spark, base=_BASE_HDFS_CONDOR, day_delta=2), schema=schema,
         ).select(
             'data.*'
         ).filter(
@@ -484,7 +457,7 @@ def main(start_date, end_date, output_dir, iterative, url_prefix, html_template,
             saved dataframe(in pickle format). Hence, final dataframes will consist of all data till 2 days ago.
     """
     # Set TZ as UTC. Also set in the spark-submit confs.
-    spark = get_spark_session()
+    spark = get_spark_session(app_name='cms-monitoring-hpc-cpu-corehr')
     spark.conf.set("spark.sql.session.timeZone", "UTC")
 
     url_prefix = url_prefix.rstrip("/")  # no slash at the end

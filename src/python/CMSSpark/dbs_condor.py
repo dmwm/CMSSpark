@@ -7,6 +7,7 @@ Description : Spark script to parse DBS and Condor records on HDFS.
 """
 
 # system modules
+import click
 import time
 
 from pyspark import SparkContext, StorageLevel
@@ -15,10 +16,10 @@ from pyspark.sql.functions import udf, lit as _lit, sum as _sum, col as _col, sp
 from pyspark.sql.types import DoubleType
 
 # CMSSpark modules
+from CMSSpark import conf as c
 from CMSSpark.spark_utils import dbs_tables, print_rows, union_all
 from CMSSpark.spark_utils import spark_context, condor_tables
 from CMSSpark.utils import info, split_date
-from CMSSpark.conf import OptionParser
 
 
 def condor_date(date):
@@ -208,20 +209,19 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
 
 
 @info
-def main():
+@click.command()
+@c.common_options(c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+# Custom options
+@click.option("--inst", default="global", help="DBS instance on HDFS: global (default), phys01, phys02, phys03")
+def main(date, yarn, fout, verbose, inst):
     """Main function"""
-    optmgr = OptionParser('dbs_condor')
-    msg = 'DBS instance on HDFS: global (default), phys01, phys02, phys03'
-    optmgr.parser.add_argument("--inst", action="store",
-                               dest="inst", default="global", help=msg)
-    opts = optmgr.parser.parse_args()
-    print("Input arguments: %s" % opts)
-    inst = opts.inst
+    click.echo('dbs_condor')
+    click.echo(f'Input Arguments: date:{date}, yarn:{yarn}, fout:{fout}, verbose:{verbose}, inst:{inst}')
     if inst in ['global', 'phys01', 'phys02', 'phys03']:
         inst = inst.upper()
     else:
         raise Exception('Unsupported DBS instance "%s"' % inst)
-    run(opts.date, opts.fout, opts.yarn, opts.verbose, inst)
+    run(date, fout, yarn, verbose, inst)
 
 
 if __name__ == '__main__':

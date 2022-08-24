@@ -7,6 +7,7 @@ Description : HDFS data anonymization
 """
 
 # system modules
+import click
 import hashlib
 import unicodedata
 
@@ -15,8 +16,8 @@ from pyspark.sql import SQLContext
 from pyspark.sql.types import StringType
 
 # CMSSpark options
+from CMSSpark import conf as c
 from CMSSpark.spark_utils import spark_context
-from CMSSpark.conf import OptionParser
 
 
 def hashfunc(rec):
@@ -68,17 +69,18 @@ def run(fin, attrs, yarn, fout, verbose, nparts=3000):
     data.write.option("compression", "gzip").json(fout)
 
 
-def main():
-    optmgr = OptionParser('hdfs_app')
-    msg = 'HDFS path to process'
-    msg = 'Comma separated list of attributes to anonimise'
-    optmgr.parser.add_argument("--attrs", action="store",
-                               dest="attrs", default="", help=msg)
-    optmgr.parser.add_argument("--nparts", action="store",
-                               dest="nparts", default=100, help=msg)
-    opts = optmgr.parser.parse_args()
-    attrs = opts.attrs.split(',')
-    run(opts.hdir, attrs, opts.yarn, opts.fout, opts.verbose, opts.nparts)
+@click.command()
+@c.common_options(c.ARG_HDIR, c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+# Custom options
+@click.option("--attrs", default="", help="Comma separated list of attributes to anonimise")
+@click.option("--nparts", default=100, help="Comma separated list of attributes to anonimise")
+def main(hdir, date, yarn, fout, verbose, attrs, nparts):
+    """Main function"""
+    click.echo('hdfs_app')
+    click.echo(f'Input Arguments: hdir:{hdir}, date:{date}, yarn:{yarn}, fout:{fout}, verbose:{verbose}, '
+               f'attrs:{attrs}, nparts:{nparts}')
+    attrs = attrs.split(',')
+    run(hdir, attrs, yarn, fout, verbose, nparts)
 
 
 if __name__ == '__main__':

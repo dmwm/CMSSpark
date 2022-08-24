@@ -8,6 +8,7 @@ Description : Spark script to parse and aggregate DBS and PhEDEx records on HDFS
 
 # system modules
 import calendar
+import click
 import datetime
 import re
 import time
@@ -15,7 +16,7 @@ import time
 from pyspark.sql import SQLContext
 
 # CMSSpark modules
-from CMSSpark.conf import OptionParser
+from CMSSpark import conf as c
 from CMSSpark.spark_utils import avro_rdd
 from CMSSpark.spark_utils import spark_context
 from CMSSpark.utils import info
@@ -156,13 +157,17 @@ def run(fout, hdir, date, yarn=None, verbose=None):
 
 
 @info
-def main():
+@click.command()
+@c.common_options(c.ARG_HDIR, c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+# Custom options
+@click.option("--attrs", default="", help="Comma separated list of attributes to anonimise")
+@click.option("--nparts", default=100, help="Comma separated list of attributes to anonimise")
+def main(hdir, date, yarn, fout, verbose):
     """Main function"""
-    optmgr = OptionParser('wmarchive')
-    opts = optmgr.parser.parse_args()
-    print("Input arguments: %s" % opts)
-    hdir = opts.hdir if opts.hdir else 'hdfs:///cms/wmarchive/avro/fwjr'
-    run(opts.fout, opts.hdir, opts.date, opts.yarn, opts.verbose)
+    click.echo('wmarchive')
+    click.echo(f'Input Arguments: hdir:{hdir}, date:{date}, yarn:{yarn}, fout:{fout}, verbose:{verbose}')
+    hdir = hdir if hdir else 'hdfs:///cms/wmarchive/avro/fwjr'
+    run(fout, hdir, date, yarn, verbose)
 
 
 if __name__ == '__main__':

@@ -16,8 +16,7 @@ from datetime import timedelta
 from functools import reduce
 
 from pyspark import SparkContext, StorageLevel
-from pyspark.sql import DataFrame
-from pyspark.sql import SQLContext
+from pyspark.sql import DataFrame, SparkSession, SQLContext
 from pyspark.sql.functions import split, col, date_format, from_unixtime, regexp_replace
 from pyspark.sql.types import DoubleType, IntegerType, StructType
 
@@ -767,8 +766,7 @@ def aso_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
 
 
 def get_candidate_files(start_date, end_date, spark, base, day_delta=1):
-    """
-    Returns a list of hdfs folders that can contain data for the given dates.
+    """Returns a list of hdfs folders that can contain data for the given dates.
     """
     st_date = start_date - timedelta(days=day_delta)
     ed_date = end_date + timedelta(days=day_delta)
@@ -795,3 +793,10 @@ def get_candidate_files(start_date, end_date, spark, base, day_delta=1):
     fs = fsystem.get(uri("hdfs:///"), sc._jsc.hadoopConfiguration())
     candidate_files = [url for url in candidate_files if fs.globStatus(path(url))]
     return candidate_files
+
+
+def get_spark_session(app_name):
+    """Get or create the spark context and session.
+    """
+    sc = SparkContext(appName=app_name)
+    return SparkSession.builder.config(conf=sc._conf).getOrCreate()

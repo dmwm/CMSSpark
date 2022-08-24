@@ -14,8 +14,6 @@ import os
 import click
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     regexp_extract,
     max as _max,
@@ -30,17 +28,11 @@ from pyspark.sql.types import StructType, LongType, StringType, StructField
 
 
 # CMSSpark modules
-from CMSSpark.spark_utils import get_candidate_files
+from CMSSpark.spark_utils import get_candidate_files, get_spark_session
 
 # global variables
 _BASE_HDFS_CONDOR = "/project/monitoring/archive/condor/raw/metric"
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
-
-
-def get_spark_session():
-    """Get or create the spark context and session."""
-    sc = SparkContext(appName="cms-crab-dataset")
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def _get_crab_condor_schema():
@@ -97,7 +89,7 @@ def get_crab_popularity_ds(start_date, end_date, base=_BASE_HDFS_CONDOR):
     """
     start = int(start_date.timestamp() * 1000)
     end = int(end_date.timestamp() * 1000)
-    spark = get_spark_session()
+    spark = get_spark_session(app_name="cms-crab-dataset")
 
     dfs_crabdb = (
         spark.read.option("basePath", base)
@@ -161,8 +153,8 @@ def generate_top_datasets_plot(pdf, output_folder, filename):
 
 
 @click.command()
-@click.argument("start_date", nargs=1, type=click.DateTime(_VALID_DATE_FORMATS))
-@click.argument("end_date", nargs=1, type=click.DateTime(_VALID_DATE_FORMATS))
+@click.option("--start_date", type=click.DateTime(_VALID_DATE_FORMATS))
+@click.option("--end_date", type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option("--generate_plots", default=False, is_flag=True, help="Additional to the csv, generate the plot(s)")
 @click.option("--output_folder", default="./output", help="local output directory")
 def main(start_date, end_date, output_folder, generate_plots=False):

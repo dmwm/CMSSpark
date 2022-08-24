@@ -12,8 +12,6 @@ from datetime import datetime
 
 import click
 import pandas as pd
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, collect_list, concat_ws, countDistinct, first, greatest, lit, lower, when,
     avg as _avg,
@@ -26,6 +24,9 @@ from pyspark.sql.functions import (
 )
 
 from pyspark.sql.types import LongType
+
+# CMSSpark modules
+from CMSSpark.spark_utils import get_spark_session
 
 # global variables
 TODAY = datetime.today().strftime('%Y-%m-%d')
@@ -40,13 +41,6 @@ HDFS_DBS_FILES = f'/tmp/cmsmonit/rucio_daily_stats-{TODAY}/FILES/part*.avro'
 
 pd.options.display.float_format = '{:,.2f}'.format
 pd.set_option('display.max_colwidth', None)
-
-
-def get_spark_session():
-    """Get or create the spark context and session.
-    """
-    sc = SparkContext(appName='cms-monitoring-rucio-datasets-for-mongo')
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def get_df_rses(spark):
@@ -306,7 +300,7 @@ def main(hdfs_out_dir):
     write_format = 'json'
     write_mode = 'overwrite'
 
-    spark = get_spark_session()
+    spark = get_spark_session(app_name='cms-monitoring-rucio-datasets-for-mongo')
     # Set TZ as UTC. Also set in the spark-submit confs.
     spark.conf.set("spark.sql.session.timeZone", "UTC")
 

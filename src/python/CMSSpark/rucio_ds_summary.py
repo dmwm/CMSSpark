@@ -18,8 +18,6 @@ import time
 from datetime import datetime
 
 import click
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, countDistinct, first, greatest, lit, lower, when,
     avg as _avg,
@@ -31,6 +29,9 @@ from pyspark.sql.functions import (
     sum as _sum,
 )
 from pyspark.sql.types import LongType
+
+# CMSSpark modules
+from CMSSpark.spark_utils import get_spark_session
 
 # CMSMonitoring modules
 try:
@@ -61,13 +62,6 @@ STR_TYPE_COLUMNS = ['RseType', 'IsDatasetValid', 'TierName', 'PhysicsGroupName',
 
 # Null string type column values will be replaced with
 NULL_STR_TYPE_COLUMN_VALUE = 'UNKNOWN'
-
-
-def get_spark_session():
-    """Get or create the spark context and session.
-    """
-    sc = SparkContext(appName='cms-monitoring-rucio-datasets-for-mongo')
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def get_df_rses(spark):
@@ -400,7 +394,7 @@ def send_to_amq(data, confs, batch_size):
 def main(creds, amq_batch_size):
     """Main function that run Spark dataframe creations and save results to HDFS directory as JSON lines
     """
-    spark = get_spark_session()
+    spark = get_spark_session(app_name='cms-monitoring-rucio-datasets-for-mongo')
     # Set TZ as UTC. Also set in the spark-submit confs.
     spark.conf.set("spark.sql.session.timeZone", "UTC")
 

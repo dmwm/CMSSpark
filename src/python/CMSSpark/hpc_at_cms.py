@@ -19,20 +19,13 @@ from pyspark.sql.types import (
     StructField,
     DoubleType,
 )
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
 import click
 
 # global variables
+from CMSSpark.spark_utils import get_candidate_files, get_spark_session
+
 _BASE_HDFS_CONDOR = "/project/monitoring/archive/condor/raw/metric"
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
-
-
-def get_spark_session():
-    """Get or create the spark context and session
-    """
-    sc = SparkContext(appName="hpc-at-cms_plot")
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def _get_schema():
@@ -57,35 +50,16 @@ def _get_schema():
     )
 
 
-def _get_candidate_files(start_date, end_date, spark, base=_BASE_HDFS_CONDOR):
-    """Returns a list of hdfs folders that can contain data for the given dates
-    """
-    st_date = start_date - timedelta(days=3)
-    ed_date = end_date + timedelta(days=3)
-    days = (ed_date - st_date).days
-    sc = spark.sparkContext
-    candidate_files = [
-        f"{base}/{(st_date + timedelta(days=i)).strftime('%Y/%m/%d')}"
-        for i in range(0, days)
-    ]
-    fsystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
-    uri = sc._gateway.jvm.java.net.URI
-    path = sc._gateway.jvm.org.apache.hadoop.fs.Path
-    fs = fsystem.get(uri("hdfs:///"), sc._jsc.hadoopConfiguration())
-    candidate_files = [url for url in candidate_files if fs.globStatus(path(url))]
-    return candidate_files
-
-
 def get_hpc_at_cms(start_date, end_date, base=_BASE_HDFS_CONDOR):
     """Get data of required sites with their specific conditions defined in CMSMONIT-341 Jira ticket
     """
     schema = _get_schema()
-    spark = get_spark_session()
+    spark = get_spark_session(app_name="hpc-at-cms_plot")
     # start_date = datetime(2020, 11, 1)
     # end_date = datetime(2021, 1, 1)
     raw_df = (
         spark.read.option("basePath", base).json(
-            _get_candidate_files(start_date, end_date, spark, base),
+            get_candidate_files(start_date, end_date, spark, base, day_delta=3),
             schema=schema,
         ).select("data.*").filter(
             f"""Status='Completed'
@@ -201,8 +175,8 @@ def generate_plot(result_df, output_folder, filename):
 
 
 @click.command()
-@click.argument("start_date", nargs=1, type=click.DateTime(_VALID_DATE_FORMATS))
-@click.argument("end_date", nargs=1, type=click.DateTime(_VALID_DATE_FORMATS))
+@click.option("--start_date", type=click.DateTime(_VALID_DATE_FORMATS))
+@click.option("--end_date", type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option("--output_folder", default="./output", help="local output directory")
 def main(start_date, end_date, output_folder):
     """Main function

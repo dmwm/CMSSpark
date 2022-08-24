@@ -7,23 +7,8 @@ Description : ...
 """
 
 # system modules
-import argparse
+import click
 import datetime
-
-
-class OptionParser:
-    def __init__(self):
-        """User based option parser"""
-        self.parser = argparse.ArgumentParser(prog='PROG')
-        self.parser.add_argument("--start", action="store",
-                                 dest="start", default="", help="start date (YYYYMMDD)")
-        self.parser.add_argument("--ndays", action="store",
-                                 dest="ndays", default=30, help="Number of days, default 30")
-        iformat = '%Y-%m-%d'
-        self.parser.add_argument("--format", action="store",
-                                 dest="format", default=iformat, help="date format, e.g. %%Y%%m%%d")
-        self.parser.add_argument("--range", action="store_true",
-                                 dest="range", default=False, help="show full range")
 
 
 def dates(start, numdays):
@@ -52,17 +37,22 @@ def dformat(date, iformat):
     return date.strftime(iformat)
 
 
-def main():
+@click.command()
+@click.option("--start", default="", help="Dstart date (YYYYMMDD)")
+@click.option("--ndays", default=30, help="Number of days, default 30")
+@click.option("--format", "format_", default="%Y-%m-%d", help="date format, e.g. %%Y%%m%%d")
+@click.option("--range", "range_", default=False, is_flag=True, help="show full range")
+def main(start, ndays, format_, range_):
     """Main function"""
-    optmgr = OptionParser()
-    opts = optmgr.parser.parse_args()
-    if opts.range:
-        for date in range_dates(opts.start, int(opts.ndays)):
-            print(dformat(date, opts.format))
+    click.echo("dates")
+    click.echo(f'Input Arguments: start:{start}, ndays:{ndays}, format:{format_}, range:{range_}')
+    if range_:
+        for date in range_dates(start, int(ndays)):
+            print(dformat(date, format_))
     else:
-        date_list = dates(opts.start, int(opts.ndays))
+        date_list = dates(start, int(ndays))
         min_date, max_date = date_list[-1], date_list[0]
-        print('%s %s' % (dformat(min_date, opts.format), dformat(max_date, opts.format)))
+        print('%s %s' % (dformat(min_date, format_), dformat(max_date, format_)))
 
 
 if __name__ == '__main__':

@@ -15,26 +15,11 @@ from datetime import datetime, date, timedelta
 import click
 import numpy as np
 import pandas as pd
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import (
-    col,
-    lit,
-    when,
-    sum as _sum,
-    first,
-)
-from pyspark.sql.types import (
-    StructType,
-    LongType,
-    StringType,
-    StructField,
-    DoubleType,
-    IntegerType,
-)
+from pyspark.sql.functions import col, lit, when, sum as _sum, first
+from pyspark.sql.types import StructType, LongType, StringType, StructField, DoubleType, IntegerType
 
 # CMSSpark modules
-from CMSSpark.spark_utils import get_candidate_files
+from CMSSpark.spark_utils import get_candidate_files, get_spark_session
 
 # global variables
 _VALID_TYPES = ["analysis", "production", "folding@home", "test"]
@@ -82,14 +67,6 @@ def site_kibana_links():
     kibana_by_site_base_link_4 = '''%22'),sort:!(RecordTime,desc))">@Kibana</a>'''
     return [kibana_by_site_base_link_0, kibana_by_site_base_link_1, kibana_by_site_base_link_2,
             kibana_by_site_base_link_3, kibana_by_site_base_link_4]
-
-
-def get_spark_session():
-    """
-    Get or create the spark context and session.
-    """
-    sc = SparkContext(appName="cms-cpu-efficiency")
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def format_df(df):
@@ -172,14 +149,8 @@ def _get_schema():
     )
 
 
-def _generate_main_page(selected_pd,
-                        grouped_tiers,
-                        start_date,
-                        end_date,
-                        cms_type,
-                        workflow_column=None,
-                        filter_column=None,
-                        cpu_eff_outlier=0):
+def _generate_main_page(selected_pd,  grouped_tiers, start_date, end_date, cms_type, workflow_column=None,
+                        filter_column=None,cpu_eff_outlier=0):
     """Create HTML page
 
     Header
@@ -353,25 +324,18 @@ def _generate_main_page(selected_pd,
 @click.command()
 @click.option("--start_date", type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option("--end_date", type=click.DateTime(_VALID_DATE_FORMATS))
-@click.option(
-    "--cms_type",
-    default="production",
-    type=click.Choice(_VALID_TYPES),
-    help=f"Workflow type to query {_VALID_TYPES}",
-)
+@click.option("--cms_type", default="production", type=click.Choice(_VALID_TYPES),
+              help=f"Workflow type to query {_VALID_TYPES}")
 @click.option("--output_folder", default="./www/cpu_eff", help="local output directory")
 @click.option("--last_n_days", type=int, default=30, help="Last n days data will be used")
 @click.option("--cpu_eff_outlier", default=0, help="Filter by CpuEffOutlier")
-def generate_cpu_eff_site(
-    start_date=None,
-    end_date=None,
-    cms_type="production",
-    output_folder="./www/cpu_eff",
-    last_n_days=30,
-    cpu_eff_outlier=0,
-):
+def generate_cpu_eff_site(start_date=None, end_date=None, cms_type="production", output_folder="./www/cpu_eff",
+                          last_n_days=30, cpu_eff_outlier=0):
     """
     """
+    click.echo("Condor cpu efficiency html producer")
+    click.echo(f"Input Arguments: start_date:{start_date}, end_date:{end_date}, cms_type:{cms_type}, "
+               f"output_folder:{output_folder}, last_n_days:{last_n_days}, cpu_eff_outlier:{cpu_eff_outlier}")
     _yesterday = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
     if not (start_date or end_date):
         # defaults to the last 30 days with 3 days offset.
@@ -394,7 +358,7 @@ def generate_cpu_eff_site(
     }
     # Should be a list, used also in dataframe merge conditions.
     group_by_col = group_type_map[cms_type]
-    spark = get_spark_session()
+    spark = get_spark_session(app_name="cms-cpu-efficiency")
     schema = _get_schema()
     raw_df = (
         spark.read.option("basePath", _BASE_HDFS_CONDOR)

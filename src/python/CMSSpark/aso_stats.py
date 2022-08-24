@@ -7,16 +7,17 @@ Description : Spark script to parse ASO records on HDFS.
 """
 
 # system modules
+import click
 import time
 
-from pyspark import SparkContext, StorageLevel
+from pyspark import StorageLevel
 from pyspark.sql import SQLContext
 from pyspark.sql.functions import count, col, lit, mean
 from pyspark.sql.functions import udf
 from pyspark.sql.types import StringType
 
 # CMSSpark modules
-from CMSSpark.conf import OptionParser
+from CMSSpark import conf as c
 from CMSSpark.spark_utils import aso_tables, print_rows
 from CMSSpark.spark_utils import fts_tables
 from CMSSpark.spark_utils import spark_context
@@ -48,15 +49,15 @@ def run(date, fout, yarn=None, verbose=None):
     """
     # define spark context, it's main object which allow communicating with spark
     ctx = spark_context('cms', yarn, verbose)
-    sqlContext = SQLContext(ctx)
+    sql_context = SQLContext(ctx)
 
     # read ASO and FTS tables
     date = aso_date(date)
     tables = {}
-    tables.update(fts_tables(sqlContext, date=date, verbose=verbose))
+    tables.update(fts_tables(sql_context, date=date, verbose=verbose))
     fts_df = tables['fts_df']  # fts table
     print_rows(fts_df, 'fts_df', verbose)
-    tables.update(aso_tables(sqlContext, verbose=verbose))
+    tables.update(aso_tables(sql_context, verbose=verbose))
     aso_df = tables['aso_df']  # aso table
     print_rows(aso_df, 'aso_df', verbose)
 
@@ -102,12 +103,13 @@ def run(date, fout, yarn=None, verbose=None):
 
 
 @info
-def main():
+@click.command()
+@c.common_options(c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+def main(date, yarn, fout, verbose):
     """Main function"""
-    optmgr = OptionParser('aso_stats')
-    opts = optmgr.parser.parse_args()
-    print("Input arguments: %s" % opts)
-    run(opts.date, opts.fout, opts.yarn, opts.verbose)
+    click.echo('aso_stats')
+    click.echo(f'Input Arguments: date:{date}, yarn:{yarn}, fout:{fout}, verbose:{verbose}')
+    run(date, fout, yarn, verbose)
 
 
 if __name__ == '__main__':

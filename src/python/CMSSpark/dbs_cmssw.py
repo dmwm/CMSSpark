@@ -8,17 +8,18 @@ Description : Spark script to parse DBS and CMSSW records on HDFS.
 """
 
 # system modules
+import click
 import time
 
-from pyspark import SparkContext, StorageLevel
+from pyspark import StorageLevel
 from pyspark.sql import SQLContext
 from pyspark.sql.functions import lit
 
 # CMSSpark modules
+from CMSSpark import conf as c
 from CMSSpark.spark_utils import dbs_tables, print_rows
 from CMSSpark.spark_utils import spark_context, cmssw_tables, split_dataset
 from CMSSpark.utils import info
-from CMSSpark.conf import OptionParser
 
 
 def cmssw_date(date):
@@ -46,23 +47,22 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
     """
     # define spark context, it's main object which allow to communicate with spark
     ctx = spark_context('cms', yarn, verbose)
-    sqlContext = SQLContext(ctx)
+    sql_context = SQLContext(ctx)
 
     # read DBS and Phedex tables
     tables = {}
-    tables.update(dbs_tables(sqlContext, inst=inst, verbose=verbose))
+    tables.update(dbs_tables(sql_context, inst=inst, verbose=verbose))
     ddf = tables['ddf']  # dataset table
     fdf = tables['fdf']  # file table
 
     # read CMSSW avro rdd
     date = cmssw_date(date)
-    cmssw_df = cmssw_tables(ctx, sqlContext, date=date, verbose=verbose)
+    cmssw_df = cmssw_tables(ctx, sql_context, date=date, verbose=verbose)
 
     # merge DBS and CMSSW data
     cols = ['d_dataset', 'd_dataset_id', 'f_logical_file_name', 'FILE_LFN', 'SITE_NAME']
-    stmt = 'SELECT %s FROM ddf JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id JOIN cmssw_df ON fdf.f_logical_file_name = cmssw_df.FILE_LFN' % ','.join(
-        cols)
-    joins = sqlContext.sql(stmt)
+    stmt = 'SELECT %s FROM ddf JOIN fdf ON ddf.d_dataset_id = fdf.f_dataset_id JOIN cmssw_df ON fdf.f_logical_file_name = cmssw_df.FILE_LFN' % ','.join(cols)
+    joins = sql_context.sql(stmt)
     print_rows(joins, stmt, verbose)
 
     # perform aggregation
@@ -87,20 +87,19 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
 
 
 @info
-def main():
+@click.command()
+@c.common_options(c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+# Custom options
+@click.option("--inst", default="global", help="DBS instance on HDFS: global (default), phys01, phys02, phys03")
+def main(date, yarn, fout, verbose, inst):
     """Main function"""
-    optmgr = OptionParser('dbs_cmssw')
-    msg = 'DBS instance on HDFS: global (default), phys01, phys02, phys03'
-    optmgr.parser.add_argument("--inst", action="store",
-                               dest="inst", default="global", help=msg)
-    opts = optmgr.parser.parse_args()
-    print("Input arguments: %s" % opts)
-    inst = opts.inst
+    click.echo('dbs_cmssw')
+    click.echo(f'Input Arguments: date:{date}, yarn:{yarn}, fout:{fout}, verbose:{verbose}, inst:{inst}')
     if inst in ['global', 'phys01', 'phys02', 'phys03']:
         inst = inst.upper()
     else:
         raise Exception('Unsupported DBS instance "%s"' % inst)
-    run(opts.date, opts.fout, opts.yarn, opts.verbose, inst)
+    run(date, fout, yarn, verbose, inst)
 
 
 if __name__ == '__main__':

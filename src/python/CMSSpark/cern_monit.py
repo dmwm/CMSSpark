@@ -7,18 +7,19 @@ Description : Spark script to read data from HDFS location and send them to CERN
 """
 
 # system modules
+import click
+import json
 import os
 import time
-import json
 
-from pyspark import SparkContext, SparkFiles
+from pyspark import SparkFiles
 from pyspark.sql import SQLContext
 
 # CMSSpark modules
+from CMSSpark import conf as c
+from CMSSpark.schemas import aggregated_data_schema
 from CMSSpark.spark_utils import spark_context, print_rows, union_all
 from CMSSpark.utils import info
-from CMSSpark.conf import OptionParser
-from CMSSpark.schemas import aggregated_data_schema
 
 # CMSMonitoring modules
 try:
@@ -80,7 +81,7 @@ def run(path, amq, stomp, yarn=None, aggregation_schema=False, verbose=False):
             raise Exception('Wrong AMQ broker file name, please name it as amq_broker.json')
     else:
         raise Exception('No AMQ credential file is provided')
-    sqlContext = SQLContext(ctx)
+    sql_context = SQLContext(ctx)
 
     awk = "awk '{print $8}'"
     hpath = f"hadoop fs -ls {path} | {awk}"
@@ -90,11 +91,11 @@ def run(path, amq, stomp, yarn=None, aggregation_schema=False, verbose=False):
     pfiles = [f for f in stream.read().splitlines() if f.find('part-') != -1]
 
     if aggregation_schema:
-        df = union_all([sqlContext.read.format('com.databricks.spark.csv')
+        df = union_all([sql_context.read.format('com.databricks.spark.csv')
                        .options(treatEmptyValuesAsNulls='true', nullValue='null', header='true')
                        .load(fname, schema=aggregated_data_schema()) for fname in pfiles])
     else:
-        df = union_all([sqlContext.read.format('com.databricks.spark.csv')
+        df = union_all([sql_context.read.format('com.databricks.spark.csv')
                        .options(treatEmptyValuesAsNulls='true', nullValue='null', header='true')
                        .load(fname) for fname in pfiles])
 
@@ -114,20 +115,19 @@ def run(path, amq, stomp, yarn=None, aggregation_schema=False, verbose=False):
 
 
 @info
-def main():
+@click.command()
+@c.common_options(c.ARG_HDIR, c.ARG_YARN, c.ARG_VERBOSE)
+# Custom options
+@click.option("--stomp", default="", help="Full path to stomp python module egg")
+@click.option("--amq", default="amq_broker.json", help="AMQ credentials JSON file (should be named as amq_broker.json")
+@click.option("--aggregation_schema", default=False, is_flag=True,
+              help="use aggregation schema for data upload (needed for correct var types)")
+def main(hdir, yarn, verbose, stomp, amq, aggregation_schema):
     """Main function"""
-    optmgr = OptionParser('cern_monit')
-    msg = 'Full path to stomp python module egg'
-    optmgr.parser.add_argument("--stomp", action="store",
-                               dest="stomp", default='', help=msg)
-    msg = "AMQ credentials JSON file (should be named as amq_broker.json)"
-    optmgr.parser.add_argument("--amq", action="store",
-                               dest="amq", default="amq_broker.json", help=msg)
-    optmgr.parser.add_argument("--aggregation_schema", action="store_true",
-                               dest="aggregation_schema", default=False,
-                               help="use aggregation schema for data upload (needed for correct var types)")
-    opts = optmgr.parser.parse_args()
-    run(opts.hdir, opts.amq, opts.stomp, opts.yarn, opts.aggregation_schema, opts.verbose)
+    click.echo('cern_monit')
+    click.echo(f'Input Arguments: hdir:{hdir}, yarn:{yarn}, verbose:{verbose}, '
+               f'stomp:{stomp}, amq:{amq}, aggregation_schema:{aggregation_schema}')
+    run(hdir, amq, stomp, yarn, aggregation_schema, verbose)
 
 
 if __name__ == '__main__':

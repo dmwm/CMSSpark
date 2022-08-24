@@ -27,8 +27,6 @@ import time
 from datetime import datetime, timezone
 
 import click
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, lit, lower, when,
     count as _count,
@@ -41,6 +39,9 @@ from pyspark.sql.functions import (
 from pyspark.sql.types import (
     LongType,
 )
+
+# CMSSpark modules
+from CMSSpark.spark_utils import get_spark_session
 
 # CMSMonitoring modules
 try:
@@ -77,12 +78,6 @@ STR_TYPE_COLUMNS = ['all_f_in_dbs', 'all_f_in_rucio', 'rucio_has_ds_name', 'dbs_
                     'processed_ds_id', 'prep_id', 'data_tier_id', 'data_tier_name', 'physics_group_id',
                     'physics_group_name', 'acquisition_era_id', 'acquisition_era_name', 'dataset_access_type_id',
                     'dataset_access_type', 'rse', 'rse_type', 'rse_tier', 'rse_country', 'rse_kind', ]
-
-
-def get_spark_session():
-    """Get or create the spark context and session."""
-    sc = SparkContext(appName="cms-monitoring-rucio-daily-stats")
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def write_stats_to_eos(base_eos_dir, stats_dict):
@@ -468,7 +463,7 @@ def main(creds, base_hdfs_dir, base_eos_dir, amq_batch_size):
     for table in TABLES:
         tables_hdfs_paths[table] = f"{base_hdfs_dir}/{table}/part*.avro"
 
-    spark = get_spark_session()
+    spark = get_spark_session("cms-monitoring-rucio-daily-stats")
     creds_json = credentials(f_name=creds)
     df = create_main_df(spark=spark, hdfs_paths=tables_hdfs_paths, base_eos_dir=base_eos_dir)
     print('Schema:')

@@ -7,6 +7,7 @@ Description : Spark script to parse DBS and EOS records on HDFS.
 """
 
 # system modules
+import click
 import time
 
 from pyspark import StorageLevel
@@ -14,7 +15,7 @@ from pyspark.sql import SQLContext
 from pyspark.sql.functions import lit
 
 # CMSSpark modules
-from CMSSpark.conf import OptionParser
+from CMSSpark import conf as c
 from CMSSpark.spark_utils import dbs_tables, print_rows
 from CMSSpark.spark_utils import spark_context, eos_tables, split_dataset
 from CMSSpark.utils import info
@@ -78,9 +79,9 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
         .withColumnRenamed('count(file_lfn)', 'count') \
         .withColumnRenamed('d_dataset', 'dataset') \
         .withColumn('date', lit(eos_date_unix(date))) \
-        .withColumn('count_type', lit('eos')) \
- \
-        # keep table around
+        .withColumn('count_type', lit('eos'))
+
+    # keep table around
     fjoin.persist(StorageLevel.MEMORY_AND_DISK)
 
     # write out results back to HDFS, the fout parameter defines area on HDFS
@@ -94,20 +95,19 @@ def run(date, fout, yarn=None, verbose=None, inst='GLOBAL'):
 
 
 @info
-def main():
+@click.command()
+@c.common_options(c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+# Custom options
+@click.option("--inst", default="global", help="DBS instance on HDFS: global (default), phys01, phys02, phys03")
+def main(date, yarn, fout, verbose, inst):
     """Main function"""
-    optmgr = OptionParser('dbs_eos')
-    msg = 'DBS instance on HDFS: global (default), phys01, phys02, phys03'
-    optmgr.parser.add_argument("--inst", action="store",
-                               dest="inst", default="global", help=msg)
-    opts = optmgr.parser.parse_args()
-    print("Input arguments: %s" % opts)
-    inst = opts.inst
+    click.echo('dbs_eos')
+    click.echo(f'Input Arguments: date:{date}, yarn:{yarn}, fout:{fout}, verbose:{verbose}, inst:{inst}')
     if inst in ['global', 'phys01', 'phys02', 'phys03']:
         inst = inst.upper()
     else:
         raise Exception('Unsupported DBS instance "%s"' % inst)
-    run(opts.date, opts.fout, opts.yarn, opts.verbose, inst)
+    run(date, fout, yarn, verbose, inst)
 
 
 if __name__ == '__main__':

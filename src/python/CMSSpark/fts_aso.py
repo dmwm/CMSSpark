@@ -7,6 +7,7 @@ Description : Spark script to parse FTS records on HDFS.
 """
 
 # system modules
+import click
 import time
 
 from pyspark import SparkContext, StorageLevel
@@ -14,9 +15,9 @@ from pyspark.sql import SQLContext
 from pyspark.sql.functions import sum as agg_sum
 
 # CMSSpark modules
+from CMSSpark import conf as c
 from CMSSpark.spark_utils import fts_tables, spark_context
 from CMSSpark.utils import info
-from CMSSpark.conf import OptionParser
 
 
 def fts_date(date):
@@ -79,12 +80,13 @@ def run(date, fout, yarn=None, verbose=None):
 
 
 @info
-def main():
+@click.command()
+@c.common_options(c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+def main(date, yarn, fout, verbose):
     """Main function"""
-    optmgr = OptionParser('fts_aso')
-    opts = optmgr.parser.parse_args()
-    print("Input arguments: %s" % opts)
-    run(opts.date, opts.fout, opts.yarn, opts.verbose)
+    click.echo('fts_aso')
+    click.echo(f'Input Arguments: date:{date}, yarn:{yarn}, fout:{fout}, verbose:{verbose}')
+    run(date, fout, yarn, verbose)
 
 
 if __name__ == '__main__':
