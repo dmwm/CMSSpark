@@ -16,15 +16,15 @@ EOF
 fi
 
 OUTPUT_DIR="${1:-$HOME/output_crab_uu}"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 
 END_DATE="${3:-$(date +%Y-%m-01)}"
 START_DATE="${2:-$(date -d "$END_DATE -1 year" +%Y-%m-01)}"
 
 (echo >&2 "Totals for dataset/datablock from $START_DATE to $END_DATE")
 
-/bin/bash "$SCRIPT_DIR/run_crab_unique_users.sh" --generate_plots --by "month" --output_folder "$OUTPUT_DIR" --start_date "$START_DATE" --end_date "$END_DATE"
-/bin/bash "$SCRIPT_DIR/run_crab_unique_users.sh" --generate_plots --by "weekofyear" --output_folder "$OUTPUT_DIR" --start_date "$START_DATE" --end_date "$END_DATE"
+/bin/bash "$script_dir/run_crab_unique_users.sh" --generate_plots --by "month" --output_folder "$OUTPUT_DIR" --start_date "$START_DATE" --end_date "$END_DATE"
+/bin/bash "$script_dir/run_crab_unique_users.sh" --generate_plots --by "weekofyear" --output_folder "$OUTPUT_DIR" --start_date "$START_DATE" --end_date "$END_DATE"
 
 ln -s -f "$OUTPUT_DIR/UniqueUsersBy_month_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).csv" "$OUTPUT_DIR/UniqueUsersBy_month_latest.csv"
 ln -s -f "$OUTPUT_DIR/UniqueUsersBy_month_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" "$OUTPUT_DIR/UniqueUsersBy_month_latest.png"

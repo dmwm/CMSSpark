@@ -391,7 +391,10 @@ def send_to_amq(data, confs, batch_size):
 @click.option("--creds", required=True, help="secrets/cms-rucio-dailystats/creds.json")
 @click.option("--amq_batch_size", type=click.INT, required=False, help="AMQ transaction batch size",
               default=100)
-def main(creds, amq_batch_size):
+@click.option("--test", is_flag=True, default=False, required=False,
+              help="It will send only 10 documents to ElasticSearch. "
+                   "[!Attention!] Please provide test/training AMQ topic.")
+def main(creds, amq_batch_size, test):
     """Main function that run Spark dataframe creations and save results to HDFS directory as JSON lines
     """
     spark = get_spark_session(app_name='cms-monitoring-rucio-datasets-for-mongo')
@@ -415,13 +418,26 @@ def main(creds, amq_batch_size):
     print('Schema:')
     df.printSchema()
     total_size = 0
-    # Iterate over list of dicts returned from spark
-    for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
-        part_size = len(part)
-        print(f"Length of partition: {part_size}")
-        send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size)
-        total_size += part_size
-    print(f"Total document size: {total_size}")
+    if test:
+        _topic = creds_json["topic"].lower()
+        if ("train" not in _topic) and ("test" not in _topic):
+            print(f"Test failed. Topic \"{_topic}\" is not training or test topic.")
+            sys.exit(1)
+
+        for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
+            part_size = len(part)
+            print(f"Length of partition: {part_size}")
+            send_to_amq(data=part[:10], confs=creds_json, batch_size=amq_batch_size)
+            print(f"Test successfully finished and sent 10 documents to {_topic} AMQ topic.")
+            sys.exit(0)
+    else:
+        # Iterate over list of dicts returned from spark
+        for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
+            part_size = len(part)
+            print(f"Length of partition: {part_size}")
+            send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size)
+            total_size += part_size
+        print(f"Total document size: {total_size}")
 
 
 if __name__ == '__main__':

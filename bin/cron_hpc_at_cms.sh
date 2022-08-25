@@ -15,7 +15,7 @@ EOF
 fi
 
 OUTPUT_DIR="${1:-$HOME/output_hpc_at_cms}"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 
 # Validation of dates are performed by python script
 # Valid date formats: "%Y/%m/%d", "%Y-%m-%d" and "%Y%m%d"
@@ -24,6 +24,6 @@ START_DATE="${2:-$(date -d "$END_DATE -1 year" +%Y-%m-01)}"
 
 (echo >&2 "Plots from $START_DATE to $END_DATE")
 
-/bin/bash "$SCRIPT_DIR/run_hpc_at_cms.sh" --output_folder "$OUTPUT_DIR" --start_date "$START_DATE" --end_date "$END_DATE"
+/bin/bash "$script_dir/run_hpc_at_cms.sh" --output_folder "$OUTPUT_DIR" --start_date "$START_DATE" --end_date "$END_DATE"
 
 ln -s -f "$OUTPUT_DIR/HPC@CMS_Running_Cores_Hourly_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" "$OUTPUT_DIR/HPC@CMS_Running_Cores_Hourly_latest.png"
