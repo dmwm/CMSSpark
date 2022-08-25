@@ -22,21 +22,9 @@ set -e
 ##H   - wdir         : Working directory to arrange logging directory
 ##H
 ##H Usage Example:
-##H    ./cron4rucio_datasets_to_mongo.sh \
-##H        --keytab ./keytab \
-##H        --mongohost $MONGO_HOST \
-##H        --mongoport $MONGO_PORT \
-##H        --mongouser $MONGO_ROOT_USERNAME \
-##H        --mongopass $MONGO_ROOT_PASSWORD \
-##H        --mongowritedb rucio \
-##H        --mongoauthdb admin \
-##H        --nodename $MY_NODE_NAME \
-##H        --sparkport0 $CMSMON_RUCIO_DS_MONGO_SERVICE_PORT_PORT_0 \
-##H        --sparkport1 $CMSMON_RUCIO_DS_MONGO_SERVICE_PORT_PORT_1 \
-##H        --sparkbindadr 0.0.0.0 \
-##H        --sparklocalip 127.0.0.1 \
-##H        --wdir $WDIR
-##H
+##H    ./cron4rucio_datasets_to_mongo.sh --keytab ./keytab --mongohost $MONGO_HOST --mongoport $MONGO_PORT --mongouser $MONGO_ROOT_USERNAME --mongopass $MONGO_ROOT_PASSWORD \
+##H                                      --mongowritedb rucio --mongoauthdb admin --nodename $MY_NODE_NAME --sparkport0 $CMSMON_RUCIO_DS_MONGO_SERVICE_PORT_PORT_0 \
+##H                                      --sparkport1 $CMSMON_RUCIO_DS_MONGO_SERVICE_PORT_PORT_1 --sparkbindadr 0.0.0.0 --sparklocalip 127.0.0.1 --wdir $WDIR
 ##H References:
 ##H   - CMSSpark/bin/cron4rucio_datasets_daily_stats.sh
 ##H
@@ -84,65 +72,21 @@ eval set -- "$PARSED_ARGUMENTS"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-    --keytab)
-        ARG_KEYTAB=$2
-        shift 2
-        ;;
-    --mongohost)
-        ARG_MONGOHOST=$2
-        shift 2
-        ;;
-    --mongoport)
-        ARG_MONGOPORT=$2
-        shift 2
-        ;;
-    --mongouser)
-        ARG_MONGOUSER=$2
-        shift 2
-        ;;
-    --mongopass)
-        ARG_MONGOPASS=$2
-        shift 2
-        ;;
-    --mongowritedb)
-        ARG_MONGOWRITEDB=$2
-        shift 2
-        ;;
-    --mongoauthdb)
-        ARG_MONGOAUTHDB=$2
-        shift 2
-        ;;
-    --nodename)
-        ARG_NODENAME=$2
-        shift 2
-        ;;
-    --sparkport0)
-        ARG_SPARKPORT0=$2
-        shift 2
-        ;;
-    --sparkport1)
-        ARG_SPARKPORT1=$2
-        shift 2
-        ;;
-    --sparkbindadr)
-        ARG_SPARKBINDADDRESS=$2
-        shift 2
-        ;;
-    --sparklocalip)
-        ARG_SPARKLOCALIP=$2
-        shift 2
-        ;;
-    --wdir)
-        ARG_WDIR=$2
-        shift 2
-        ;;
-    -h | --help)
-        help=1
-        shift
-        ;;
-    *)
-        break
-        ;;
+    --keytab)       ARG_KEYTAB=$2           ; shift 2 ;;
+    --mongohost)    ARG_MONGOHOST=$2        ; shift 2 ;;
+    --mongoport)    ARG_MONGOPORT=$2        ; shift 2 ;;
+    --mongouser)    ARG_MONGOUSER=$2        ; shift 2 ;;
+    --mongopass)    ARG_MONGOPASS=$2        ; shift 2 ;;
+    --mongowritedb) ARG_MONGOWRITEDB=$2     ; shift 2 ;;
+    --mongoauthdb)  ARG_MONGOAUTHDB=$2      ; shift 2 ;;
+    --nodename)     ARG_NODENAME=$2         ; shift 2 ;;
+    --sparkport0)   ARG_SPARKPORT0=$2       ; shift 2 ;;
+    --sparkport1)   ARG_SPARKPORT1=$2       ; shift 2 ;;
+    --sparkbindadr) ARG_SPARKBINDADDRESS=$2 ; shift 2 ;;
+    --sparklocalip) ARG_SPARKLOCALIP=$2     ; shift 2 ;;
+    --wdir)         ARG_WDIR=$2             ; shift 2 ;;
+    -h | --help)    help=1                  ; shift   ;;
+    *) break;;
     esac
 done
 
