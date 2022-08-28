@@ -121,3 +121,13 @@ ln -s -f "$OUTPUT_DIR/T1/HS06CpuTimeHr_weekofyear_$(date -d "$START_DATE" +%Y%m%
 
 duration=$(($(date +%s) - START_TIME))
 util4logi "all finished, time spent: $(util_secs_to_human $duration)"
+
+# ---------------------------------------------------------------------------------------------------------------- TEST
+# This cron job runs monthly, so last modification date of the output should be within 32 days
+time_threshold=2764800
+size_threshold=10000 # (10KB)
+
+set -e
+/bin/bash "$script_dir/utils/check_utils.sh" check_file_status "$OUTPUT_DIR/T1/HS06CpuTimeHr_weekofyear_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" $time_threshold $size_threshold
+/bin/bash "$script_dir/utils/check_utils.sh" check_file_status "$OUTPUT_DIR/T2/HS06CpuTimeHr_weekofyear_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" $time_threshold $size_threshold
+# Running commands after this point will change the exit code.
