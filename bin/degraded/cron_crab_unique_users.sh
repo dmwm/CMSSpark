@@ -31,3 +31,10 @@ ln -s -f "$OUTPUT_DIR/UniqueUsersBy_month_$(date -d "$START_DATE" +%Y%m%d)-$(dat
 
 ln -s -f "$OUTPUT_DIR/UniqueUsersBy_weekofyear_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).csv" "$OUTPUT_DIR/UniqueUsersBy_weekofyear_latest.csv"
 ln -s -f "$OUTPUT_DIR/UniqueUsersBy_weekofyear_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" "$OUTPUT_DIR/UniqueUsersBy_weekofyear_latest.png"
+
+# ----- CRON SUCCESS CHECK -----
+# This cron job generates a plot every month, so time treshold should be 32 days
+TIME_TRESHOLD=2764800
+SIZE_TRESHOLD=10000 # (10KB)
+
+/bin/bash "$SCRIPT_DIR"/utils/check_utils.sh check_file_status "$OUTPUT_DIR/UniqueUsersBy_month_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" $TIME_TRESHOLD $SIZE_TRESHOLD
