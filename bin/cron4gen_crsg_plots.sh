@@ -133,10 +133,22 @@ if [[ "$IS_TEST" == 1 ]]; then
     start_month=$(date -d "$(date) -3 month" +%Y/%m)
     gen_plot "F10" "$start_month"
     gen_plot "F9" "$start_month"
+    file_to_test="event_count_$(date -d "-3 month" +"%Y%m")-$(date -d "-1 month" +"%Y%m").png"
 else
     gen_plot "F10"
     gen_plot "F9"
+    file_to_test="event_count_$(date -d "-1 year" +"%Y%m")-$(date -d "-1 month" +"%Y%m").png"
 fi
 
 duration=$(($(date +%s) - START_TIME))
 util4logi "all finished, time spent: $(util_secs_to_human $duration)"
+
+# ---------------------------------------------------------------------------------------------------------------- TEST
+# This cron job runs monthly, so last modification date of the output should be within 32 days
+time_threshold=2764800
+size_threshold=10000 # (10KB)
+
+set -e
+/bin/bash "$script_dir/utils/check_utils.sh" check_file_status "$OUTPUT_DIR/F9/$file_to_test" $time_threshold $size_threshold
+/bin/bash "$script_dir/utils/check_utils.sh" check_file_status "$OUTPUT_DIR/F10/$file_to_test" $time_threshold $size_threshold
+# Running commands after this point will change the exit code.
