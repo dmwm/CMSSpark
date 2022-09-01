@@ -15,6 +15,8 @@ set -e
 ##H How to test:
 ##H   - You can test by just giving different output directory to '--out'
 ##H
+TZ=UTC
+START_TIME=$(date +%s)
 script_dir="$(
     cd -- "$(dirname "$0")" >/dev/null 2>&1
     pwd -P
@@ -60,9 +62,6 @@ if [[ "$help" == 1 ]]; then
 fi
 
 # ------------------------------------------------------------------------------------------------------------- PREPARE
-TZ=UTC
-START_TIME=$(date +%s)
-
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 
 # Define logs path for Spark imports which produce lots of info logs
@@ -86,8 +85,7 @@ currentDir=$(
     cd "$(dirname "$0")" && pwd
 )
 spark_confs=(
-    --master yarn --conf "spark.driver.bindAddress=0.0.0.0" --conf spark.ui.showConsoleProgress=false
-    --conf "spark.executor.memory=8g" --conf "spark.driver.memory=4g"
+    --master yarn --conf "spark.driver.bindAddress=0.0.0.0" --conf spark.ui.showConsoleProgress=false --driver-memory=8g --executor-memory=8g
     --conf "spark.driver.host=${K8SHOST}" --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
 )
 
@@ -119,4 +117,5 @@ util4logi "deleting html and png files older than 60 days in dir: ${OUTPUT_DIR}"
 find "$MAIN_OUTPUT_DIR" -type f \( -name '*.html' -o -name '*.png' \) -mtime +60 -delete
 util4logi "old file deletion is finished"
 
-util4logi "Condor cpu efficiency finished. Time spent: $(util_secs_to_human "$(($(date +%s) - START_TIME))")"
+duration=$(($(date +%s) - START_TIME))
+util4logi "Condor cpu efficiency finished., time spent: $(util_secs_to_human $duration)"
