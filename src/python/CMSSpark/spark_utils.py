@@ -1,132 +1,116 @@
 #!/usr/bin/env python
-#-*- coding: utf-8 -*-
-#pylint: disable=
-# Author: Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
+# -*- coding: utf-8 -*-
 """
-Spark utililities
+File        : spark_utils.py
+Author      : Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
+Description : Spark utilities
 """
 
 # system modules
+import logging
 import os
 import re
-import sys
 import time
-import logging
-import json
 from datetime import datetime as dt
 from datetime import timedelta
-from subprocess import Popen, PIPE
 from functools import reduce
 
-# local modules
-from CMSSpark.schemas import schema_processing_eras, schema_dataset_access_types
-from CMSSpark.schemas import schema_acquisition_eras,  schema_datasets, schema_blocks
-from CMSSpark.schemas import schema_files, schema_mod_configs, schema_out_configs
-from CMSSpark.schemas import schema_rel_versions, schema_file_lumis, schema_phedex
-from CMSSpark.schemas import schema_phedex_summary, schema_data_tiers
-from CMSSpark.schemas import schema_jm, schema_cmssw, schema_asodb, schema_empty_aaa, schema_empty_eos
-from CMSSpark.schemas import schema_cmspop_json
-
 from pyspark import SparkContext, StorageLevel
-from pyspark.sql import Row
-from pyspark.sql import SQLContext
-from pyspark.sql import DataFrame
-from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField, StringType, BooleanType, LongType
-from pyspark.sql.functions import split, col, udf, regexp_extract, date_format, from_unixtime, regexp_replace
+from pyspark.sql import DataFrame, SparkSession, SQLContext
+from pyspark.sql.functions import split, col, date_format, from_unixtime, regexp_replace
+from pyspark.sql.types import DoubleType, IntegerType, StructType
+
+# CMSSpark modules
+from CMSSpark.schemas import schema_acquisition_eras, schema_datasets, schema_blocks
+from CMSSpark.schemas import schema_cmspop_json
+from CMSSpark.schemas import schema_files, schema_mod_configs, schema_out_configs
+from CMSSpark.schemas import schema_jm, schema_asodb, schema_empty_aaa, schema_empty_eos
+from CMSSpark.schemas import schema_phedex_summary, schema_data_tiers
+from CMSSpark.schemas import schema_processing_eras, schema_dataset_access_types
+from CMSSpark.schemas import schema_rel_versions, schema_file_lumis, schema_phedex
+
 
 class SparkLogger(object):
-    "Control Spark Logger"
+    """Control Spark Logger"""
+
     def __init__(self, ctx):
         self.logger = ctx._jvm.org.apache.log4j
         self.rlogger = self.logger.LogManager.getRootLogger()
 
     def set_level(self, level):
-        "Set Spark Logger level"
+        """Set Spark Logger level"""
         self.rlogger.setLevel(getattr(self.logger.Level, level))
 
     def lprint(self, stream, msg):
-        "Print message via Spark Logger to given stream"
+        """Print message via Spark Logger to given stream"""
         getattr(self.rlogger, stream)(msg)
 
     def info(self, msg):
-        "Print message via Spark Logger to info stream"
+        """Print message via Spark Logger to info stream"""
         self.lprint('info', msg)
 
     def error(self, msg):
-        "Print message via Spark Logger to error stream"
+        """Print message via Spark Logger to error stream"""
         self.lprint('error', msg)
 
     def warning(self, msg):
-        "Print message via Spark Logger to warning stream"
+        """Print message via Spark Logger to warning stream"""
         self.lprint('warning', msg)
 
+
 def apath(hdir, name):
-    "Helper function to construct attribute path"
+    """Helper function to construct attribute path"""
     return os.path.join(hdir, name)
 
+
 def files(path, verbose=0):
-    "Return list of files for given HDFS path"
+    """Return list of files for given HDFS path"""
     hpath = "hadoop fs -ls %s | awk '{print $8}'" % path
-    if  verbose:
+    if verbose:
         print("Lookup area: %s" % hpath)
-    if sys.version_info[0] < 3:
-        pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
-    else:
-        pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True, encoding="utf-8")
-    pipe.wait()
-    if sys.version_info[0] < 3:
-        fnames = [f for f in pipe.stdout.read().split('\n') if f.find('part') != -1]
-    else:
-        fnames = [f.strip() for f in pipe.stdout.readlines() if f.find('part') != -1]
+    stream = os.popen(hpath)
+    fnames = [f for f in stream.read().splitlines() if f.find('part-') != -1]
     return fnames
 
 
-def glob_files(sc, url,verbose):
+def glob_files(sc, url):
+    """Return a list of files. It uses the jvm gateway.
+       This function should be prefered to files when using glob expressions.
     """
-    Return a list of files. It uses the jvm gateway. 
-    This function should be prefered to files when using glob expressions.
-    """
-    URI = sc._gateway.jvm.java.net.URI
-    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
-    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
-    fs = FileSystem.get(URI("hdfs:///"), sc._jsc.hadoopConfiguration())
-    l = fs.globStatus(Path(url))
-    return [f.getPath().toString() for f in l]
+    uri = sc._gateway.jvm.java.net.URI
+    path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    fsystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    fs = fsystem.get(uri("hdfs:///"), sc._jsc.hadoopConfiguration())
+    lst = fs.globStatus(path(url))
+    return [f.getPath().toString() for f in lst]
 
 
 def avro_files(path, verbose=0):
-    "Return list of files for given HDFS path"
+    """Return list of files for given HDFS path"""
     hpath = "hadoop fs -ls %s/*.avro | awk '{print $8}'" % path
-    if  verbose:
+    if verbose:
         print("### Avro files area: %s" % hpath)
-    if sys.version_info[0] < 3:
-        pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True)
-    else:
-        pipe = Popen(hpath, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, close_fds=True, encoding="utf-8")
-    pipe.wait()
-    if sys.version_info[0] < 3:
-        fnames = [f for f in pipe.stdout.read().split('\n') if f.endswith('avro')]
-    else:
-        fnames = [f.strip() for f in pipe.stdout.readlines() if f.endswith('avro\n')]
+    stream = os.popen(hpath)
+    fnames = [f for f in stream.read().splitlines() if f.endswith('avro\n')]
     return fnames
 
-def unionAll(dfs, cols=None):
-    """
-    Unions snapshots in one dataframe
 
-    :param item: list of dataframes
+def union_all(dfs, cols=None):
+    """Unions snapshots in one dataframe
+
+    :param dfs: dataframes to union
+    :param cols: list of dataframe columns
     :returns: union of dataframes
     """
 
-    if cols == None:
+    if cols is None:
         return reduce(DataFrame.unionAll, dfs)
     else:
-        return unionAll(df.select(cols) for df in dfs)
+        return union_all(df.select(cols) for df in dfs)
 
 
 def file_list(basedir, fromdate=None, todate=None):
-    """
-    Finds snapshots in given directory by interval dates
+    """Finds snapshots in given directory by interval dates
 
     :param basedir: directory where snapshots are held
     :param fromdate: date from which snapshots are filtered
@@ -134,14 +118,16 @@ def file_list(basedir, fromdate=None, todate=None):
     :returns: array of filtered snapshots paths
     :raises ValueError: if unparsable date format
     """
-    dirs = os.popen("hadoop fs -ls %s | sed '1d;s/  */ /g' | cut -d\  -f8" % basedir).read().splitlines()
+    sed = "sed '1d;s/  */ /g'"
+    cut = "cut -d\  -f8"
+    dirs = os.popen(f"hadoop fs -ls {basedir} | {sed} | {cut}").read().splitlines()
     # if files are not in hdfs --> dirs = os.listdir(basedir)
 
     # by default we'll use yesterday date on HDFS to avoid clashes
-    date = time.strftime("%Y-%m-%d", time.gmtime(time.time()-60*60*24))
-    if  not fromdate:
+    date = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 60 * 60 * 24))
+    if not fromdate:
         fromdate = date
-    if  not todate:
+    if not todate:
         todate = date
 
     o_fromdate = fromdate
@@ -153,7 +139,7 @@ def file_list(basedir, fromdate=None, todate=None):
         print("### fromdate", fromdate)
         print("### todate", todate)
         print("### error", str(err))
-        raise ValueError("Unparsable date parameters. Date should be specified in form: YYYY-mm-dd") 
+        raise ValueError("Unparsable date parameters. Date should be specified in form: YYYY-mm-dd")
 
     pattern = re.compile(r"(\d{4}-\d{2}-\d{2})")
 
@@ -161,36 +147,39 @@ def file_list(basedir, fromdate=None, todate=None):
     from_match = 0
     to_match = 0
     for idir in dirs:
-        if  idir.find(o_fromdate) != -1:
+        if idir.find(o_fromdate) != -1:
             from_match = 1
-        if  idir.find(o_todate) != -1:
+        if idir.find(o_todate) != -1:
             to_match = 1
         matching = pattern.search(idir)
         if matching:
             dirdate_dic[idir] = dt.strptime(matching.group(1), "%Y-%m-%d")
 
-    if  not from_match:
+    if not from_match:
         raise Exception("Unable to find fromdate=%s are on HDFS %s" % (o_fromdate, basedir))
-    if  not to_match:
+    if not to_match:
         raise Exception("Unable to find todate=%s are on HDFS %s" % (o_todate, basedir))
-    return [k for k, v in dirdate_dic.items() if v >= fromdate and v <= todate]
+    return [k for k, v in dirdate_dic.items() if fromdate <= v <= todate]
+
 
 def print_rows(df, dfname, verbose, head=5):
-    "Helper function to print rows from a given dataframe"
-    if  verbose:
+    """Helper function to print rows from a given dataframe"""
+    if verbose:
         print('First %s rows of %s' % (head, dfname))
         for i, row in enumerate(df.head(head)):
             print('%s. %s' % (i, row))
 
-def spark_context(appname='cms', yarn=None, verbose=False, python_files=[]):
-    # define spark context, it's main object which allow
-    # to communicate with spark
-    if  python_files:
+
+def spark_context(appname='cms', yarn=None, verbose=False, python_files=None):
+    """Define spark context, it's main object which allow to communicate with spark"""
+    if python_files is None:
+        python_files = []
+    if python_files:
         ctx = SparkContext(appName=appname, pyFiles=python_files)
     else:
         ctx = SparkContext(appName=appname)
     logger = SparkLogger(ctx)
-    if  not verbose:
+    if not verbose:
         logger.set_level('ERROR')
     if yarn:
         logger.info("YARN client mode enabled")
@@ -200,17 +189,21 @@ def spark_context(appname='cms', yarn=None, verbose=False, python_files=[]):
 def delete_hadoop_directory(path):
     os.popen("hadoop fs -rm -r \"" + path + "\"")
 
+
 def unix2human(tstamp):
-    "Convert unix time stamp into human readable format"
+    """Convert unix time stamp into human readable format"""
     return time.strftime('%Y%m%d', time.gmtime(tstamp))
 
-def phedex_summary_tables(sqlContext, hdir='hdfs:///cms/phedex', verbose=False):
-    """
-    Parse PhEDEx records on HDFS via mapping PhEDEx tables to Spark SQLContext.
+
+def phedex_summary_tables(sql_context, hdir='hdfs:///cms/phedex'):
+    """Parse PhEDEx records on HDFS via mapping PhEDEx tables to Spark SQLContext.
+
     :returns: a dictionary with PhEDEx Spark DataFrame.
     """
     # look-up phedex summary area and construct a list of part-XXXXX files
-    dirs = os.popen("hadoop fs -ls %s | sed '1d;s/  */ /g' | cut -d\  -f8" % hdir).read().splitlines()
+    sed = "sed '1d;s/  */ /g'"
+    cut = "cut -d\  -f8"
+    dirs = os.popen(f"hadoop fs -ls {hdir} | {sed} | {cut}").read().splitlines()
 
     dfs = []
     for idir in dirs:
@@ -224,62 +217,64 @@ def phedex_summary_tables(sqlContext, hdir='hdfs:///cms/phedex', verbose=False):
         if not len(pfiles):
             print("Skip %s" % idir)
             continue
-        pdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')
-                        .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                        .load(file_path, schema = schema_phedex_summary()) \
-                        for file_path in pfiles])
+        pdf = union_all([sql_context.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(file_path, schema=schema_phedex_summary())
+                         for file_path in pfiles])
         pdf.persist(StorageLevel.MEMORY_AND_DISK)
         dfs.append(pdf)
 
     # Register temporary tables to be able to use sqlContext.sql
-    phedex_summary_df = unionAll(dfs)
+    phedex_summary_df = union_all(dfs)
     phedex_summary_df.registerTempTable('phedex_summary_df')
 
-    tables = {'phedex_summary_df':phedex_summary_df}
+    tables = {'phedex_summary_df': phedex_summary_df}
     return tables
+
 
 def phedex_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False, fromdate=None, todate=None):
     """
     Parse PhEDEx records on HDFS via mapping PhEDEx tables to Spark SQLContext.
     :returns: a dictionary with PhEDEx Spark DataFrame.
     """
-    phxdir = hdir+'/phedex/block-replicas-snapshots/csv/'
+    phxdir = hdir + '/phedex/block-replicas-snapshots/csv/'
 
     # phedex data
     pfiles = file_list(phxdir, fromdate, todate)
     msg = "Phedex snapshot %s-%s found %d directories" \
-            % (fromdate, todate, len(pfiles))
+          % (fromdate, todate, len(pfiles))
     print(msg)
-    phedex_df = unionAll([sqlContext.read.format('com.databricks.spark.csv')
-                    .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                    .load(file_path, schema = schema_phedex()) \
-                    for file_path in pfiles])
+    phedex_df = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                          .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                          .load(file_path, schema=schema_phedex())
+                           for file_path in pfiles])
 
     # Register temporary tables to be able to use sqlContext.sql
     phedex_df.registerTempTable('phedex_df')
 
-    tables = {'phedex_df':phedex_df}
+    tables = {'phedex_df': phedex_df}
     return tables
+
 
 def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', inst='GLOBAL', verbose=False, tables=None):
     """
     Parse DBS records on HDFS via mapping DBS tables to Spark SQLContext.
     :returns: a dictionary with DBS Spark DataFrame.
     """
-    dbsdir = hdir+'/CMS_DBS3_PROD_%s/current' % inst
-    paths = {'dpath':apath(dbsdir, 'DATASETS'),
-             'tpath':apath(dbsdir, 'DATA_TIERS'),
-             'bpath':apath(dbsdir, 'BLOCKS'),
-             'fpath':apath(dbsdir, 'FILES'),
-             'apath':apath(dbsdir, 'ACQUISITION_ERAS'),
-             'ppath':apath(dbsdir, 'PROCESSING_ERAS'),
-             'mcpath':apath(dbsdir, 'DATASET_OUTPUT_MOD_CONFIGS'),
-             'ocpath':apath(dbsdir, 'OUTPUT_MODULE_CONFIGS'),
-             'rvpath':apath(dbsdir, 'RELEASE_VERSIONS'),
-             'flpath':apath(dbsdir, 'FILE_LUMIS'),
-             'dapath':apath(dbsdir, 'DATASET_ACCESS_TYPES')}
+    dbsdir = hdir + '/CMS_DBS3_PROD_%s/current' % inst
+    paths = {'dpath': apath(dbsdir, 'DATASETS'),
+             'tpath': apath(dbsdir, 'DATA_TIERS'),
+             'bpath': apath(dbsdir, 'BLOCKS'),
+             'fpath': apath(dbsdir, 'FILES'),
+             'apath': apath(dbsdir, 'ACQUISITION_ERAS'),
+             'ppath': apath(dbsdir, 'PROCESSING_ERAS'),
+             'mcpath': apath(dbsdir, 'DATASET_OUTPUT_MOD_CONFIGS'),
+             'ocpath': apath(dbsdir, 'OUTPUT_MODULE_CONFIGS'),
+             'rvpath': apath(dbsdir, 'RELEASE_VERSIONS'),
+             'flpath': apath(dbsdir, 'FILE_LUMIS'),
+             'dapath': apath(dbsdir, 'DATASET_ACCESS_TYPES')}
     logging.info("Use the following data on HDFS")
-    dbs_tables = {} # final dict of tables we'll load
+    dict_dbs_tables = {}  # final dict of tables we'll load
     for key, val in paths.items():
         if tables:
             if key in tables:
@@ -289,92 +284,88 @@ def dbs_tables(sqlContext, hdir='hdfs:///project/awg/cms', inst='GLOBAL', verbos
 
     # define DBS tables
     if not tables or 'daf' in tables:
-        daf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                            .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                            .load(path, schema = schema_dataset_access_types()) \
-                            for path in files(paths['dapath'], verbose)])
+        daf = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(path, schema=schema_dataset_access_types())
+                         for path in files(paths['dapath'], verbose)])
         daf.registerTempTable('daf')
-        dbs_tables.update({'daf':daf})
+        dict_dbs_tables.update({'daf': daf})
     if not tables or 'ddf' in tables:
-        ddf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                            .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                            .load(path, schema = schema_datasets()) \
-                            for path in files(paths['dpath'], verbose)])
+        ddf = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(path, schema=schema_datasets())
+                         for path in files(paths['dpath'], verbose)])
         ddf.registerTempTable('ddf')
-        dbs_tables.update({'ddf':ddf})
+        dict_dbs_tables.update({'ddf': ddf})
     if not tables or 'dtf' in tables:
-        dtf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                            .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                            .load(path, schema = schema_data_tiers()) \
-                            for path in files(paths['tpath'], verbose)])
+        dtf = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(path, schema=schema_data_tiers())
+                         for path in files(paths['tpath'], verbose)])
         dtf.registerTempTable('dtf')
-        dbs_tables.update({'dtf':dtf})
+        dict_dbs_tables.update({'dtf': dtf})
     if not tables or 'bdf' in tables:
-        bdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                            .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                            .load(path, schema = schema_blocks()) \
-                            for path in files(paths['bpath'], verbose)])
+        bdf = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(path, schema=schema_blocks())
+                         for path in files(paths['bpath'], verbose)])
         bdf.registerTempTable('bdf')
-        dbs_tables.update({'bdf':bdf})
+        dict_dbs_tables.update({'bdf': bdf})
     if not tables or 'fdf' in tables:
-        fdf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                            .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                            .load(path, schema = schema_files()) \
-                            for path in files(paths['fpath'], verbose)])
+        fdf = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(path, schema=schema_files())
+                         for path in files(paths['fpath'], verbose)])
         fdf.registerTempTable('fdf')
-        dbs_tables.update({'fdf':fdf})
+        dict_dbs_tables.update({'fdf': fdf})
     if not tables or 'aef' in tables:
-        aef = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                            .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                            .load(path, schema = schema_acquisition_eras()) \
-                            for path in files(paths['apath'], verbose)])
+        aef = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(path, schema=schema_acquisition_eras())
+                         for path in files(paths['apath'], verbose)])
         aef.registerTempTable('aef')
-        dbs_tables.update({'aef':aef})
+        dict_dbs_tables.update({'aef': aef})
     if not tables or 'pef' in tables:
-        pef = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                            .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                            .load(path, schema = schema_processing_eras()) \
-                            for path in files(paths['ppath'], verbose)])
+        pef = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(path, schema=schema_processing_eras())
+                         for path in files(paths['ppath'], verbose)])
         pef.registerTempTable('pef')
-        dbs_tables.update({'pef':pef})
+        dict_dbs_tables.update({'pef': pef})
     if not tables or 'mcf' in tables:
-        mcf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                            .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                            .load(path, schema = schema_mod_configs()) \
-                            for path in files(paths['mcpath'], verbose)])
+        mcf = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(path, schema=schema_mod_configs())
+                         for path in files(paths['mcpath'], verbose)])
         mcf.registerTempTable('mcf')
-        dbs_tables.update({'mcf':mcf})
+        dict_dbs_tables.update({'mcf': mcf})
     if not tables or 'ocf' in tables:
-        ocf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                            .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                            .load(path, schema = schema_out_configs()) \
-                            for path in files(paths['ocpath'], verbose)])
+        ocf = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(path, schema=schema_out_configs())
+                         for path in files(paths['ocpath'], verbose)])
         ocf.registerTempTable('ocf')
-        dbs_tables.update({'ocf':ocf})
+        dict_dbs_tables.update({'ocf': ocf})
     if not tables or 'rvf' in tables:
-        rvf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                            .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                            .load(path, schema = schema_rel_versions()) \
-                            for path in files(paths['rvpath'], verbose)])
+        rvf = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(path, schema=schema_rel_versions())
+                         for path in files(paths['rvpath'], verbose)])
         rvf.registerTempTable('rvf')
-        dbs_tables.update({'rvf':rvf})
+        dict_dbs_tables.update({'rvf': rvf})
     if not tables or 'flf' in tables:
-        flf = unionAll([sqlContext.read.format('com.databricks.spark.csv')\
-                            .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                            .load(path, schema = schema_file_lumis()) \
-                            for path in files(paths['flpath'], verbose)])
+        flf = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                        .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                        .load(path, schema=schema_file_lumis())
+                         for path in files(paths['flpath'], verbose)])
         flf.registerTempTable('flf')
-        dbs_tables.update({'flf':flf})
+        dict_dbs_tables.update({'flf': flf})
 
-    return dbs_tables
+    return dict_dbs_tables
 
-def cmssw_tables(
-    ctx,
-    spark,
-    hdir="hdfs:///project/monitoring/archive/cmssw_pop/raw/metric/",
-    date=None,
-    verbose=None,
-):
+
+def cmssw_tables(ctx, spark, hdir="hdfs:///project/monitoring/archive/cmssw_pop/raw/metric/", date=None,
+                 verbose=None, ):
     """
        Parse cmssw popularity data from HDFS. 
     """
@@ -386,7 +377,7 @@ def cmssw_tables(
             " will be used instead of " +
             "hdfs:///project/awg/cms/cmssw-popularity/avro-snappy"
         )
-    if date == None:
+    if date is None:
         date = time.strftime("%Y/%-m/%-d", time.gmtime(time.time() - 60 * 60 * 24))
         path = "%s/%s" % (hdir, date)
     elif len(str(date)) == 8:  # YYYYMMDD
@@ -397,11 +388,7 @@ def cmssw_tables(
         path = hdir
         if date:
             path = "%s/%s" % (hdir, date)
-    df = (
-        spark.read.option("basePath", hdir)
-        .json(path, schema=schema_cmspop_json())
-        .select("data.*")
-    )
+    df = (spark.read.option("basePath", hdir).json(path, schema=schema_cmspop_json()).select("data.*"))
 
     df = df.select(*[c.upper() for c in df.columns])
     df = df.withColumn("FILE_LFN", regexp_replace("FILE_LFN", "file:", ""))
@@ -409,8 +396,8 @@ def cmssw_tables(
     tables = {"cmssw_df": df}
     return tables
 
-def jm_tables(ctx, sqlContext,
-        hdir='hdfs:///project/awg/cms/jm-data-popularity/avro-snappy', date=None, verbose=None):
+
+def jm_tables(ctx, sqlContext, hdir='hdfs:///project/awg/cms/jm-data-popularity/avro-snappy', date=None, verbose=None):
     """
     Parse JobMonitoring popularity HDFS records comes from
     https://gitlab.cern.ch/awg/awg-ETL-crons/blob/master/sqoop/jm-cms-data-pop.sh
@@ -433,15 +420,16 @@ def jm_tables(ctx, sqlContext,
 
     # create new spark DataFrame
     jdf = sqlContext.createDataFrame(rdd, schema=schema_jm())
-    df = jdf.withColumn("WrapWC", jdf["WrapWC"].cast(DoubleType()))\
-            .withColumn("WrapCPU", jdf["WrapCPU"].cast(DoubleType()))\
-            .withColumn("ExeCPU", jdf["ExeCPU"].cast(DoubleType()))\
-            .withColumn("NCores", jdf["NCores"].cast(IntegerType()))\
-            .withColumn("NEvProc", jdf["NEvProc"].cast(IntegerType()))\
-            .withColumn("NEvReq", jdf["NEvReq"].cast(IntegerType()))
+    df = jdf.withColumn("WrapWC", jdf["WrapWC"].cast(DoubleType())) \
+        .withColumn("WrapCPU", jdf["WrapCPU"].cast(DoubleType())) \
+        .withColumn("ExeCPU", jdf["ExeCPU"].cast(DoubleType())) \
+        .withColumn("NCores", jdf["NCores"].cast(IntegerType())) \
+        .withColumn("NEvProc", jdf["NEvProc"].cast(IntegerType())) \
+        .withColumn("NEvReq", jdf["NEvReq"].cast(IntegerType()))
     df.registerTempTable('jm_df')
     tables = {'jm_df': df}
     return tables
+
 
 def avro_rdd(ctx, sqlContext, hdir, date=None, verbose=None):
     """
@@ -449,20 +437,20 @@ def avro_rdd(ctx, sqlContext, hdir, date=None, verbose=None):
     :returns: a Spark RDD object
     """
 
-    if  date == None:
-        date = time.strftime("year=%Y/month=%-m/day=%-d", time.gmtime(time.time()-60*60*24))
+    if date is None:
+        date = time.strftime("year=%Y/month=%-m/day=%-d", time.gmtime(time.time() - 60 * 60 * 24))
         path = '%s/%s' % (hdir, date)
-    elif len(str(date)) == 8: # YYYYMMDD
+    elif len(str(date)) == 8:  # YYYYMMDD
         ddd = dt.strptime(str(date), "%Y%m%d")
         date = time.strftime("year=%Y/month=%-m/day=%-d", ddd.utctimetuple())
         path = '%s/%s' % (hdir, date)
     else:
         path = hdir
-        if  date:
+        if date:
             path = '%s/%s' % (hdir, date)
 
     print("### hdir", path, type(path))
-    if  isinstance(path, list):
+    if isinstance(path, list):
         afiles = path
     else:
         # get avro files from HDFS
@@ -470,12 +458,11 @@ def avro_rdd(ctx, sqlContext, hdir, date=None, verbose=None):
     print("### avro_files", afiles)
 
     # define newAPIHadoopFile parameters, java classes
-    aformat="org.apache.avro.mapreduce.AvroKeyInputFormat"
-    akey="org.apache.avro.mapred.AvroKey"
-    awrite="org.apache.hadoop.io.NullWritable"
-    aconv="org.apache.spark.examples.pythonconverters.AvroWrapperToJavaConverter"
+    aformat = "org.apache.avro.mapreduce.AvroKeyInputFormat"
+    akey = "org.apache.avro.mapred.AvroKey"
+    awrite = "org.apache.hadoop.io.NullWritable"
+    aconv = "org.apache.spark.examples.pythonconverters.AvroWrapperToJavaConverter"
 
-    rdd = []
     # load data from HDFS
     if len(afiles) == 0:
         rdd = ctx.emptyRDD()
@@ -484,15 +471,16 @@ def avro_rdd(ctx, sqlContext, hdir, date=None, verbose=None):
 
     # the records are stored as [(dict, None), (dict, None)], therefore we take first element
     # and assign them to new rdd
-    avro_rdd = rdd.map(lambda x: x[0])
-    records = avro_rdd.take(1) # take function will return list of records
-    if  verbose:
+    dict_avro_rdd = rdd.map(lambda x: x[0])
+    records = dict_avro_rdd.take(1)  # take function will return list of records
+    if verbose:
         print("### avro records", records, type(records))
-    return avro_rdd
+    return dict_avro_rdd
+
 
 def aaa_tables(sqlContext,
-        hdir='hdfs:///project/monitoring/archive/xrootd/raw/gled',
-        date=None, verbose=False):
+               hdir='hdfs:///project/monitoring/archive/xrootd/raw/gled',
+               date=None, verbose=False):
     """
     Parse AAA HDFS records. This data set comes from XRootD servers around the
     world. Data is send by XRootD servers across CERN and US to dedicated
@@ -505,29 +493,30 @@ def aaa_tables(sqlContext,
 
     :returns: a dictionary with AAA Spark DataFrame
     """
-    if  not date:
+    if not date:
         # by default we read yesterdate data
-        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+        date = time.strftime("%Y/%m/%d", time.gmtime(time.time() - 60 * 60 * 24))
 
     hpath = '%s/%s' % (hdir, date)
     try:
-        rdd = unionAll([sqlContext.read.json(path) for path in files(hpath, verbose)])
-    except:
-        rdd = unionAll([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
+        rdd = union_all([sqlContext.read.json(path) for path in files(hpath, verbose)])
+    except Exception:
+        rdd = union_all([sqlContext.jsonFile(path) for path in files(hpath, verbose)])
     aaa_rdd = rdd.map(lambda r: r['data'])
-    records = aaa_rdd.take(1) # take function will return list of records
-    if  verbose:
+    records = aaa_rdd.take(1)  # take function will return list of records
+    if verbose:
         print("### aaa_rdd records", records, type(records))
 
     # create new spark DataFrame
     aaa_df = sqlContext.createDataFrame(aaa_rdd)
     aaa_df.registerTempTable('aaa_df')
-    tables = {'aaa_df':aaa_df}
+    tables = {'aaa_df': aaa_df}
     return tables
 
+
 def aaa_tables_enr(sqlContext,
-        hdir='hdfs:///project/monitoring/archive/xrootd/enr/gled',
-        date=None, verbose=False):
+                   hdir='hdfs:///project/monitoring/archive/xrootd/enr/gled',
+                   date=None, verbose=False):
     """
     Parse AAA HDFS records.
 
@@ -536,33 +525,32 @@ def aaa_tables_enr(sqlContext,
 
     :returns: a dictionary with AAA Spark DataFrame
     """
-    if  not date:
+    if not date:
         # by default we read yesterdate data
-        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+        date = time.strftime("%Y/%m/%d", time.gmtime(time.time() - 60 * 60 * 24))
 
     hpath = '%s/%s' % (hdir, date)
     cols = ['data.src_experiment_site', 'data.user_dn', 'data.file_lfn']
 
     files_in_hpath = files(hpath, verbose)
 
-    aaa_df = []
-
     if len(files_in_hpath) == 0:
         aaa_df = sqlContext.createDataFrame([], schema=schema_empty_aaa())
     else:
         try:
-            aaa_df = unionAll([sqlContext.read.json(path) for path in files_in_hpath], cols)
-        except:
-            aaa_df = unionAll([sqlContext.jsonFile(path) for path in files_in_hpath], cols)
+            aaa_df = union_all([sqlContext.read.json(path) for path in files_in_hpath], cols)
+        except Exception:
+            aaa_df = union_all([sqlContext.jsonFile(path) for path in files_in_hpath], cols)
 
     aaa_df.registerTempTable('aaa_df')
-    tables = {'aaa_df':aaa_df}
+    tables = {'aaa_df': aaa_df}
     return tables
 
+
 def eos_tables(sqlContext,
-#        hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms', #before 2020
-        hdir='hdfs:///project/monitoring/archive/eos-report/logs/cms', #after 2020
-        date=None, start_date=None, end_date=None, verbose=False):
+               #        hdir='hdfs:///project/monitoring/archive/eos/logs/reports/cms', #before 2020
+               hdir='hdfs:///project/monitoring/archive/eos-report/logs/cms',  # after 2020
+               date=None, start_date=None, end_date=None, verbose=False):
     """
     Parse EOS HDFS records. This data set comes from EOS servers at CERN. Data
     is send directly by the EOS team, reading the EOS logs and sending them
@@ -582,17 +570,17 @@ def eos_tables(sqlContext,
 
     :returns: a dictionary with eos Spark DataFrame
     """
-    if  not date:
+    if not date:
         if start_date:
             if not end_date:
-                end_date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
-            _sd = dt.strptime(start_date,"%Y/%m/%d")
-            _ed = dt.strptime(end_date,"%Y/%m/%d")
-            dates = ','.join([(_sd + timedelta(days=x)).strftime("%Y/%m/%d") for x in xrange(0,(_ed-_sd).days+1)])
-            date = '{{{}}}'.format(dates) 
+                end_date = time.strftime("%Y/%m/%d", time.gmtime(time.time() - 60 * 60 * 24))
+            _sd = dt.strptime(start_date, "%Y/%m/%d")
+            _ed = dt.strptime(end_date, "%Y/%m/%d")
+            dates = ','.join([(_sd + timedelta(days=x)).strftime("%Y/%m/%d") for x in range(0, (_ed - _sd).days + 1)])
+            date = '{{{}}}'.format(dates)
         else:
             # by default we read yesterdate data
-            date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+            date = time.strftime("%Y/%m/%d", time.gmtime(time.time() - 60 * 60 * 24))
 
     hpath = '%s/%s/part*' % (hdir, date)
     cols = ['data', 'metadata.timestamp']
@@ -603,111 +591,113 @@ def eos_tables(sqlContext,
         sqlContext.sparkSession.sparkContext
         if isinstance(sqlContext, SQLContext)
         else sqlContext.sparkContext,
-        hpath,
-        verbose,
+        hpath
     )
 
     if len(files_in_hpath) == 0:
         eos_df = sqlContext.createDataFrame([], schema=schema_empty_eos())
         eos_df.registerTempTable('eos_df')
-        tables = {'eos_df':eos_df}
+        tables = {'eos_df': eos_df}
         return tables
-    
+
     # in Spark 2.X and 2019 we have different record
     # Sampling ratio, if there is more than one file we can take the 10%,
     # but if there is only one file it is probable that it have less than 10 records 
     # (making the samplig size 0, which make the process fail)
-    edf = sqlContext.read.option("basePath", hdir).option("samplingRatio", 0.1 if len(files_in_hpath)>1 else 1).json(files_in_hpath)
+    edf = sqlContext.read.option("basePath", hdir).option("samplingRatio", 0.1 if len(files_in_hpath) > 1 else 1).json(
+        files_in_hpath)
 
-    #select columns
-    edf = edf.selectExpr\
-       ('metadata.timestamp', \
-        'data.rb_max', \
-        'data.td', \
-        'data.path', \
-        'data.`sec.app`', \
-        'data.rt', \
-        'data.wt', \
-        'data.rb', \
-        'data.wb', \
-        'data.cts', \
-        'data.csize', \
-        'data.`sec.name`', \
-        'data.`sec.info`') 
+    # select columns
+    edf = edf.selectExpr(
+        'metadata.timestamp',
+        'data.rb_max',
+        'data.td',
+        'data.path',
+        'data.`sec.app`',
+        'data.rt',
+        'data.wt',
+        'data.rb',
+        'data.wb',
+        'data.cts',
+        'data.csize',
+        'data.`sec.name`',
+        'data.`sec.info`')
 
     # backward compatibility: 
     # path -> file_lfn, sec.name -> user, sec.info -> user_dn, td -> session, sec.app -> application
     # add day based on timestamp
-    eos_df = edf.withColumnRenamed("path", "file_lfn")\
+    eos_df = edf.withColumnRenamed("path", "file_lfn") \
         .withColumnRenamed("sec.name", "user") \
         .withColumnRenamed("sec.info", "user_dn") \
         .withColumnRenamed("sec.app", "application") \
         .withColumnRenamed("td", "session") \
-        .withColumn('day', date_format(from_unixtime(edf.timestamp/1000),'yyyyMMdd')) 
+        .withColumn('day', date_format(from_unixtime(edf.timestamp / 1000), 'yyyyMMdd'))
 
-# OLD ---before 2020
-#    f_data = 'data as raw' if str(edf.schema['data'].dataType) == 'StringType' else 'data.raw'
-#    edf = edf.selectExpr(f_data,'metadata.timestamp')
-    
+    # OLD ---before 2020
+    #    f_data = 'data as raw' if str(edf.schema['data'].dataType) == 'StringType' else 'data.raw'
+    #    edf = edf.selectExpr(f_data,'metadata.timestamp')
+
     # At this moment, json files can have one of two known schemas. In order to read several days we need to be able to work with both of them. 
     # eos_df = edf.select(data.getField("eos.path").alias("file_lfn"), data.getField("eos.sec.info").alias("user_dn"), data.getField("eos.sec.app").alias("application"), data.getField("eos.sec.host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
     # eos_df = edf.select(eos_path, data.getField("sec_info").alias("user_dn"), data.getField("sec_app").alias("application"), data.getField("eos_host").alias("host"), edf.metadata.getField("timestamp").alias("timestamp"))
     # We can use the raw field because it doesn't change on time  
- #   eos_df = edf\
- #        .withColumn('rb_max', regexp_extract(edf.raw,'&rb_max=([^&\']*)',1).cast('long'))\
- #        .withColumn('session', regexp_extract(edf.raw,'&td=([^&\']*)',1))\
- #        .withColumn('file_lfn', regexp_extract(edf.raw,'&path=([^&]*)',1))\
- #        .withColumn('application', regexp_extract(edf.raw,'&sec.app=([^&\']*)',1))\
- #        .withColumn('rt', regexp_extract(edf.raw,'&rt=([^&\']*)',1).cast('long'))\
- #        .withColumn('wt', regexp_extract(edf.raw,'&wt=([^&\']*)',1).cast('long'))\
- #        .withColumn('rb', regexp_extract(edf.raw,'&rb=([^&\']*)',1).cast('long'))\
- #        .withColumn('wb', regexp_extract(edf.raw,'&wb=([^&\']*)',1).cast('long'))\
- #        .withColumn('cts', regexp_extract(edf.raw,'&cts=([^&\']*)',1).cast('long'))\
- #        .withColumn('csize', regexp_extract(edf.raw,'&csize=([^&\']*)',1).cast('long'))\
- #        .withColumn('user', regexp_extract(edf.raw,'&sec.name=([^&\']*)',1))\
- #        .withColumn('user_dn', regexp_extract(edf.raw,'&sec.info=([^&\']*)',1))\
- #        .withColumn('day', date_format(from_unixtime(edf.timestamp/1000),'yyyyMMdd'))
-    
+    #   eos_df = edf\
+    #        .withColumn('rb_max', regexp_extract(edf.raw,'&rb_max=([^&\']*)',1).cast('long'))\
+    #        .withColumn('session', regexp_extract(edf.raw,'&td=([^&\']*)',1))\
+    #        .withColumn('file_lfn', regexp_extract(edf.raw,'&path=([^&]*)',1))\
+    #        .withColumn('application', regexp_extract(edf.raw,'&sec.app=([^&\']*)',1))\
+    #        .withColumn('rt', regexp_extract(edf.raw,'&rt=([^&\']*)',1).cast('long'))\
+    #        .withColumn('wt', regexp_extract(edf.raw,'&wt=([^&\']*)',1).cast('long'))\
+    #        .withColumn('rb', regexp_extract(edf.raw,'&rb=([^&\']*)',1).cast('long'))\
+    #        .withColumn('wb', regexp_extract(edf.raw,'&wb=([^&\']*)',1).cast('long'))\
+    #        .withColumn('cts', regexp_extract(edf.raw,'&cts=([^&\']*)',1).cast('long'))\
+    #        .withColumn('csize', regexp_extract(edf.raw,'&csize=([^&\']*)',1).cast('long'))\
+    #        .withColumn('user', regexp_extract(edf.raw,'&sec.name=([^&\']*)',1))\
+    #        .withColumn('user_dn', regexp_extract(edf.raw,'&sec.info=([^&\']*)',1))\
+    #        .withColumn('day', date_format(from_unixtime(edf.timestamp/1000),'yyyyMMdd'))
+
     if verbose:
         eos_df.printSchema()
-        records = eos_df.take(1) # take function will return list of records
+        records = eos_df.take(1)  # take function will return list of records
         print("### rdd records", records, type(records))
 
-    if  verbose:
-        records = eos_df.take(1) # take function will return list of records
+    if verbose:
+        records = eos_df.take(1)  # take function will return list of records
         print("### eos_rdd records", records, type(records))
 
     # create new spark DataFrame
     eos_df.registerTempTable('eos_df')
-    tables = {'eos_df':eos_df}
+    tables = {'eos_df': eos_df}
     return tables
 
+
 def condor_tables(sqlContext,
-        hdir='hdfs:///project/monitoring/archive/condor/raw/metric',
-        date=None, verbose=False):
+                  hdir='hdfs:///project/monitoring/archive/condor/raw/metric',
+                  date=None, verbose=False):
     """
     Parse HTCondor records
 
     Example of HTCondor recornd on HDFS
     {"data":{"AccountingGroup":"analysis.wverbeke","Badput":0.0,"CMSGroups":"[\"/cms\"]","CMSPrimaryDataTier":"MINIAODSIM","CMSPrimaryPrimaryDataset":"TTWJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-madspin-pythia8","CMSPrimaryProcessedDataset":"RunIISummer16MiniAODv2-PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext2-v1","CRAB_AsyncDest":"T2_BE_IIHE","CRAB_DataBlock":"/TTWJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-madspin-pythia8/RunIISummer16MiniAODv2-PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext2-v1/MINIAODSIM#291c85fa-aab1-11e6-846b-02163e0184a6","CRAB_ISB":"https://cmsweb.cern.ch/crabcache","CRAB_Id":30,"CRAB_JobArch":"slc6_amd64_gcc530","CRAB_JobSW":"CMSSW_9_2_4","CRAB_JobType":"analysis","CRAB_OutLFNDir":"/store/user/wverbeke/heavyNeutrino/TTWJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-madspin-pythia8/crab_Moriond2017_ext2-v1_ewkinoMCList-v7p1/171111_214448","CRAB_PrimaryDataset":"TTWJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-madspin-pythia8","CRAB_Publish":false,"CRAB_PublishName":"crab_Moriond2017_ext2-v1_ewkinoMCList-v7p1-00000000000000000000000000000000","CRAB_Retry":0,"CRAB_SaveLogsFlag":true,"CRAB_SiteBlacklist":"[]","CRAB_SiteWhitelist":"[]","CRAB_SubmitterIpAddr":"193.58.172.33","CRAB_TaskEndTime":1513028688,"CRAB_TaskLifetimeDays":30,"CRAB_TaskWorker":"vocms052","CRAB_TransferOutputs":true,"CRAB_UserHN":"wverbeke","CRAB_Workflow":"171111_214448:wverbeke_crab_Moriond2017_ext2-v1_ewkinoMCList-v7p1","Campaign":"crab_wverbeke","ClusterId":20752288,"Cmd":"/data/srv/glidecondor/condor_local/spool/2259/0/cluster20752259.proc0.subproc0/gWMS-CMSRunAnalysis.sh","CommittedCoreHr":0.0,"CommittedSlotTime":0,"CommittedSuspensionTime":0,"CommittedTime":0,"CommittedWallClockHr":0.0,"CoreHr":0.0,"CoreSize":-1,"Country":"Unknown","CpuBadput":0.0,"CpuEff":0.0,"CpuTimeHr":0.0,"CumulativeRemoteSysCpu":0.0,"CumulativeRemoteUserCpu":0.0,"CumulativeSlotTime":0,"CumulativeSuspensionTime":0,"CurrentHosts":0,"DAGNodeName":"Job30","DAGParentNodeNames":"","DESIRED_Archs":"X86_64","DESIRED_CMSDataLocations":"T2_FR_IPHC,T2_CH_CERN_HLT,T1_ES_PIC,T2_DE_DESY,T2_BE_IIHE,T2_CH_CERN,T2_ES_IFCA","DESIRED_CMSDataset":"/TTWJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-madspin-pythia8/RunIISummer16MiniAODv2-PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext2-v1/MINIAODSIM","DESIRED_Overflow_Region":"none,none,none","DESIRED_Sites":["T2_FR_IPHC","T2_CH_CERN_HLT","T1_ES_PIC","T2_DE_DESY","T2_BE_IIHE","T2_CH_CERN","T2_ES_IFCA"],"DataCollection":1510475761000,"DataCollectionDate":1510475761000,"DataLocations":["T2_FR_IPHC","T2_CH_CERN_HLT","T1_ES_PIC","T2_DE_DESY","T2_BE_IIHE","T2_CH_CERN","T2_ES_IFCA"],"DataLocationsCount":7,"DesiredSiteCount":7,"DiskUsage":5032,"DiskUsageGB":0.005032,"EncryptExecuteDirectory":false,"EnteredCurrentStatus":1510436775000,"EstimatedWallTimeMins":1250,"ExecutableSize":9,"ExitBySignal":false,"ExitStatus":0,"GLIDEIN_CMSSite":"Unknown","GlobalJobId":"crab3@vocms0122.cern.ch#20752288.0#1510436775","HasSingularity":false,"ImageSize":9,"JOB_CMSSite":"$$(GLIDEIN_CMSSite:Unknown)","JOB_Gatekeeper":"Unknown","JobBatchName":"RunJobs.dag+20752259","JobPrio":10,"JobStatus":1,"JobUniverse":5,"MaxHosts":1,"MaxWallTimeMins":1250,"MemoryMB":0.0,"MinHosts":1,"NumJobCompletions":0,"NumJobStarts":0,"NumRestarts":0,"NumSystemHolds":0,"OVERFLOW_CHECK":false,"Original_DESIRED_Sites":["UNKNOWN"],"OutputFiles":2,"Owner":"cms1315","PostJobPrio1":-1510436758,"PostJobPrio2":0,"PreJobPrio1":1,"ProcId":0,"QDate":1510436775000,"QueueHrs":10.951667712198363,"REQUIRED_OS":"rhel6","Rank":0,"RecordTime":1510475761000,"RemoteSysCpu":0,"RemoteUserCpu":0,"RemoteWallClockTime":0,"RequestCpus":1,"RequestDisk":1,"RequestMemory":2000,"ScheddName":"crab3@vocms0122.cern.ch","ShouldTransferFiles":"YES","Site":"Unknown","SpoolOnEvict":false,"Status":"Idle","TaskType":"Analysis","Tier":"Unknown","TotalSubmitProcs":1,"TotalSuspensions":0,"TransferInputSizeMB":4,"Type":"analysis","Universe":"Vanilla","User":"cms1315@cms","VO":"cms","WMAgent_TaskType":"UNKNOWN","WallClockHr":0.0,"WhenToTransferOutput":"ON_EXIT_OR_EVICT","Workflow":"wverbeke_crab_Moriond2017_ext2-v1_ewkinoMCList-v7p1","metadata":{"id":"crab3@vocms0122.cern.ch#20752288.0#1510436775","timestamp":1510476202,"uuid":"8aa4b4fe-c785-11e7-ad57-fa163e15539a"},"x509UserProxyEmail":"Willem.Verbeke@UGent.be","x509UserProxyFQAN":["/DC=org/DC=terena/DC=tcs/C=BE/O=Universiteit Gent/CN=Willem Verbeke wlverbek@UGent.be","/cms/Role=NULL/Capability=NULL"],"x509UserProxyFirstFQAN":"/cms/Role=NULL/Capability=NULL","x509UserProxyVOName":"cms","x509userproxysubject":"/DC=org/DC=terena/DC=tcs/C=BE/O=Universiteit Gent/CN=Willem Verbeke wlverbek@UGent.be"},"metadata":{"_id":"380721bc-a12c-9b43-b545-740c10d2d0f0","hostname":"monit-amqsource-fafa51de8d.cern.ch","kafka_timestamp":1510476204057,"partition":"1","producer":"condor","timestamp":1510476204022,"topic":"condor_raw_metric","type":"metric","type_prefix":"raw","version":"001"}}
     """
-    if  not date:
+    if not date:
         # by default we read yesterdate data
-        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+        date = time.strftime("%Y/%m/%d", time.gmtime(time.time() - 60 * 60 * 24))
 
     hpath = '%s/%s' % (hdir, date)
 
     # create new spark DataFrame
     condor_df = sqlContext.read.json(hpath)
     condor_df.registerTempTable('condor_df')
-#    condor_df = condor_df.select(unpack_struct("data", condor_df)) # extract data part of JSON records
+    #    condor_df = condor_df.select(unpack_struct("data", condor_df)) # extract data part of JSON records
     condor_df.printSchema()
-    tables = {'condor_df':condor_df}
+    tables = {'condor_df': condor_df}
     return tables
 
+
 def fts_tables(sqlContext,
-        hdir='hdfs:///project/monitoring/archive/fts/raw/complete',
-        date=None, verbose=False):
+               hdir='hdfs:///project/monitoring/archive/fts/raw/complete',
+               date=None, verbose=False):
     """
     Parse fts HDFS records
 
@@ -719,34 +709,36 @@ def fts_tables(sqlContext,
 
     :returns: a dictionary with fts Spark DataFrame
     """
-    if  not date:
+    if not date:
         # by default we read yesterdate data
-        date = time.strftime("%Y/%m/%d", time.gmtime(time.time()-60*60*24))
+        date = time.strftime("%Y/%m/%d", time.gmtime(time.time() - 60 * 60 * 24))
 
     hpath = '%s/%s' % (hdir, date)
 
     # create new spark DataFrame
     fts_df = sqlContext.read.json(hpath)
     fts_df.registerTempTable('fts_df')
-    fts_df = fts_df.select(unpack_struct("data", fts_df)) # extract data part of JSON records
+    fts_df = fts_df.select(unpack_struct("data", fts_df))  # extract data part of JSON records
     fts_df.printSchema()
-    tables = {'fts_df':fts_df}
+    tables = {'fts_df': fts_df}
     return tables
 
+
 def split_dataset(df, dcol):
-    "Split dataset name in DataFrame into primds,procds,tier components"
-    ndf = df.withColumn("primds", split(col(dcol), "/").alias('primds').getItem(1))\
-            .withColumn("procds", split(col(dcol), "/").alias('procds').getItem(2))\
-            .withColumn("tier", split(col(dcol), "/").alias('tier').getItem(3))\
-            .drop(dcol)
+    """Split dataset name in DataFrame into primds,procds,tier components"""
+    ndf = df.withColumn("primds", split(col(dcol), "/").alias('primds').getItem(1)) \
+        .withColumn("procds", split(col(dcol), "/").alias('procds').getItem(2)) \
+        .withColumn("tier", split(col(dcol), "/").alias('tier').getItem(3)) \
+        .drop(dcol)
     return ndf
 
+
 def unpack_struct(colname, df):
-    "Unpack structure and extract specific column from dataframe"
-    parent = filter(lambda field: field.name == colname, df.schema.fields).pop()
-    fields = parent.dataType.fields \
-            if isinstance(parent.dataType, StructType) else []
-    return map(lambda x : col(colname+"."+x.name), fields)
+    """Unpack structure and extract specific column from dataframe"""
+    parent = list(filter(lambda field: field.name == colname, df.schema.fields))[0]
+    fields = parent.dataType.fields if isinstance(parent.dataType, StructType) else []
+    return list(map(lambda x: col(colname + "." + x.name), fields))
+
 
 def aso_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
     """
@@ -755,19 +747,56 @@ def aso_tables(sqlContext, hdir='hdfs:///project/awg/cms', verbose=False):
 
     :returns: a dictionary with ASO Spark DataFrame.
     """
-    adir = hdir+'/CMS_ASO/filetransfersdb/merged'
+    adir = hdir + '/CMS_ASO/filetransfersdb/merged'
 
     # aso data
     pfiles = os.popen("hadoop fs -ls %s | grep part | awk '{print $8}'" % adir).read().splitlines()
     msg = "ASO snapshot found %d directories" % len(pfiles)
     print(msg)
-    aso_df = unionAll([sqlContext.read.format('com.databricks.spark.csv')
-                    .options(treatEmptyValuesAsNulls='true', nullValue='null')\
-                    .load(file_path, schema = schema_asodb()) \
-                    for file_path in pfiles])
+    aso_df = union_all([sqlContext.read.format('com.databricks.spark.csv')
+                       .options(treatEmptyValuesAsNulls='true', nullValue='null')
+                       .load(file_path, schema=schema_asodb())
+                        for file_path in pfiles])
 
     # Register temporary tables to be able to use sqlContext.sql
     aso_df.registerTempTable('aso_df')
 
-    tables = {'aso_df':aso_df}
+    tables = {'aso_df': aso_df}
     return tables
+
+
+def get_candidate_files(start_date, end_date, spark, base, day_delta=1):
+    """Returns a list of hdfs folders that can contain data for the given dates.
+    """
+    st_date = start_date - timedelta(days=day_delta)
+    ed_date = end_date + timedelta(days=day_delta)
+    days = (ed_date - st_date).days
+
+    # pre_candidate_files = [
+    #     "{base}/{day}{{,.tmp}}".format(
+    #         base=base, day=(st_date + timedelta(days=i)).strftime("%Y/%m/%d")
+    #     )
+    #     for i in range(0, days)
+    # ]
+
+    sc = spark.sparkContext
+    # The candidate files are the folders to the specific dates,
+    # but if we are looking at recent days the compaction procedure could
+    # have not run yet so we will considerate also the .tmp folders.
+    candidate_files = [
+        f"{base}/{(st_date + timedelta(days=i)).strftime('%Y/%m/%d')}{{,.tmp}}"
+        for i in range(0, days)
+    ]
+    fsystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    uri = sc._gateway.jvm.java.net.URI
+    path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    fs = fsystem.get(uri("hdfs:///"), sc._jsc.hadoopConfiguration())
+    candidate_files = [url for url in candidate_files if fs.globStatus(path(url))]
+    return candidate_files
+
+
+def get_spark_session(app_name):
+    """Get or create the spark context and session.
+    """
+    sc = SparkContext(appName=app_name)
+    return SparkSession.builder.config(conf=sc._conf).getOrCreate()

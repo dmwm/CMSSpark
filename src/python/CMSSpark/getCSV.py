@@ -1,28 +1,29 @@
 #!/usr/bin/env python
-#-*- coding: utf-8 -*-
-#pylint: disable=
+# -*- coding: utf-8 -*-
 """
-File       : makeCSV.py
-Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
-Description: script to fetch data from HDFS and create local CSV file(s)
-#./getCSV.py --hdir=hdfs:///cms/users/vk/dbs_condor --date=20171121 --odir=dbs_condor
-./getCSV.py --idir=$PWD/dbs_condor --dates=20171121-20171128
+File        : getCSV.py
+Author      : Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
+Description : script to fetch data from HDFS and create local CSV file(s)
+Usage:
+    - ./getCSV.py --hdir=hdfs:///cms/users/vk/dbs_condor --date=20171121 --odir=dbs_condor
+    - ./getCSV.py --idir=$PWD/dbs_condor --dates=20171121-20171128
 """
 
 # system modules
 import os
-import sys
 import argparse
-import subprocess
 
-class OptionParser():
+
+class OptionParser:
     def __init__(self):
-        "User based option parser"
+        """User based option parser"""
         self.parser = argparse.ArgumentParser(prog='PROG')
         self.parser.add_argument("--idir", action="store",
-            dest="idir", default="", help="Input data path")
+                                 dest="idir", default="", help="Input data path")
         self.parser.add_argument("--dates", action="store",
-            dest="dates", default="", help="dates or dates-rante to read, e.g. YYYYMMDD-YYYYMMDD")
+                                 dest="dates", default="", help="dates or dates-rante to read, e.g. YYYYMMDD-YYYYMMDD")
+
+
 #        self.parser.add_argument("--hdir", action="store",
 #            dest="hdir", default="", help="Input HDFS path")
 #        self.parser.add_argument("--odir", action="store",
@@ -30,7 +31,7 @@ class OptionParser():
 #        self.parser.add_argument("--verbose", action="store_true",
 #            dest="verbose", default=False, help="verbose output")
 
-#def makeCSV(hdir, dates, odir):
+# def make_csv(hdir, dates, odir):
 #    "read data from HDFS and create CSV files from it"
 #    cmd = "hadoop fs -get %s %s" % (hdir, odir)
 #    print("run %s" % cmd)
@@ -39,8 +40,8 @@ class OptionParser():
 #    if proc.returncode:
 #        print("Fail to read, return code %s" % proc.returncode)
 #        os.exit(proc.returncode)
-def makeCSV(idir, dates):
-#    "read data from HDFS and create CSV files from it"
+def make_csv(idir, dates):
+    """read data from HDFS and create CSV files from it"""
     for path, dirs, files in os.walk(idir):
         for date in dates:
             # first loop over output dir
@@ -66,15 +67,18 @@ def makeCSV(idir, dates):
                                 break
                             ostream.write(line)
 
+
 def main():
-    "Main function"
-    optmgr  = OptionParser()
+    """Main function"""
+    optmgr = OptionParser()
     opts = optmgr.parser.parse_args()
     dates = opts.dates.split('-')
     idates = [int(d) for d in dates]
     pdates = [d for d in range(idates[0], idates[-1])]
-    makeCSV(opts.idir, pdates)
-#    makeCSV(opts.hdir, idates, opts.odir)
+    make_csv(opts.idir, pdates)
+
+
+#    make_csv(opts.hdir, idates, opts.odir)
 
 if __name__ == '__main__':
     main()

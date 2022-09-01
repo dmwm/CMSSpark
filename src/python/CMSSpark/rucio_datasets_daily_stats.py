@@ -1,21 +1,24 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-#
-# Sends aggregated DBS and Rucio table dump results to MONIT(ElasticSearch) via AMQ
-#
-# Requirements:
-#    - stomp.py version 7.0.0 will be provided with spark-submit as zip file
-#    - Specific branch of dmwm/CMSMonitoring will be provided with spark-submit as zip file
-#    - creds json file should be provided which contains AMQ and MONIT credentials and configurations
-#
-# Assumptions:
-#    - No Scope filter, assumed all of them is of cms scope
-#
-# References:
-#   - https://github.com/vkuznet/log-clustering/blob/master/workflow/workflow.py
-#   - https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/cern_monit.py
+"""
+File        : rucio_datasets_daily_stats.py
+Author      : Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+Description : Sends aggregated DBS and Rucio table dump results to MONIT(ElasticSearch) via AMQ
 
+Requirements:
+   - stomp.py version 7.0.0 will be provided with spark-submit as zip file
+   - Specific branch of dmwm/CMSMonitoring will be provided with spark-submit as zip file
+   - creds json file should be provided which contains AMQ and MONIT credentials and configurations
+
+Assumptions:
+   - No Scope filter, assumed all of them is of cms scope
+
+References:
+  - https://github.com/vkuznet/log-clustering/blob/master/workflow/workflow.py
+  - https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/cern_monit.py
+"""
+
+# system modules
 import json
 import logging
 import os
@@ -24,8 +27,6 @@ import time
 from datetime import datetime, timezone
 
 import click
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, lit, lower, when,
     count as _count,
@@ -39,12 +40,19 @@ from pyspark.sql.types import (
     LongType,
 )
 
+# CMSSpark modules
+from CMSSpark.spark_utils import get_spark_session
+
+# CMSMonitoring modules
 try:
     from CMSMonitoring.StompAMQ7 import StompAMQ7
 except ImportError:
     print("ERROR: Could not import StompAMQ")
     sys.exit(1)
 
+# global variables
+
+# used Oracle tables
 TABLES = ['REPLICAS', 'CONTENTS', 'RSES', 'FILES', 'DATASETS', 'DATA_TIERS', 'PHYSICS_GROUPS',
           'ACQUISITION_ERAS', 'DATASET_ACCESS_TYPES']
 
@@ -70,12 +78,6 @@ STR_TYPE_COLUMNS = ['all_f_in_dbs', 'all_f_in_rucio', 'rucio_has_ds_name', 'dbs_
                     'processed_ds_id', 'prep_id', 'data_tier_id', 'data_tier_name', 'physics_group_id',
                     'physics_group_name', 'acquisition_era_id', 'acquisition_era_name', 'dataset_access_type_id',
                     'dataset_access_type', 'rse', 'rse_type', 'rse_tier', 'rse_country', 'rse_kind', ]
-
-
-def get_spark_session():
-    """Get or create the spark context and session."""
-    sc = SparkContext(appName="cms-monitoring-rucio-daily-stats")
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def write_stats_to_eos(base_eos_dir, stats_dict):
@@ -205,15 +207,13 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
         .agg(_sum(col('replica_file_size')).alias('rucio_size'),
              _count(lit(1)).alias('rucio_n_files'),
              _sum(
-                 when(col('replica_accessed_at').isNull(), 0)
-                     .otherwise(1)
+                 when(col('replica_accessed_at').isNull(), 0).otherwise(1)
              ).alias('rucio_n_accessed_files'),
              _first(col("is_d_name_from_rucio")).alias("is_d_name_from_rucio"),
              _sum(col('lock_cnt')).alias('rucio_locked_files')
              ) \
         .withColumn('rucio_is_d_locked',
-                    when(col('rucio_locked_files') > 0, IS_DATASET_LOCKED[True])
-                    .otherwise(IS_DATASET_LOCKED[False])
+                    when(col('rucio_locked_files') > 0, IS_DATASET_LOCKED[True]).otherwise(IS_DATASET_LOCKED[False])
                     ) \
         .select(['contents_dataset', 'replica_rse_id', 'rucio_size', 'rucio_n_files', 'rucio_n_accessed_files',
                  'is_d_name_from_rucio', 'rucio_locked_files', 'rucio_is_d_locked', ])
@@ -234,8 +234,7 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
         .agg(_sum(col('dbs_file_size')).alias('dbs_size'),
              _count(lit(1)).alias('dbs_n_files'),
              _sum(
-                 when(col('replica_accessed_at').isNull(), 0)
-                     .otherwise(1)
+                 when(col('replica_accessed_at').isNull(), 0).otherwise(1)
              ).alias('dbs_n_accessed_files'),
              _first(col("is_d_name_from_dbs")).alias("is_d_name_from_dbs"),
              _sum(col('lock_cnt')).alias('dbs_locked_files')
@@ -459,24 +458,42 @@ def send_to_amq(data, confs, batch_size):
               default="/eos/user/c/cmsmonit/www/rucio_daily_ds_stats", )
 @click.option("--amq_batch_size", type=click.INT, required=False, help="AMQ transaction batch size",
               default=100)
-def main(creds, base_hdfs_dir, base_eos_dir, amq_batch_size):
+@click.option("--test", is_flag=True, default=False, required=False,
+              help="It will send only 10 documents to ElasticSearch. "
+                   "[!Attention!] Please provide test/training AMQ topic.")
+def main(creds, base_hdfs_dir, base_eos_dir, amq_batch_size, test):
     tables_hdfs_paths = {}
     for table in TABLES:
         tables_hdfs_paths[table] = f"{base_hdfs_dir}/{table}/part*.avro"
 
-    spark = get_spark_session()
+    spark = get_spark_session("cms-monitoring-rucio-daily-stats")
     creds_json = credentials(f_name=creds)
     df = create_main_df(spark=spark, hdfs_paths=tables_hdfs_paths, base_eos_dir=base_eos_dir)
     print('Schema:')
     df.printSchema()
     total_size = 0
-    # Iterate over list of dicts returned from spark
-    for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
-        part_size = len(part)
-        print(f"Length of partition: {part_size}")
-        send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size)
-        total_size += part_size
-    print(f"Total document size: {total_size}")
+
+    # Test. Sends only 10 documents to training or test AMQ topic
+    if test:
+        _topic = creds_json["topic"].lower()
+        if ("train" not in _topic) and ("test" not in _topic):
+            print(f"Test failed. Topic \"{_topic}\" is not training or test topic.")
+            sys.exit(1)
+
+        for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
+            part_size = len(part)
+            print(f"Length of partition: {part_size}")
+            send_to_amq(data=part[:10], confs=creds_json, batch_size=amq_batch_size)
+            print(f"Test successfully finished and sent 10 documents to {_topic} AMQ topic.")
+            sys.exit(0)
+    else:
+        # Iterate over list of dicts returned from spark
+        for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
+            part_size = len(part)
+            print(f"Length of partition: {part_size}")
+            send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size)
+            total_size += part_size
+        print(f"Total document size: {total_size}")
 
 
 if __name__ == "__main__":

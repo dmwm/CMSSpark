@@ -1,55 +1,38 @@
 #!/usr/bin/env python
-#-*- coding: utf-8 -*-
-#pylint: disable=
-# Author: Justinas Rumševičius <justinas.rumsevicius AT gmail [DOT] com>
+# -*- coding: utf-8 -*-
 """
-Spark script to collect data from DBS and AAA, CMSSW, EOS, JM streams on HDFS and aggregate them into
-records that would be fed into MONIT system.
+File        : data_aggregation.py
+Author      : Justinas Rumševičius <justinas.rumsevicius AT gmail [DOT] com>
+Description : Spark script to collect data from DBS and AAA, CMSSW, EOS, JM streams on HDFS and aggregate them into ...
+              ... records that would be fed into MONIT system.
 """
 
+# system modules
+import click
+import hashlib
 import re
 import time
-import argparse
-import hashlib
 
-from pyspark import SparkContext, StorageLevel
 from pyspark.sql import SQLContext
-
-# CMSSpark modules
-from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables_enr, eos_tables, jm_tables, phedex_tables
-from CMSSpark.spark_utils import spark_context, print_rows, split_dataset
-from CMSSpark.utils import elapsed_time
-from CMSSpark.data_collection import  yesterday, short_date_string, long_date_string, output_dataframe, run_query, short_date_to_unix
 from pyspark.sql.functions import desc
 from pyspark.sql.functions import split, col
 
+# CMSSpark modules
+from CMSSpark import conf as c
+from CMSSpark.data_collection import short_date_string, long_date_string, output_dataframe, run_query, \
+    short_date_to_unix
+from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables_enr, eos_tables, jm_tables, phedex_tables
+from CMSSpark.spark_utils import spark_context, print_rows
+from CMSSpark.utils import elapsed_time
+
+# global variables
 LET_PAT = re.compile(r'^CN=[a-zA-Z]')
 NUM_PAT = re.compile(r'^CN=[0-9]')
 
-class OptionParser():
-    def __init__(self):
-        "User based option parser"
-        desc = "Spark script to process DBS + [AAA, CMSSW, EOS, JM] metadata"
-
-        self.parser = argparse.ArgumentParser(prog='PROG', description=desc)
-
-        self.parser.add_argument("--inst", action="store",
-            dest="inst", default="global", help='DBS instance on HDFS: global (default), phys01, phys02, phys03')
-        self.parser.add_argument("--date", action="store",
-            dest="date", default="", help='Select data for specific date (YYYYMMDD)')
-        self.parser.add_argument("--yarn", action="store_true",
-            dest="yarn", default=False, help="Run job on analytics cluster via yarn resource manager")
-        self.parser.add_argument("--verbose", action="store_true",
-            dest="verbose", default=False, help="Verbose output")
-        self.parser.add_argument("--fout", action="store",
-            dest="fout", default="", help='Output directory path')
-        self.parser.add_argument("--aaa_hdir", action="store",
-            dest="aaa_hdir", default="", help='AAA input directory path')
-
 
 def run_agg_jm(date, ctx, sql_context, verbose=False):
-    """
-    Runs aggregation for JobMonitoring stream for a certain date.
+    """Runs aggregation for JobMonitoring stream for a certain date.
+
     Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
     Result dataframe is sorted by nacc.
     """
@@ -79,19 +62,10 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
     # - site tier                +
     # - cpu time                 +
 
-    cols = ['SiteName AS site_name',
-            'dataset_name',
-            'count(dataset_name) AS nacc',
-            'count(distinct(UserId)) AS distinct_users',
-            '\"crab\" AS stream',
-            '%s AS timestamp' % unix_date,
-            'first_value(tier_from_site_name(SiteName)) AS site_tier',
-            'SUM(WrapCPU) AS cpu_time']
-
     # Build a query with "cols" columns
-#    query = ("SELECT %s FROM jm_df "\
-#             "JOIN f_b_s_df ON f_b_s_df.file_name = jm_df.FileName "\
-#             "GROUP BY jm_df.SiteName, dataset_name") \
+    #    query = ("SELECT %s FROM jm_df "\
+    #             "JOIN f_b_s_df ON f_b_s_df.file_name = jm_df.FileName "\
+    #             "GROUP BY jm_df.SiteName, dataset_name") \
     cols = ['SiteName AS site_name',
             'dataset_name',
             'stream4app(jm_df.SubmissionTool) AS app',
@@ -101,9 +75,9 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
             '%s AS timestamp' % unix_date,
             'WrapCPU AS cpu',
             'WrapWC as wc']
-    query = "SELECT %s FROM jm_df "\
-             "JOIN f_b_s_df ON f_b_s_df.file_name = jm_df.FileName " \
-             % ','.join(cols)
+    query = "SELECT %s FROM jm_df " \
+            "JOIN f_b_s_df ON f_b_s_df.file_name = jm_df.FileName " \
+            % ','.join(cols)
     cols = ['dn', 'dataset_name', 'site_name', 'app',
             'uid', 'stream', 'timestamp',
             'count(dataset_name) AS nacc',
@@ -129,7 +103,7 @@ def run_agg_jm(date, ctx, sql_context, verbose=False):
     return result
 
 
-def run_agg_eos(date, ctx, sql_context, verbose=False):
+def run_agg_eos(date, sql_context, verbose=False):
     """
     Runs aggregation for EOS stream for a certain date.
     Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
@@ -162,20 +136,11 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
     # - site tier                +
     # - cpu time                -1
 
-    cols = ['site_name',
-            'dataset_name',
-            'count(dataset_name) AS nacc',
-            'count(distinct(eos_df.user_dn)) AS distinct_users',
-            '\"eos\" as stream',
-            '%s AS timestamp' % unix_date,
-            'first_value(tier_from_site_name(site_name)) AS site_tier',
-            '-1 AS cpu_time']
-
     # Build a query with "cols" columns
-#    query = ("SELECT %s FROM eos_df " \
-#             "JOIN f_b_s_df ON f_b_s_df.file_name = eos_df.file_lfn " \
-#             "GROUP BY site_name, dataset_name") \
-#             % ','.join(cols)
+    #    query = ("SELECT %s FROM eos_df " \
+    #             "JOIN f_b_s_df ON f_b_s_df.file_name = eos_df.file_lfn " \
+    #             "GROUP BY site_name, dataset_name") \
+    #             % ','.join(cols)
     cols = ['site_name',
             'dataset_name',
             'parse_app(eos_df.application) AS app',
@@ -185,8 +150,8 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
             '%s AS timestamp' % unix_date,
             '-1 AS cpu']
     query = "SELECT %s FROM eos_df " \
-             "JOIN f_b_s_df ON f_b_s_df.file_name = eos_df.file_lfn " \
-             % ','.join(cols)
+            "JOIN f_b_s_df ON f_b_s_df.file_name = eos_df.file_lfn " \
+            % ','.join(cols)
     cols = ['dn', 'dataset_name', 'site_name', 'app',
             'uid', 'stream', 'timestamp',
             'count(dataset_name) AS nacc',
@@ -211,7 +176,7 @@ def run_agg_eos(date, ctx, sql_context, verbose=False):
     return result
 
 
-def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive/xrootd/enr/gled', verbose=False):
+def run_agg_aaa(date, sql_context, hdir='hdfs:///project/monitoring/archive/xrootd/enr/gled', verbose=False):
     """
     Runs aggregation for JobMonitoring stream for a certain date.
     Function produces a dataframe that contains site name, dataset name, number of access, distinct users and stream.
@@ -245,20 +210,11 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
     # - site tier                +
     # - cpu time                -1
 
-    cols = ['src_experiment_site AS site_name',
-            'dataset_name',
-            'count(dataset_name) AS nacc',
-            'count(distinct(aaa_df.user_dn)) AS distinct_users',
-            '\"aaa\" as stream',
-            '%s AS timestamp' % unix_date,
-            'first_value(tier_from_site_name(src_experiment_site)) AS site_tier',
-            '-1 AS cpu_time']
-
     # Build a query with "cols" columns
-#    query = ("SELECT %s FROM aaa_df " \
-#             "JOIN f_b_s_df ON f_b_s_df.file_name = aaa_df.file_lfn " \
-#             "GROUP BY src_experiment_site, dataset_name") \
-#             % ','.join(cols)
+    #    query = ("SELECT %s FROM aaa_df " \
+    #             "JOIN f_b_s_df ON f_b_s_df.file_name = aaa_df.file_lfn " \
+    #             "GROUP BY src_experiment_site, dataset_name") \
+    #             % ','.join(cols)
     cols = ['src_experiment_site AS site_name',
             'dataset_name',
             '\"xrootd\" AS app',
@@ -268,8 +224,8 @@ def run_agg_aaa(date, ctx, sql_context, hdir='hdfs:///project/monitoring/archive
             '%s AS timestamp' % unix_date,
             '-1 AS cpu']
     query = "SELECT %s FROM aaa_df " \
-             "JOIN f_b_s_df ON f_b_s_df.file_name = aaa_df.file_lfn " \
-             % ','.join(cols)
+            "JOIN f_b_s_df ON f_b_s_df.file_name = aaa_df.file_lfn " \
+            % ','.join(cols)
     cols = ['dn', 'dataset_name', 'site_name', 'app',
             'uid', 'stream', 'timestamp',
             'count(dataset_name) AS nacc',
@@ -325,22 +281,12 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
     # - timestamp                +
     # - site tier                +
     # - cpu time                -1
-    
-
-    cols = ['cmssw_df.SITE_NAME AS site_name',
-            'dataset_name',
-            'count(dataset_name) AS nacc',
-            'count(distinct(USER_DN)) AS distinct_users',
-            '\"cmssw\" as stream',
-            '%s AS timestamp' % unix_date,
-            'first_value(tier_from_site_name(cmssw_df.SITE_NAME)) AS site_tier',
-            '-1 AS cpu_time']
 
     # Build a query with "cols" columns
-#    query = ("SELECT %s FROM cmssw_df "\
-#             "JOIN f_b_s_df ON f_b_s_df.file_name = cmssw_df.FILE_LFN "\
-#             "GROUP BY cmssw_df.SITE_NAME, dataset_name") \
-#             % ','.join(cols)
+    #    query = ("SELECT %s FROM cmssw_df "\
+    #             "JOIN f_b_s_df ON f_b_s_df.file_name = cmssw_df.FILE_LFN "\
+    #             "GROUP BY cmssw_df.SITE_NAME, dataset_name") \
+    #             % ','.join(cols)
     cols = ['cmssw_df.SITE_NAME AS site_name',
             'dataset_name',
             'parse_app(cmssw_df.APP_INFO) AS app',
@@ -349,9 +295,9 @@ def run_agg_cmssw(date, ctx, sql_context, verbose=False):
             'stream4app(cmssw_df.APP_INFO) as stream',
             '%s AS timestamp' % unix_date,
             '-1 AS cpu']
-    query = "SELECT %s FROM cmssw_df "\
-             "JOIN f_b_s_df ON f_b_s_df.file_name = cmssw_df.FILE_LFN " \
-             % ','.join(cols)
+    query = "SELECT %s FROM cmssw_df " \
+            "JOIN f_b_s_df ON f_b_s_df.file_name = cmssw_df.FILE_LFN " \
+            % ','.join(cols)
     cols = ['dn', 'dataset_name', 'site_name', 'app',
             'uid', 'stream', 'timestamp',
             'count(dataset_name) AS nacc',
@@ -386,7 +332,7 @@ def quiet_logs(sc):
     print('Did set log level to ERROR')
 
 
-def create_file_block_site_table(ctx, sql_context, verbose=False):
+def create_file_block_site_table(sql_context, verbose=False):
     """
     Joins fdf, bdf, ddf and PhEDEx tables and produces table with file name, block name, dataset name and site name.
     Site name is obtained from PhEDEx. Before site name is used, it is cleaned with clean_site_name function.
@@ -400,9 +346,9 @@ def create_file_block_site_table(ctx, sql_context, verbose=False):
             'd_dataset AS dataset_name']
 
     # Join FDF and BDF by f_block_id and b_block_id
-    query = ("SELECT %s FROM fdf " \
-             "JOIN bdf ON fdf.f_block_id = bdf.b_block_id "\
-             "JOIN ddf ON fdf.f_dataset_id = ddf.d_dataset_id "\
+    query = ("SELECT %s FROM fdf "
+             "JOIN bdf ON fdf.f_block_id = bdf.b_block_id "
+             "JOIN ddf ON fdf.f_dataset_id = ddf.d_dataset_id "
              "JOIN phedex_df ON bdf.b_block_name = phedex_df.block_name") % ','.join(cols)
 
     if verbose:
@@ -411,7 +357,7 @@ def create_file_block_site_table(ctx, sql_context, verbose=False):
     result = run_query(query, sql_context, verbose)
     result.registerTempTable('f_b_all_df')
 
-    query_distinct = ("SELECT DISTINCT * FROM f_b_all_df ORDER  BY file_name")
+    query_distinct = "SELECT DISTINCT * FROM f_b_all_df ORDER  BY file_name"
     result_distinct = run_query(query_distinct, sql_context, verbose)
     result_distinct.registerTempTable('f_b_s_df')
 
@@ -426,87 +372,87 @@ def create_file_block_site_table(ctx, sql_context, verbose=False):
 
 
 def clean_site_name(s):
-    """
-    Splits site name by _ (underscore), takes no more than first three parts and joins them with _.
+    """Splits site name by _ (underscore), takes no more than first three parts and joins them with _.
+
     This way site name always have at most three parts, separated by _.
     First three parts represent a tier, a country and a lab/university name.
     """
-    split = s.split('_')
-    split = split[0:3]
+    split_s = s.split('_')[0:3]
 
     # Remove empty strings which may appear when s is T0_USA_
-    split = filter(None, split)
+    split_s = filter(None, split_s)
 
-    join = '_'.join(split)
+    join = '_'.join(split_s)
     return join
 
+
 def parse_dn(dn):
-    "Parse user DN and extract only user name and real name"
+    """Parse user DN and extract only user name and real name"""
     dn = str(dn).split('&')[0]
     cns = [x for x in dn.split('/') if x.startswith('CN=') and not NUM_PAT.match(x)]
     if len(cns):
-        name = cns[-1].split('=')[-1] # /CN=user/CN=First Last Name we return First Last Name
+        name = cns[-1].split('=')[-1]  # /CN=user/CN=First Last Name we return First Last Name
     else:
-        name = str(dn) # when we're unable to split DN with / we return it as is
+        name = str(dn)  # when we're unable to split DN with / we return it as is
     return name.replace('CN=', '')
 
+
 def stream4app(app):
-    "Parse CMSSW APP_INFO attribute and assign appropriate stream"
+    """Parse CMSSW APP_INFO attribute and assign appropriate stream"""
     if not app:
         return 'cmssw'
     if app and 'crab' in app:
         return 'crab'
     return app
 
+
 def parse_app(app):
-    "Parse CMSSW APP_INFO attribute"
+    """Parse CMSSW APP_INFO attribute"""
     if not app or app == "')":
         return "unknown"
     if 'crab' in app:
         return 'crab'
     return app
 
+
 def dn2uuid(dn):
-    "Convert user DN to UID, we take first 16 digits of the int base 16 of the dn hash"
-    return int(hashlib.sha1(parse_dn(dn)).hexdigest(), 16) % (10**16)
+    """Convert user DN to UID, we take first 16 digits of the int base 16 of the dn hash"""
+    return int(hashlib.sha1(parse_dn(dn)).hexdigest(), 16) % (10 ** 16)
+
 
 def tier_from_site_name(s):
-    """
-    Splits site name by _ (underscore), and takes only the first part that represents tier.
-    """
-    split = s.split('_')
-    tier = str(split[0])
-    return tier
+    """Splits site name by _ (underscore), and takes only the first part that represents tier"""
+    return str(s.split('_')[0])
+
 
 def split_dataset_col(df, dcol):
-    """
-    Split dataset name in DataFrame into primary_name, processing_name , data_tier components.
+    """Split dataset name in DataFrame into primary_name, processing_name , data_tier components.
+
     Keep original column
     """
-    ndf = df.withColumn("primary_name", split(col(dcol), "/").alias('primary_name').getItem(1))\
-            .withColumn("processing_name", split(col(dcol), "/").alias('processing_name').getItem(2))\
-            .withColumn("data_tier", split(col(dcol), "/").alias('data_tier').getItem(3))
+    ndf = df.withColumn("primary_name", split(col(dcol), "/").alias('primary_name').getItem(1)) \
+        .withColumn("processing_name", split(col(dcol), "/").alias('processing_name').getItem(2)) \
+        .withColumn("data_tier", split(col(dcol), "/").alias('data_tier').getItem(3))
     return ndf
 
 
-def main():
-    "Main function"
-    optmgr = OptionParser()
-    opts = optmgr.parser.parse_args()
-
-    print("Input arguments: %s" % opts)
+@click.command()
+@c.common_options(c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+# Custom options
+@click.option("--inst", default="global", help="DBS instance on HDFS: global (default), phys01, phys02, phys03")
+@click.option("--aaa_hdir", default="", help="AAA input directory path")
+def main(date, yarn, fout, verbose, inst, aaa_hdir):
+    """Main function"""
+    click.echo("data_aggregation")
+    click.echo("Spark script to process DBS + [AAA, CMSSW, EOS, JM] metadata")
+    click.echo(f'Input Arguments: date:{date}, yarn:{yarn}, verbose:{verbose}, fout:{fout}, '
+               f'inst:{inst}, aaa_hdir:{aaa_hdir}')
 
     start_time = time.time()
-    verbose = opts.verbose
     # VK: turn verbose output for debugging purposes
-    verbose = 1
-    yarn = opts.yarn
-    inst = opts.inst
-    date = opts.date
-    fout = opts.fout
-    aaa_hdir = opts.aaa_hdir
+    verbose = True
 
-    if  inst.lower() in ['global', 'phys01', 'phys02', 'phys03']:
+    if inst.lower() in ['global', 'phys01', 'phys02', 'phys03']:
         inst = inst.upper()
     else:
         raise Exception('Unsupported DBS instance "%s"' % inst)
@@ -549,7 +495,7 @@ def main():
 
     f_b_s_start_time = time.time()
     # Create temp table with file name, block name, site name and site from PhEDEx
-    create_file_block_site_table(ctx, sql_context, verbose)
+    create_file_block_site_table(sql_context, verbose)
     f_b_s_elapsed_time = elapsed_time(f_b_s_start_time)
 
     cmssw_start_time = time.time()
@@ -558,14 +504,14 @@ def main():
 
     aaa_start_time = time.time()
     if len(aaa_hdir) > 0:
-        aggregated_aaa_df = run_agg_aaa(date, ctx, sql_context, aaa_hdir, verbose)
+        aggregated_aaa_df = run_agg_aaa(date, sql_context, aaa_hdir, verbose)
     else:
-        aggregated_aaa_df = run_agg_aaa(date, ctx, sql_context, verbose=verbose)
+        aggregated_aaa_df = run_agg_aaa(date, sql_context, verbose=verbose)
 
     aaa_elapsed_time = elapsed_time(aaa_start_time)
 
     eos_start_time = time.time()
-    aggregated_eos_df = run_agg_eos(date, ctx, sql_context, verbose)
+    aggregated_eos_df = run_agg_eos(date, sql_context, verbose)
     eos_elapsed_time = elapsed_time(eos_start_time)
 
     jm_start_time = time.time()
@@ -576,9 +522,9 @@ def main():
         print('Will union outputs from all streams to a single dataframe')
     # Schema for output is:
     # site name, dataset name, number of accesses, distinct users, stream
-    all_df = aggregated_cmssw_df.unionAll(aggregated_aaa_df)
-    all_df = all_df.unionAll(aggregated_eos_df)
-    all_df = all_df.unionAll(aggregated_jm_df)
+    all_df = aggregated_cmssw_df.union_all(aggregated_aaa_df)
+    all_df = all_df.union_all(aggregated_eos_df)
+    all_df = all_df.union_all(aggregated_jm_df)
     all_df = all_df.sort(desc("nacc"))
 
     if verbose:

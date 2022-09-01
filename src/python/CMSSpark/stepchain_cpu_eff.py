@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-"""Generates StepChain tasks' CPU efficiency static web site"""
+"""
+File        : stepchain_cpu_eff.py
+Author      : Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+Description : Generates StepChain tasks' CPU efficiency static web site
+"""
 
+# system modules
 import os
 import time
 from datetime import date, datetime, timedelta
 
 import click
 import pandas as pd
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col as _col,
     collect_set as _collect_set,
@@ -28,45 +30,15 @@ from pyspark.sql.types import (
     LongType,
 )
 
-# pd.set_option("display.max_colwidth", None)
+# CMSSpark modules
+from CMSSpark.spark_utils import get_spark_session, get_candidate_files
+
 pd.options.display.float_format = "{:,.2f}".format
 pd.set_option("display.max_colwidth", None)
 
+# global variables
 _DEFAULT_HDFS_FOLDER = "/project/monitoring/archive/wmarchive/raw/metric"
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
-
-
-def get_spark_session(yarn=True, verbose=False):
-    """
-    Get or create the spark context and session.
-    """
-    sc = SparkContext(appName="cms-stepchain-cpu-eff")
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
-
-
-def get_candidate_files(
-    start_date, end_date, spark, base=_DEFAULT_HDFS_FOLDER,
-):
-    """
-    Returns a list of hdfs folders that can contain data for the given dates.
-    """
-    st_date = start_date - timedelta(days=1)
-    ed_date = end_date + timedelta(days=1)
-    days = (ed_date - st_date).days
-    sc = spark.sparkContext
-    # The candidate files are the folders to the specific dates,
-    # but if we are looking at recent days the compaction procedure could
-    # have not run yet so we will considerate also the .tmp folders.
-    candidate_files = [
-        f"{base}/{(st_date + timedelta(days=i)).strftime('%Y/%m/%d')}{{,.tmp}}"
-        for i in range(0, days)
-    ]
-    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
-    URI = sc._gateway.jvm.java.net.URI
-    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
-    fs = FileSystem.get(URI("hdfs:///"), sc._jsc.hadoopConfiguration())
-    candidate_files = [url for url in candidate_files if fs.globStatus(Path(url))]
-    return candidate_files
 
 
 def get_schema():
@@ -385,9 +357,9 @@ def main(
             f"start date ({start_date}) should be earlier than end date({end_date})"
         )
 
-    spark = get_spark_session()
+    spark = get_spark_session(app_name='cms-stepchain-cpu-eff')
     df_raw = spark.read.option("basePath", _DEFAULT_HDFS_FOLDER).json(
-        get_candidate_files(start_date, end_date, spark, base=_DEFAULT_HDFS_FOLDER)
+        get_candidate_files(start_date, end_date, spark, base=_DEFAULT_HDFS_FOLDER, day_delta=1)
     ) \
         .select(["data.*", "metadata.timestamp"]) \
         .filter(

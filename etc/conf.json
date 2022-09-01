@@ -1,6 +1,6 @@
 {
     "output_dir" : "hdfs:///cms/cms-popularity/agg",
-    "stomp_path" : "/data/cms/CMSSpark/static/stomp.py-4.1.15-py2.7.egg",
+    "py_files" : "/data/CMSMonitoring.zip,/data/stomp-v700.zip",
     "credentials" : "/data/cms/CMSSpark/acronjob/amq_broker.json",
     "keytab" : "/data/cms/etc/agg.keytab",
     "aaa_dir" : "/project/monitoring/archive/xrootd/enr/gled",

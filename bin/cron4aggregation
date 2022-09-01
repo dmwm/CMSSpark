@@ -1,52 +1,85 @@
 #!/bin/bash
-# this script is designed to be used in crontab, i.e. with full path
-# adjust script to put your desired notification address if necessary
-
-#addr=cms-popdb-alarms@cern.ch
-#addr=vkuznet@gmail.com
-addr=cms-comp-monit-alerts@cern.ch
-
-
-# DO NOT EDIT BELOW THIS LINE
-# for Spark 2.X
-export PATH=$PATH:/usr/hdp/hadoop/bin
-
-me=$(dirname "$0")
-wdir=`echo $me | sed -e "s,/bin,,g"`
-mkdir -p $wdir/logs
-log=$wdir/logs/agg-`date +%Y%m%d`.log
-export PYTHONPATH=$wdir/src/python:$PYTHONPATH:/data/cms/CMSMonitoring/src/python
-export PATH=$wdir/bin:$PATH
-cmd="$wdir/bin/run_aggregation $wdir/etc/conf.json"
-msg="Error while executing $cmd on $USER@`hostname` log at $log"
 set -e
-#trap "echo \"$msg\" | mail -s \"Cron alert CMS Popularity\" \"$addr\"" ERR
-# Call func function on exit
-trap func exit
-# Declare the function
-function func() {
-    local status=$?
-    if [ $status -ne 0 ]; then
-        local msg="cron4aggregation completed with non zero status"
-        if [ -f /data/cms/bin/amtool ]; then
-            local expire=`date -d '+1 hour' --rfc-3339=ns | tr ' ' 'T'`
-            local urls="http://cms-monitoring.cern.ch:30093 http://cms-monitoring-ha1.cern.ch:30093 http://cms-monitoring-ha2.cern.ch:30093"
-            for url in $urls; do
-                /data/cms/bin/amtool alert add cron4aggregation \
-                    alertname=cron4aggregation severity=medium tag=cronjob alert=amtool \
-                    --end=$expire\
-                    --annotation=summary="$msg" \
-                    --annotation=date="`date`" \
-                    --annotation=hostname="`hostname`" \
-                    --annotation=status="$status" \
-                    --annotation=command="$cmd" \
-                    --annotation=log="$log" \
-                    --alertmanager.url=$url
-            done
-        else
-            echo "$msg" | mail -s "Cron alert cron4aggregation" "$addr"
-        fi
-    fi
-}
+##H Can only run in K8s
+##H
+##H cron4aggregation
+##H
+##H Usage: cron4aggregation --conf <> --p1 <> --p2 <> --host <>
+##H Example : cron4aggregation --conf conf.json --p1 32000 --p2 32001 --host $MY_NODE_NAME
+##H Arguments:
+##H   - conf                : Required configuration file path, run_aggregation.sh file for example
+##H   - p1, p2, host  : [ALL FOR K8S] p1 and p2 spark required ports(driver and blockManager), host is k8s node dns alias
+##H
+script_dir="$(
+    cd -- "$(dirname "$0")" >/dev/null 2>&1
+    pwd -P
+)"
+# get common util functions
+. "$script_dir"/utils/common_utils.sh
 
-$cmd >> $log 2>&1
+trap 'onFailExit' ERR
+onFailExit() {
+    util4loge "finished with error!" || exit 1
+}
+# ------------------------------------------------------------------------------------------------------- GET USER ARGS
+unset -v CONF_FILE PORT1 PORT2 K8SHOST help
+[ "$#" -ne 0 ] || util_usage_help
+
+# --options (short options) is mandatory, and v is a dummy param.
+parsed_args=$(getopt --unquoted --options v --name "$(basename -- "$0")" --longoptions conf:,p1:,p2:,host:,,help -- "$@")
+valid_args=$?
+if [ "$valid_args" != "0" ]; then
+    util_usage_help
+fi
+
+util4logi "Given arguments: $parsed_args"
+eval set -- "$parsed_args"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --conf)       CONF_FILE=$2  ; shift 2 ;;
+    --p1)         PORT1=$2      ; shift 2 ;;
+    --p2)         PORT2=$2      ; shift 2 ;;
+    --host)       K8SHOST=$2    ; shift 2 ;;
+    -h | --help)  help=1        ; shift   ;;
+    *)            break                   ;;
+    esac
+done
+
+if [[ "$help" == 1 ]]; then
+    util_usage_help
+fi
+# ------------------------------------------------------------------------------------------------------------- PREPARE
+util_check_vars CONF_FILE PORT1 PORT2 K8SHOST
+
+# CMSSpark/bin
+script_dir="$(
+    cd -- "$(dirname "$0")" >/dev/null 2>&1
+    pwd -P
+)"
+
+# CMSSpark
+wdir="$(
+    cd -- "$(dirname "$script_dir")" >/dev/null 2>&1
+    pwd -P
+)"
+
+if [[ ":$PYTHONPATH:" == *"CMSMonitoring"* ]]; then
+    echo "CMSMonitoring is in $PYTHONPATH"
+else
+    echo "Please add CMSMonitoring/src/python to PYTHONPATH:$PYTHONPATH"
+    exit 1
+fi
+
+export PYTHONPATH=$wdir/src/python:$PYTHONPATH
+export PATH=$wdir/bin:$PATH
+
+# Set environment variables to run them run_spark3 in K8s mode
+export IS_K8S="true"
+export K8SHOST=$K8SHOST
+export K8S_PORT1=$PORT1
+export K8S_PORT2=$PORT2
+
+cmd="$wdir/bin/run_aggregation $CONF_FILE"
+
+$cmd 2>&1

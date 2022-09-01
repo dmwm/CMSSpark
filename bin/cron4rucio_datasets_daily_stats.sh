@@ -14,167 +14,99 @@ set -e
 ##H Example :
 ##H    cron4rucio_datasets_daily_stats.sh \
 ##H        --keytab ./keytab --cmsr ./cmsr_cstring --rucio ./rucio --amq ./amq-creds.json \
-##H        --cmsmonitoring ./CMSMonitoring.zip --stomp ./stomp-v700.zip --eos /eos/user/c/cmsmonit/www/rucio_test
-##H
-##H Arguments with values:
-##H   - keytab                    : Kerberos auth file: secrets/kerberos
-##H   - cmsr                      : DBS oracle user&pass secret file: secrets/sqoop
-##H   - rucio                     : Rucio oracle user&pass secret file: secrets/rucio
-##H   - amq                       : AMQ credentials and configurations json file for /topic/cms.rucio.dailystats:
-##H                                   secrets/cms-rucio-dailystats
-##H   - cmsmonitoring             : dmwm/CMSMonitoring/src/python/CMSMonitoring folder as zip to be sent to Spark nodes
-##H   - stomp                     : stomp.py==7.0.0 module as zip to be sent to Spark nodes which has lower versions.
-##H   - eos                       : Base EOS directory to write datasets statistics in html format.
-##H
+##H        --cmsmonitoring ./CMSMonitoring.zip --stomp ./stomp-v700.zip --eos /eos/user/c/cmsmonit/www/rucio_test \
+##H        --p1 32000 --p2 32001 --host $MY_NODE_NAME --wdir $WDIR
+##H Arguments:
+##H   - keytab              : Kerberos auth file: secrets/kerberos
+##H   - cmsr                : DBS oracle user&pass secret file: secrets/sqoop
+##H   - rucio               : Rucio oracle user&pass secret file: secrets/rucio
+##H   - amq                 : AMQ credentials and configurations json file for /topic/cms.rucio.dailystats:
+##H                             secrets/cms-rucio-dailystats
+##H   - cmsmonitoring       : dmwm/CMSMonitoring/src/python/CMSMonitoring folder as zip to be sent to Spark nodes
+##H   - stomp               : stomp.py==7.0.0 module as zip to be sent to Spark nodes which has lower versions.
+##H   - eos                 : Base EOS directory to write datasets statistics in html format.
+##H   - p1, p2, host, wdir  : [ALL FOR K8S] p1 and p2 spark required ports(driver and blockManager), host is k8s node dns alias, wdir is working directory
+##H   - test                : will run only test job which will send only 10 documents to AMQ topic. Please give test/training AMQ credentials
 ##H References:
 ##H   - some features&logics are copied from sqoop_utils.sh and cms-dbs3-full-copy.sh
 ##H   - getopt ref: https://www.shellscript.sh/tips/getopt/index.html
+##H How to test:
+##H   - Use personal keytab file, because sqoop dumps will be written to its '/tmp/$USER/rucio_daily_stats' directory
+##H   - Use test or training AMQ topic and its credentials, test AMQ credentials json file should be provided via --amq
+##H   - Delete or comment out 'run_spark 2>&1' line and uncomment '##TEST##run_test 2>&1' line
+##H   - That's all
 ##H
-
-trap 'onFailExit' ERR
-onFailExit() {
-    echo "$(date --rfc-3339=seconds)" "[ERROR] Finished with error!"
-    exit 1
-}
-usage() {
-    grep "^##H" <"$0" | sed -e "s,##H,,g"
-    exit 1
-}
-# seconds to h, m, s format used in logging
-secs_to_human() {
-    # Ref https://stackoverflow.com/a/59096583/6123088
-    echo "$((${1} / 3600))h $(((${1} / 60) % 60))m $((${1} % 60))s"
-}
-SCRIPT_DIR="$(
+script_dir="$(
     cd -- "$(dirname "$0")" >/dev/null 2>&1
     pwd -P
 )"
+# get common util functions
+. "$script_dir"/utils/common_utils.sh
+
+trap 'onFailExit' ERR
+onFailExit() {
+    util4loge "finished with error!" || exit 1
+}
+# ------------------------------------------------------------------------------------------------------- GET USER ARGS
+unset -v KEYTAB_SECRET CMSR_SECRET RUCIO_SECRET AMQ_JSON_CREDS CMSMONITORING_ZIP STOMP_ZIP EOS_DIR PORT1 PORT2 K8SHOST WDIR IS_TEST help
+[ "$#" -ne 0 ] || util_usage_help
+
+# --options (short options) is mandatory, and v is a dummy param.
+PARSED_ARGS=$(getopt --unquoted --options v,h --name "$(basename -- "$0")" --longoptions keytab:,cmsr:,rucio:,amq:,cmsmonitoring:,stomp:,eos:,p1:,p2:,host:,wdir:,test,help -- "$@")
+VALID_ARGS=$?
+if [ "$VALID_ARGS" != "0" ]; then
+    util_usage_help
+fi
+
+util4logi "Given arguments: $PARSED_ARGS"
+eval set -- "$PARSED_ARGS"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --keytab)        KEYTAB_SECRET=$2     ; shift 2 ;;
+    --cmsr)          CMSR_SECRET=$2       ; shift 2 ;;
+    --rucio)         RUCIO_SECRET=$2      ; shift 2 ;;
+    --amq)           AMQ_JSON_CREDS=$2    ; shift 2 ;;
+    --cmsmonitoring) CMSMONITORING_ZIP=$2 ; shift 2 ;;
+    --stomp)         STOMP_ZIP=$2         ; shift 2 ;;
+    --eos)           PORT1=$2             ; shift 2 ;;
+    --p1)            PORT1=$2             ; shift 2 ;;
+    --p2)            PORT2=$2             ; shift 2 ;;
+    --host)          K8SHOST=$2           ; shift 2 ;;
+    --wdir)          WDIR=$2              ; shift 2 ;;
+    --test)          IS_TEST=1            ; shift   ;;
+    -h | --help)     help=1               ; shift   ;;
+    *)               break                          ;;
+    esac
+done
+
+if [[ "$help" == 1 ]]; then
+    util_usage_help
+fi
+# ------------------------------------------------------------------------------------------------------------- PREPARE
 TZ=UTC
 START_TIME=$(date +%s)
-
 # Define logs path for Spark imports which produce lots of info logs
 LOG_DIR="$WDIR"/logs/$(date +%Y%m%d)
 mkdir -p "$LOG_DIR"
 
-# ------------------------------------------------------------------------------------------------------- GET USER ARGS
-unset -v KEYTAB_SECRET CMSR_SECRET RUCIO_SECRET AMQ_JSON_CREDS CMSMONITORING_ZIP STOMP_ZIP EOS_DIR help
-[ "$#" -ne 0 ] || usage
+#  check files exist
+util_check_files "$KEYTAB_SECRET" "$CMSR_SECRET" "$RUCIO_SECRET" "$AMQ_JSON_CREDS" "$CMSMONITORING_ZIP" "$STOMP_ZIP"
+# check variables set
+util_check_vars PORT1 PORT2 K8SHOST WDIR
 
-# --options (short options) is mandatory, and v is a dummy param.
-PARSED_ARGUMENTS=$(
-    getopt \
-        --unquoted \
-        --options v \
-        --name "$(basename -- "$0")" \
-        --longoptions keytab:,cmsr:,rucio:,amq:,cmsmonitoring:,stomp:,eos:,,help \
-        -- "$@"
-)
-VALID_ARGUMENTS=$?
-if [ "$VALID_ARGUMENTS" != "0" ]; then
-    usage
-fi
+# INITIALIZE ANALYTIX SPARK3
+util_setup_spark_k8s
 
-echo "$(date --rfc-3339=seconds)" "[INFO] Given arguments: $PARSED_ARGUMENTS"
-eval set -- "$PARSED_ARGUMENTS"
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-    --keytab)
-        KEYTAB_SECRET=$2
-        shift 2
-        ;;
-    --cmsr)
-        CMSR_SECRET=$2
-        shift 2
-        ;;
-    --rucio)
-        RUCIO_SECRET=$2
-        shift 2
-        ;;
-    --amq)
-        AMQ_JSON_CREDS=$2
-        shift 2
-        ;;
-    --cmsmonitoring)
-        CMSMONITORING_ZIP=$2
-        shift 2
-        ;;
-    --stomp)
-        STOMP_ZIP=$2
-        shift 2
-        ;;
-    --eos)
-        EOS_DIR=$2
-        shift 2
-        ;;
-    -h | --help)
-        help=1
-        shift
-        ;;
-    *)
-        break
-        ;;
-    esac
-done
-
-#
-if [[ "$help" == 1 ]]; then
-    usage
-fi
-
-# ------------------------------------------------------------------------------------------- CHECK IF FILES/DIRS EXIST
-for fname in $KEYTAB_SECRET $CMSR_SECRET $RUCIO_SECRET $AMQ_JSON_CREDS $CMSMONITORING_ZIP $STOMP_ZIP; do
-    if [ ! -e "${BASE_SECRET_FILES_DIR}/${fname}" ]; then
-        echo "$(date --rfc-3339=seconds)" "[ERROR] File does not exist: ${BASE_SECRET_FILES_DIR}/${fname}"
-        exit 1
-    fi
-done
-
-# Check JAVA_HOME is set
-if [ -n "$JAVA_HOME" ]; then
-    if [ -e "/usr/lib/jvm/java-1.8.0" ]; then
-        export JAVA_HOME="/usr/lib/jvm/java-1.8.0"
-    elif ! (java -XX:+PrintFlagsFinal -version 2>/dev/null | grep -E -q 'UseAES\s*=\s*true'); then
-        echo "$(date --rfc-3339=seconds)" "[ERROR] This script requires a java version with AES enabled"
-        exit 1
-    fi
-fi
-
-# ------------------------------------------------------------------------------------------------------ CHECK K8S ENVS
-[[ -z "$MY_NODE_NAME" ]] && {
-    echo "ERROR: MY_NODE_NAME is not defined"
-    exit 1
-}
-[[ -z "$CMSMON_RUCIO_DS_SERVICE_PORT_PORT_0" ]] && {
-    echo "ERROR: CMSMON_RUCIO_DS_SERVICE_PORT_PORT_0 is not defined, which is used for -spark.driver.port-"
-    exit 1
-}
-[[ -z "$CMSMON_RUCIO_DS_SERVICE_PORT_PORT_1" ]] && {
-    echo "ERROR: CMSMON_RUCIO_DS_SERVICE_PORT_PORT_1 is not defined, which used for -spark.driver.blockManager.port-"
-    exit 1
-}
-[[ -z "$WDIR" ]] && {
-    echo "ERROR: WDIR is not defined"
-    exit 1
-}
-
-# --------------------------------------------------------------------------------------------- Kerberos authentication
-PRINCIPAL=$(klist -k "$KEYTAB_SECRET" | tail -1 | awk '{print $2}')
-echo "Kerberos principle=$PRINCIPAL"
-kinit "$PRINCIPAL" -k -t "$KEYTAB_SECRET"
-if [ $? == 1 ]; then
-    echo "$(date --rfc-3339=seconds)" "[ERROR] Unable to perform kinit"
-    exit 1
-fi
-klist -k "$KEYTAB_SECRET"
-# Get Kerberos user name to use its /tmp HDFS directory as temporary folder
-KERBEROS_USER=$(echo "$PRINCIPAL" | grep -o '^[^@]*')
+# Authenticate kerberos and get principle user name
+KERBEROS_USER=$(util_kerberos_auth_with_keytab "$KEYTAB_SECRET")
 
 # Requires kerberos ticket to reach the EOS directory
 if [ ! -d "$EOS_DIR" ]; then
-    echo "$(date --rfc-3339=seconds)" "[ERROR] EOS directory does not exist: ${EOS_DIR}}"
+    util4logw "EOS directory does not exist: ${EOS_DIR}}"
     # exit 1, do not exit till we solve the problem in K8s magnum-eos pods which always cause trouble in each 40-50 days
 fi
+
 # -------------------------------------------------------------------------------------------------------------- TABLES
 # The tables of which split-by column set as Null and -m=1 are so small tables, no need to do parallel import
 RUCIO_TABLES_DICT="table split_column num_mappers
@@ -200,10 +132,6 @@ JDBC_URL=$(sed '1q;d' "$CMSR_SECRET")
 SQOOP_DUMP_DIR_PREFIX=/tmp/${KERBEROS_USER}/rucio_daily_stats
 BASE_SQOOP_DUMP_DIR="$SQOOP_DUMP_DIR_PREFIX"-$(date +%Y-%m-%d)
 
-# ------------------------------------------------------------------------------------------ INITIALIZE ANALYTIX SPARK3
-hadoop-set-default-conf.sh analytix
-source hadoop-setconf.sh analytix 3.2 spark3
-
 # ------------------------------------------------------------------------------------------------- IMPORT SINGLE TABLE
 function dump_single_table() {
     trap 'onFailExit' ERR
@@ -221,16 +149,14 @@ function dump_single_table() {
         extra_args=(-m "$local_num_mappers" --split-by "$local_split_column")
     fi
 
-    echo "$(date --rfc-3339=seconds)" [INFO] Start: "$local_schema"."$local_table" with "${extra_args[@]}"
+    util4logi "start: ${local_schema}.${local_table}" with "${extra_args[@]}"
     /usr/hdp/sqoop/bin/sqoop import \
         -Dmapreduce.job.user.classpath.first=true \
         -Doraoop.timestamp.string=false \
         -Dmapred.child.java.opts="-Djava.security.egd=file:/dev/../dev/urandom" \
         -Ddfs.client.socket-timeout=120000 \
+        --direct --compress --throw-on-error \
         --username "$local_username" --password "$local_password" \
-        --direct \
-        --compress \
-        --throw-on-error \
         --connect "$JDBC_URL" \
         --as-avrodatafile \
         --target-dir "${BASE_SQOOP_DUMP_DIR}/${local_table}/" \
@@ -238,7 +164,7 @@ function dump_single_table() {
         "${extra_args[@]}" \
         >>"${LOG_DIR}/${local_table}.log" 2>&1
 
-    echo "$(date --rfc-3339=seconds)" [INFO] End: "$local_schema"."$local_table"
+    util4logi "end: ${local_schema}.${local_table}"
 }
 
 # ------------------------------------------------------------------------------------------------ IMPORT RUCIO AND DBS
@@ -271,7 +197,6 @@ function import_dbs_tables() {
 }
 
 # ------------------------------------------------------------------------------------------------------------ MAIN RUN
-
 import_rucio_tables 2>&1 &
 import_dbs_tables 2>&1 &
 wait
@@ -282,49 +207,41 @@ hadoop fs -chmod -R o+rx "$BASE_SQOOP_DUMP_DIR"/
 # Delete yesterdays dumps
 path_of_yesterday="$SQOOP_DUMP_DIR_PREFIX"-"$(date -d "yesterday" '+%Y-%m-%d')"
 hadoop fs -rm -r -f -skipTrash "$path_of_yesterday"
-echo "$(date --rfc-3339=seconds)" "[INFO] Dump of yesterday is deleted ${path_of_yesterday}"
-echo "$(date --rfc-3339=seconds)" "[INFO] Dumps are finished. Time spent: $(secs_to_human "$(($(date +%s) - START_TIME))")"
+util4logi "dump of yesterday is deleted ${path_of_yesterday}"
+util4logi "dumps are finished. Time spent: $(util_secs_to_human "$(($(date +%s) - START_TIME))")"
 
 # ------------------------------------------------------------------------------------------------------- RUN SPARK JOB
+# Required for Spark job in K8s
+util4logi "spark job starts"
+export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
+spark_submit_args=(
+    --master yarn --conf spark.ui.showConsoleProgress=false --conf "spark.driver.bindAddress=0.0.0.0"
+    --conf spark.executor.memory=8g --conf spark.driver.memory=8g
+    --conf "spark.driver.host=${K8SHOST}" --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
+    --packages org.apache.spark:spark-avro_2.12:3.2.1 --py-files "${CMSMONITORING_ZIP},${STOMP_ZIP}"
+)
+
+py_input_args=(--creds "$AMQ_JSON_CREDS" --base_hdfs_dir "$BASE_SQOOP_DUMP_DIR" --base_eos_dir "$EOS_DIR" --amq_batch_size 1000)
+
 function run_spark() {
-    # Required for Spark job in K8s
-    export SPARK_LOCAL_IP=127.0.0.1
-    echo "$(date --rfc-3339=seconds)" "[INFO] Spark job starts"
-    export PYTHONPATH=$SCRIPT_DIR/../src/python:$PYTHONPATH
-    spark_submit_args=(
-        --master yarn
-        --conf spark.executor.memory=8g
-        --conf spark.executor.instances=30
-        --conf spark.executor.cores=4
-        --conf spark.driver.memory=8g
-        --conf spark.ui.showConsoleProgress=false
-        --packages org.apache.spark:spark-avro_2.12:3.2.1
-        --py-files "${CMSMONITORING_ZIP},${STOMP_ZIP}"
-    )
-    # Define Spark network settings in K8s cluster
-    spark_submit_args+=(
-        --conf "spark.driver.bindAddress=0.0.0.0"
-        --conf "spark.driver.host=${MY_NODE_NAME}"
-        --conf "spark.driver.port=${CMSMON_RUCIO_DS_SERVICE_PORT_PORT_0}"
-        --conf "spark.driver.blockManager.port=${CMSMON_RUCIO_DS_SERVICE_PORT_PORT_1}"
-    )
-    py_input_args=(
-        --creds "$AMQ_JSON_CREDS"
-        --base_hdfs_dir "$BASE_SQOOP_DUMP_DIR"
-        --base_eos_dir "$EOS_DIR"
-        --amq_batch_size 1000
-    )
-    # Run
-    spark-submit \
-        "${spark_submit_args[@]}" \
-        "${SCRIPT_DIR}/../src/python/CMSSpark/rucio_datasets_daily_stats.py" \
-        "${py_input_args[@]}" \
-        >>"${LOG_DIR}/spark-job.log" 2>&1
+    spark-submit "${spark_submit_args[@]}" "${script_dir}/../src/python/CMSSpark/rucio_datasets_daily_stats.py" \
+        "${py_input_args[@]}" >>"${LOG_DIR}/spark-job.log" 2>&1
+}
+function run_test_spark() {
+    # Test will send 10 documents to AMQ topic
+    py_input_args+=(--test)
+    spark-submit "${spark_submit_args[@]}" "${script_dir}/../src/python/CMSSpark/rucio_datasets_daily_stats.py" \
+        "${py_input_args[@]}" >>"${LOG_DIR}/spark-job.log" 2>&1
 }
 
-run_spark 2>&1
+# RUN SPARK
+if [[ "$IS_TEST" == 1 ]]; then
+    # will send only 10 documents, only to test/training AMQ topic. Please check python script for more details.
+    run_test_spark 2>&1
+else
+    run_spark 2>&1
+fi
 
-echo "$(date --rfc-3339=seconds)" "[INFO] Last 10 lines of Spark job log"
+util4logi "last 10 lines of spark job log"
 tail -10 "${LOG_DIR}/spark-job.log"
-# Print process wall clock time
-echo "$(date --rfc-3339=seconds)" "[INFO] All finished. Time spent: $(secs_to_human "$(($(date +%s) - START_TIME))")"
+util4logi "all finished, time spent: $(util_secs_to_human "$(($(date +%s) - START_TIME))")"

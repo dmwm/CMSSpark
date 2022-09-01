@@ -1,17 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Christian Ariza <christian.ariza AT gmail [DOT] com>
 # pylint: disable=wrong-import-position,C0330
-# We disabled wrong-import-position because matplotlib needs
-# setup the backend before pyplot is imported.
-# We disabled C0330 because pylint complains following the
-# old recomendation. Black follows the new indentation recomendation.
+
 """
-Create the event count plot used, for example, in the C-RSG report.
-This script requires python >=3.6 and CMSSpark in the python path.
-For additional documentation look at the notebook in the
-CMSSpark/src/notebooks folder.
+File        : dbs_event_count_plot.py
+Author      : Christian Ariza <christian.ariza AT gmail [DOT] com>
+Description : Create the event count plot used, for example, in the C-RSG report.
+                For additional documentation look at the notebook in the CMSSpark/src/notebooks folder.
+Notes       : We disabled wrong-import-position because matplotlib needs setup the backend before pyplot is imported.
+                We disabled C0330 because pylint complains following the
+                old recommendation. Black follows the new indentation recommendation.
 """
+
+# system modules
 import os
 import argparse
 import json
@@ -21,13 +22,7 @@ from dateutil.relativedelta import relativedelta
 
 import pandas as pd
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import (
-    from_unixtime,
-    concat,
-    year,
-    month,
-    lpad,
-)
+from pyspark.sql.functions import from_unixtime, concat, year, month, lpad
 
 # Matplotlib needs to set the backend before pyplot is imported. That will
 # cause pylint complain about the imports not being at top of file.
@@ -37,6 +32,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# CMSSpark modules
 from CMSSpark import spark_utils
 
 logger = logging.getLogger(__name__)
@@ -44,9 +40,7 @@ logger.addHandler(logging.StreamHandler())
 
 
 def valid_date(str_date):
-    """
-        Is the string a valid date in the desired format?
-    """
+    """Is the string a valid date in the desired format?"""
     try:
         datetime.strptime(f"{str_date}/01", "%Y/%m/%d")
         return str_date
@@ -56,136 +50,65 @@ def valid_date(str_date):
 
 
 class OptionParser:
-    """
-    Custom option parser.
-    """
+    """Custom option parser."""
 
     def __init__(self):
-        "User based option parser"
-        desc = """
-This script create Event Count Plots based on the dbs data.
-It prints the path of the created image in std output.
-               """
+        """User based option parser"""
+        desc = "This script create Event Count Plots based on the dbs data. " \
+               "It prints the path of the created image in std output."
         self.parser = argparse.ArgumentParser(prog="DBS Event Count Plot", usage=desc)
-        self.parser.add_argument(
-            "--start_month",
-            action="store",
-            dest="start_month",
-            default=None,
-            help="""Start month in format yyyy/MM,
-            defaults to: end_month - 11 months (i.e. one year period)""",
-            type=valid_date,
-        )
-        self.parser.add_argument(
-            "--end_month",
-            action="store",
-            dest="end_month",
-            default=None,
-            help="End month (inclusive) in format yyyy/MM, defaults to previous month",
-            type=valid_date,
-        )
-        self.parser.add_argument(
-            "--output_folder",
-            action="store",
-            dest="output_folder",
-            default="./output",
-            help="output folder for the plots",
-        )
-        self.parser.add_argument(
-            "--output_format",
-            action="store",
-            dest="output_format",
-            choices=["pdf", "png", "jpg", "svg"],
-            default="png",
-            help="output format for the plots",
-        )
-        self.parser.add_argument(
-            "--colors_file",
-            action="store",
-            default=None,
-            type=argparse.FileType("r"),
-            help="""A json file either with a list of colors (strings), 
-            or with a mapping of label and color. 
-            If the file is not valid, or is not provided,
-            a default palette will be generated.""",
-        )
-        self.parser.add_argument(
-            "--tiers",
-            action="store",
-            nargs="*",
-            dest="tiers",
-            default=[
-                "GEN",
-                "GEN-SIM",
-                "GEN-RAW",
-                "GEN-SIM-RECO",
-                "AODSIM",
-                "MINIAODSIM",
-                "RAWAODSIM",
-                "NANOAODSIM",
-                "GEN-SIM-DIGI-RAW",
-                "GEN-SIM-RAW",
-                "GEN-SIM-DIGI-RECO",
-            ],
-            help="""
-            Space separed list of tiers to consider.
-            ej:
-            GEN GEN-SIM GEN-RAW GEN-SIM-RECO AODSIM MINIAODSIM RAWAODSIM NANOAODSIM GEN-SIM-DIGI-RAW GEN-SIM-RAW GEN-SIM-DIGI-RECO
-            """,
-        )
-        self.parser.add_argument(
-            "--remove",
-            action="store",
-            nargs="*",
-            dest="remove",
-            default="test,backfill,jobrobot,sam,bunnies,penguins".split(","),
-            help="""
-            Space separed list of case insensitive patterns.
-            The datasets which name match any of the patterns will be ignored.
-            """,
-        )
-        self.parser.add_argument(
-            "--skims",
-            action="store",
-            nargs="*",
-            dest="skims",
-            default=[],
-            help="""
-            Space separed list of skims. The skims are case sensitive.
-            Datasets which match the given skims will not be counted
-            as part of the tier, but in a separated group named <tier>/<skim>.
-            """,
-        )
-        self.parser.add_argument(
-            "--generate_csv",
-            action="store_true",
-            help="Create also a csv file with the plot data",
-            default=False,
-        )
-        self.parser.add_argument(
-            "--only_valid_files",
-            action="store_true",
-            help="Only consider valid files, default False",
-            default=False,
-        )
-        self.parser.add_argument(
-            "--attributes",
-            action="store",
-            dest="attributes",
-            help="matplotlib rc params file (JSON format)",
-            default=None,
-        )
-        self.parser.add_argument(
-            "--verbose",
-            action="store_true",
-            help="Prints additional logging info",
-            default=False,
-        )
+        self.parser.add_argument("--start_month", action="store", dest="start_month", default=None, type=valid_date,
+                                 help="Start month in format yyyy/MM, "
+                                      "defaults to: end_month - 11 months (i.e. one year period)")
+        self.parser.add_argument("--end_month", action="store", dest="end_month", default=None, type=valid_date,
+                                 help="End month (inclusive) in format yyyy/MM, defaults to previous month")
+        self.parser.add_argument("--output_folder", action="store", dest="output_folder", default="./output",
+                                 help="output folder for the plots", )
+        self.parser.add_argument("--output_format", action="store", dest="output_format",
+                                 choices=["pdf", "png", "jpg", "svg"], default="png",
+                                 help="output format for the plots")
+        self.parser.add_argument("--colors_file", action="store", default=None, type=argparse.FileType("r"),
+                                 help="A json file either with a list of colors (strings), "
+                                      "or with a mapping of label and color. "
+                                      "If the file is not valid, or is not provided, "
+                                      "a default palette will be generated.")
+        self.parser.add_argument("--tiers", action="store", nargs="*", dest="tiers",
+                                 default=[
+                                     "GEN",
+                                     "GEN-SIM",
+                                     "GEN-RAW",
+                                     "GEN-SIM-RECO",
+                                     "AODSIM",
+                                     "MINIAODSIM",
+                                     "RAWAODSIM",
+                                     "NANOAODSIM",
+                                     "GEN-SIM-DIGI-RAW",
+                                     "GEN-SIM-RAW",
+                                     "GEN-SIM-DIGI-RECO",
+                                 ],
+                                 help="Space separated list of tiers to consider. "
+                                      "eg: GEN GEN-SIM GEN-RAW GEN-SIM-RECO AODSIM MINIAODSIM RAWAODSIM "
+                                      "NANOAODSIM GEN-SIM-DIGI-RAW GEN-SIM-RAW GEN-SIM-DIGI-RECO")
+        self.parser.add_argument("--remove", action="store", nargs="*", dest="remove",
+                                 default="test,backfill,jobrobot,sam,bunnies,penguins".split(","),
+                                 help="Space separed list of case insensitive patterns. "
+                                      "The datasets which name match any of the patterns will be ignored.")
+        self.parser.add_argument("--skims", action="store", nargs="*", dest="skims", default=[],
+                                 help="Space separated list of skims. The skims are case sensitive. "
+                                      "Datasets which match the given skims will not be countedas part of the tier, "
+                                      "but in a separated group named <tier>/<skim>.")
+        self.parser.add_argument("--generate_csv", action="store_true", default=False,
+                                 help="Create also a csv file with the plot data")
+        self.parser.add_argument("--only_valid_files", action="store_true", default=False,
+                                 help="Only consider valid files, default False")
+        self.parser.add_argument("--attributes", action="store", dest="attributes", default=None,
+                                 help="matplotlib rc params file (JSON format)")
+        self.parser.add_argument("--verbose", action="store_true", default=False, help="Prints additional logging info")
 
 
 def plot_tiers_month(data, colors_file=None, attributes=None):
-    """
-    Create a stacked bar plot of events by data tier/month.
+    """Create a stacked bar plot of events by data tier/month.
+
     args:
         - data: pandas dataframe with the month, data_tier_name and nevents columns.
     """
@@ -246,23 +169,14 @@ def plot_tiers_month(data, colors_file=None, attributes=None):
     if attributes:
         for key, kwds in attributes.items():
             matplotlib.rc(key, **kwds)
-    pivot_df.plot.bar(stacked=True, color=colors, ax=plot_ax).legend(loc='center left',bbox_to_anchor=(1.0, 0.5))
+    pivot_df.plot.bar(stacked=True, color=colors, ax=plot_ax).legend(loc='center left', bbox_to_anchor=(1.0, 0.5))
     return fig
 
 
-def get_events_by_tier_month(
-    spark,
-    start_date,
-    end_date,
-    tiers_raw=None,
-    remove_raw=None,
-    skims_raw=None,
-    only_valid_files=False,
-    verbose=False,
-):
-    """
-        Generate a pandas dataframe containing data_tier_name, month, nevents
-        for the given time period.
+def get_events_by_tier_month(spark, start_date, end_date,
+                             tiers_raw=None, remove_raw=None, skims_raw=None, only_valid_files=False, verbose=False):
+    """Generate a pandas dataframe containing data_tier_name, month, nevents for the given time period.
+
         It will add virtual tiers based on the skims.
         args:
             - spark: Spark session
@@ -282,12 +196,12 @@ def get_events_by_tier_month(
         remove_raw = []
     tiers = "^({})$".format("|".join(["{}".format(tier.strip()) for tier in tiers_raw]))
     skims_rlike = (
-        ".*-({})-.*".format("|".join([l.strip() for l in skims_raw]))
+        ".*-({})-.*".format("|".join([elem.strip() for elem in skims_raw]))
         if skims_raw
         else "^$"
     )
     remove_rlike = (
-        ".*({}).*".format("|".join([l.strip().lower() for l in remove_raw]))
+        ".*({}).*".format("|".join([elem.strip().lower() for elem in remove_raw]))
         if remove_raw
         else "^$"
     )
@@ -362,20 +276,8 @@ def get_events_by_tier_month(
     return grouped.toPandas()
 
 
-def event_count_plot(
-    start_date,
-    end_date,
-    output_folder,
-    output_format,
-    tiers,
-    remove_patterns,
-    skims,
-    colors_file=None,
-    generate_csv=False,
-    only_valid_files=False,
-    attributes=None,
-    verbose=False,
-):
+def event_count_plot(start_date, end_date, output_folder, output_format, tiers, remove_patterns, skims,
+                     colors_file=None, generate_csv=False, only_valid_files=False, attributes=None, verbose=False):
     """
     args:
         - start_date: String with the start date in format yyyy/MM/dd
@@ -414,9 +316,7 @@ def event_count_plot(
 
 
 def main():
-    """
-    Main function
-    """
+    """Main function"""
     optmgr = OptionParser()
     opts = optmgr.parser.parse_args()
     if opts.verbose:
@@ -460,7 +360,7 @@ def main():
             attributes=attributes,
             verbose=opts.verbose,
         )
-    print(filename)
+        print(filename)
 
 
 if __name__ == "__main__":

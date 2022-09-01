@@ -1,75 +1,28 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Christian Ariza <christian.ariza AT gmail [DOT] com>
 """
-Generate datasets and plots for CRAB unique users count
-either by week of year or by month for a given calendar year.
+File        : condor_crab_unique_users.py
+Author      : Christian Ariza <christian.ariza AT gmail [DOT] com>
+Description : Generate datasets and plots for CRAB unique users count ...
+              ... either by week of year or by month for a given calendar year.
 """
+
+# system modules
+import click
 import os
-from datetime import datetime, timezone, timedelta
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, LongType, StringType, StructField, DoubleType
-from pyspark.sql.functions import (
-    regexp_extract,
-    date_format,
-    from_unixtime,
-    substring_index,
-    col,
-    input_file_name,
-    concat,
-    year,
-    month,
-    weekofyear,
-    lpad,
-    countDistinct,
-)
+
 import matplotlib.pyplot as plt
 import seaborn as sns
-import click
+from pyspark.sql.functions import from_unixtime, col, year, month, weekofyear, countDistinct
+from pyspark.sql.types import StructType, LongType, StringType, StructField
 
-_BASE_PATH = "/project/monitoring/archive/condor/raw/metric"
+# CMSSpark modules
+from CMSSpark.spark_utils import get_candidate_files, get_spark_session
+
+# global variables
+_BASE_HDFS_CONDOR = "/project/monitoring/archive/condor/raw/metric"
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 _VALID_BY = ("weekofyear", "month")
-
-
-def get_spark_session(yarn=True, verbose=False):
-    """
-        Get or create the spark context and session.
-    """
-    sc = SparkContext(appName="cms-crab-unique-users")
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
-
-
-def _get_candidate_files(start_date, end_date, spark, base=_BASE_PATH):
-    """
-    Returns a list of hdfs folders that can contain data for the given dates.
-    """
-    st_date = start_date - timedelta(days=1)
-    ed_date = end_date + timedelta(days=1)
-    days = (ed_date - st_date).days
-    pre_candidate_files = [
-        "{base}/{day}{{,.tmp}}".format(
-            base=base, day=(st_date + timedelta(days=i)).strftime("%Y/%m/%d")
-        )
-        for i in range(0, days)
-    ]
-    sc = spark.sparkContext
-    # The candidate files are the folders to the specific dates,
-    # but if we are looking at recent days the compaction procedure could
-    # have not run yet so we will considerate also the .tmp folders.
-    candidate_files = [
-        "/project/monitoring/archive/condor/raw/metric/{}{{,.tmp}}".format(
-            (st_date + timedelta(days=i)).strftime("%Y/%m/%d")
-        )
-        for i in range(0, days)
-    ]
-    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
-    URI = sc._gateway.jvm.java.net.URI
-    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
-    fs = FileSystem.get(URI("hdfs:///"), sc._jsc.hadoopConfiguration())
-    candidate_files = [url for url in candidate_files if fs.globStatus(Path(url))]
-    return candidate_files
 
 
 def _get_crab_condor_schema():
@@ -97,32 +50,25 @@ def _get_crab_condor_schema():
     return schema
 
 
-def get_crab_unique_users(
-    start_date,
-    end_date,
-    by="month",
-    verbose=False,
-    base=_BASE_PATH,
-    include_re="^T2_.*$",
-    exclude_re=".*_CERN.*",
-):
-    """
-    Query the hdfs data and returns a pandas dataframe with:
-    year, [weekofyear/month], count(DISTINCT CRAB_UserHN)
+def get_crab_unique_users(start_date, end_date, by="month", base=_BASE_HDFS_CONDOR,
+                          include_re="^T2_.*$", exclude_re=".*_CERN.*"):
+    """Query the hdfs data and returns a pandas dataframe
+
+    with: year, [weekofyear/month], count(DISTINCT CRAB_UserHN)
     args:
         - start_date datetime Start of the query period (RecordTime)
         - end_date datetime End of the query period
     """
     if by not in _VALID_BY:
-        raise ValueError("by must be one of %r." % _VALID_BY)
+        raise ValueError(f"by must be one of {_VALID_BY}")
     start = int(start_date.timestamp() * 1000)
     end = int(end_date.timestamp() * 1000)
-    spark = get_spark_session(yarn=True, verbose=verbose)
+    spark = get_spark_session(app_name="cms-crab-unique-users")
 
     dfs_raw = (
         spark.read.option("basePath", base)
         .json(
-            _get_candidate_files(start_date, end_date, spark, base=base),
+            get_candidate_files(start_date, end_date, spark, base=base),
             schema=_get_crab_condor_schema(),
         )
         .select("data.*")
@@ -173,49 +119,23 @@ def generate_plot(pdf, by, output_folder, filename):
 
 
 @click.command()
-@click.argument("start_date", nargs=1, type=click.DateTime(_VALID_DATE_FORMATS))
-@click.argument("end_date", nargs=1, type=click.DateTime(_VALID_DATE_FORMATS))
-@click.option(
-    "--by",
-    default="month",
-    type=click.Choice(_VALID_BY),
-    help="Either weekofyear or month",
-)
-@click.option(
-    "--include_re",
-    default="^T2_.*$",
-    help="Regular expression to select the sites to include in the plot",
-    show_default=True,
-)
-@click.option(
-    "--exclude_re",
-    default=".*_CERN.*",
-    help="Regular expression to select the sites to exclude of the plot",
-    show_default=True,
-)
-@click.option(
-    "--generate_plots",
-    default=False,
-    is_flag=True,
-    help="Additional to the csv, generate the plot(s)",
-)
+@click.option("--start_date", type=click.DateTime(_VALID_DATE_FORMATS))
+@click.option("--end_date", type=click.DateTime(_VALID_DATE_FORMATS))
+@click.option("--by", default="month", type=click.Choice(_VALID_BY), help="Either weekofyear or month")
+@click.option("--include_re", default="^T2_.*$", show_default=True,
+              help="Regular expression to select the sites to include in the plot")
+@click.option("--exclude_re", default=".*_CERN.*", show_default=True,
+              help="Regular expression to select the sites to exclude of the plot")
+@click.option("--generate_plots", default=False, is_flag=True, help="Additional to the csv, generate the plot(s)")
 @click.option("--output_folder", default="./output", help="local output directory")
-def main(
-    start_date,
-    end_date,
-    output_folder,
-    by="month",
-    generate_plots=False,
-    include_re=".*",
-    exclude_re="^$",
-):
+def main(start_date, end_date, output_folder, by="month", generate_plots=False, include_re=".*", exclude_re="^$"):
+    """This script will generate a dataset with the number of unique users of CRAB either by month or by weekofyear
     """
-        This script will generate a dataset with the number of unique users of CRAB
-        either by month or by weekofyear.
-    """
-    cp_pdf = get_crab_unique_users(
-        start_date, end_date, by, include_re=include_re, exclude_re=exclude_re
-    )
+    click.echo("Condor crab unique users")
+    click.echo(f"Input Arguments: start_date:{start_date}, end_date:{end_date}, by:{by}, include_re:{include_re}, "
+               f"exclude_re:{exclude_re}, generate_plots:{generate_plots}, output_folder:{output_folder}")
+
+    cp_pdf = get_crab_unique_users(start_date, end_date, by, include_re=include_re, exclude_re=exclude_re)
     os.makedirs(output_folder, exist_ok=True)
     filename = f"UniqueUsersBy_{by}_{start_date.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
     cp_pdf.to_csv(os.path.join(output_folder, f"{filename}.csv"))

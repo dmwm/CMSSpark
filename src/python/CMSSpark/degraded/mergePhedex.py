@@ -3,7 +3,7 @@
 # pylint: disable=
 """
 File       : process.py
-Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
+Author     : Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
 Description: script to parse phedex data produce on HDFS and create a new dataframe
 with the following attributes
 site,dateset,min_date,max_date,min_rdate,max_rdate,min_size,max_size,days
@@ -76,7 +76,7 @@ def update(rdict, giddict, line):
                 # fix the old dictionary first
                 keyDel = (site, dataset, rdate, lastGid)
                 if key in rdict:
-                    print 'surprising', key, keyDel
+                    print('surprising', key, keyDel)
                 rdict[key] = rdict[keyDel]
                 del rdict[keyDel]
 

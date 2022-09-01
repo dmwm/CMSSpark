@@ -3,7 +3,7 @@
 
 ENV_SETUP_SCRIPT="/cvmfs/sft.cern.ch/lcg/views/LCG_96/x86_64-centos7-gcc8-opt/setup.sh"
 HADOOP_ENV_SETUP_SCRIPT="/cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-swan-setconf.sh"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 # Validation:
 if ! klist -s; then
     (echo >&2 -e "This application requires a valid kerberos ticket")
@@ -33,7 +33,7 @@ fi
 # Check if CMSSpark is in the python path,
 # otherwise add it assuming the script is in the default location
 if ! python -c "import CMSSpark.rucio_daily" 2>/dev/null; then
-    export PYTHONPATH="$SCRIPT_DIR/../src/python:$PYTHONPATH"
+    export PYTHONPATH="$script_dir/../src/python:$PYTHONPATH"
 fi
 
 # Run the script
@@ -43,4 +43,4 @@ spark-submit \
     --num-executors 30 \
     --executor-memory 6g \
     --packages org.apache.spark:spark-avro_2.11:2.4.3 \
-    "$SCRIPT_DIR/../src/python/CMSSpark/rucio_daily.py" "$@"
+    "$script_dir/../src/python/CMSSpark/rucio_daily.py" "$@"
