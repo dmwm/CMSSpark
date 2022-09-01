@@ -29,6 +29,8 @@ set -e
 ##H   - OR, you can use totally different MongoDB instance
 ##H   - All of them will test safely. Of course use same test configs(DB name, collection names) in Go web service
 ##H
+TZ=UTC
+START_TIME=$(date +%s)
 script_dir="$(
     cd -- "$(dirname "$0")" >/dev/null 2>&1
     pwd -P
@@ -79,8 +81,6 @@ if [[ "$help" == 1 ]]; then
 fi
 
 # ------------------------------------------------------------------------------------------------------------- PREPARE
-TZ=UTC
-START_TIME=$(date +%s)
 # Define logs path for Spark imports which produce lots of info logs
 LOG_DIR="$WDIR"/logs/$(date +%Y%m%d)
 mkdir -p "$LOG_DIR"
@@ -119,9 +119,8 @@ function run_spark_and_mongo_import() {
     export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
     spark_submit_args=(
         --master yarn --conf spark.ui.showConsoleProgress=false --conf spark.sql.session.timeZone=UTC --conf "spark.driver.bindAddress=0.0.0.0"
-        --conf spark.executor.memory=8g --conf spark.driver.memory=8g
+        --driver-memory=8g --executor-memory=8g --packages org.apache.spark:spark-avro_2.12:3.2.1
         --conf "spark.driver.host=${K8SHOST}" --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
-        --packages org.apache.spark:spark-avro_2.12:3.2.1
     )
     py_input_args=(--hdfs_out_dir "$hdfs_out_dir")
 
@@ -182,4 +181,5 @@ mongoimport --drop --type=json --host "$ARG_MONGOHOST" --port "$ARG_MONGOPORT" -
 
 # -------------------------------------------------------------------------------------------------------------- FINISH
 # Print process wall clock time
-util4logi "All finished. Time spent: $(util_secs_to_human "$(($(date +%s) - START_TIME))")"
+duration=$(($(date +%s) - START_TIME))
+util4logi "all finished, time spent: $(util_secs_to_human $duration)"
