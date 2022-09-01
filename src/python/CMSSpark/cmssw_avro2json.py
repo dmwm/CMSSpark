@@ -1,68 +1,48 @@
 #!/usr/bin/env python
-#-*- coding: utf-8 -*-
-#pylint: disable=
+# -*- coding: utf-8 -*-
 """
-File       : cmssw_avro2json.py
-Author     : Valentin Kuznetsov <vkuznet AT gmail dot com>
-Description: convert avro file to json on HDFS. Here is usage example
-run_spark cmssw_avro2json.py --yarn --date "20200102" --verbose --fout /cms/tmp/cmssw/
+File        : cmssw_avro2json.py
+Author      : Valentin Kuznetsov <vkuznet AT gmail [DOT] com>
+Description : convert avro file to json on HDFS. Here is usage example
+Usage       : run_spark cmssw_avro2json.py --yarn --date "20200102" --verbose --fout /cms/tmp/cmssw/
 """
 
 # system modules
-import os
-import re
-import sys
 import time
-import json
-import argparse
+import click
 
-# pyspark modules
-from pyspark import SparkContext, StorageLevel
 from pyspark.sql import SQLContext
 
 # CMSSpark modules
+from CMSSpark import conf as c
 from CMSSpark.spark_utils import cmssw_tables, spark_context
 
-
-class OptionParser():
-    def __init__(self):
-        "User based option parser"
-        self.parser = argparse.ArgumentParser(prog='PROG')
-        self.parser.add_argument("--fin", action="store",
-            dest="fin", default="", help="Input file")
-        self.parser.add_argument("--date", action="store",
-            dest="date", default="", help='Select CMSSW data for specific date (YYYYMMDD)')
-        self.parser.add_argument("--yarn", action="store_true",
-            dest="yarn", default=False, help="run job on analytix cluster via yarn resource manager")
-        self.parser.add_argument("--fout", action="store",
-            dest="fout", default="", help="Output file")
-        self.parser.add_argument("--verbose", action="store_true",
-            dest="verbose", default=False, help="verbose output")
 
 def transform(rec):
     xdf = {}
     for key, val in rec.items():
         xdf[key.lower()] = val
-    tstamp = long(time.time())*1000
+    tstamp = int(time.time()) * 1000
     mid = "43b78d48-7509-e1cc-dc2c-a071d2cfdd7c"
-    metadata = {"_id":"43b78d48-7509-e1cc-dc2c-a071d2cfdd7c",
-        "hostname":"monit.cern.ch",
-        "kafka_timestamp": tstamp,
-        "partition":"1",
-        "producer":"convert_avro2json",
-        "timestamp": tstamp,
-        "topic":"cmssw_pop_raw_metric",
-        "type":"metric",
-        "type_prefix":"raw",
-        "version":"001"}
-    return {"data":xdf, "metadata": metadata}
+    metadata = {"_id": "43b78d48-7509-e1cc-dc2c-a071d2cfdd7c",
+                "hostname": "monit.cern.ch",
+                "kafka_timestamp": tstamp,
+                "partition": "1",
+                "producer": "convert_avro2json",
+                "timestamp": tstamp,
+                "topic": "cmssw_pop_raw_metric",
+                "type": "metric",
+                "type_prefix": "raw",
+                "version": "001"}
+    return {"data": xdf, "metadata": metadata}
 
-def convert(ctx, sqlContext, date, fin, fout, verbose):
-    "Helper function to convert fin (avro) to fout (json)"
+
+def convert(ctx, sql_context, date, fin, fout, verbose):
+    """Helper function to convert fin (avro) to fout (json)"""
     if fin:
-        pdf = cmssw_tables(ctx, sqlContext, hdir=fin, date=date)
+        pdf = cmssw_tables(ctx, sql_context, hdir=fin, date=date)
     else:
-        pdf = cmssw_tables(ctx, sqlContext, date=date)
+        pdf = cmssw_tables(ctx, sql_context, date=date)
     xdf = pdf['cmssw_df']
     if verbose:
         records = xdf.take(1)
@@ -75,20 +55,22 @@ def convert(ctx, sqlContext, date, fin, fout, verbose):
 
     # write out results back to HDFS, the fout parameter defines area on HDFS
     # it is either absolute path or area under /user/USERNAME
-    if  fout:
-        xdf = sqlContext.createDataFrame(new_rdd)
+    if fout:
+        xdf = sql_context.createDataFrame(new_rdd)
         xdf.write.format("json").save(fout)
 
-def main():
-    "Main function"
-    optmgr  = OptionParser()
-    opts = optmgr.parser.parse_args()
 
+@click.command()
+@c.common_options(c.ARG_FIN, c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+def main(fin, date, yarn, fout, verbose):
+    """Main function"""
+    click.echo('cmssw_avro2json')
+    click.echo(f'Input Arguments: fin:{fin}, date:{date}, yarn:{yarn}, fout:{fout}, verbose:{verbose}')
     # define spark context, it's main object which allow to communicate with spark
-    ctx = spark_context('cms', opts.yarn, opts.verbose)
-    sqlContext = SQLContext(ctx)
+    ctx = spark_context('cms', yarn, verbose)
+    sql_context = SQLContext(ctx)
+    convert(ctx, sql_context, date, fin, fout, verbose)
 
-    convert(ctx, sqlContext, opts.date, opts.fin, opts.fout, opts.verbose)
 
 if __name__ == '__main__':
     main()

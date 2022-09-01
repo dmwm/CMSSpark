@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-"""Create html pages for datasets' access times by joining Rucio's REPLICAS, DIDS and CONTENTS tables
+"""
+File        : rucio_datasets_last_access_ts.py
+Author      : Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+Description : Create html pages for datasets' access times by joining Rucio's REPLICAS, DIDS and CONTENTS tables
 
 ATTENTION: Please see explanations in CMSSpark/src/html/src/html/rucio_datasets_last_access_ts for Disk and Tape.
 """
 
+# system modules
 import pickle
 from datetime import datetime
 
@@ -13,8 +16,6 @@ import click
 import os
 import pandas as pd
 from dateutil.relativedelta import relativedelta
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, collect_list, concat_ws, greatest, lit, lower, when,
     avg as _avg,
@@ -25,18 +26,19 @@ from pyspark.sql.functions import (
     round as _round,
     sum as _sum,
 )
-
-from pyspark.sql.types import (
-    LongType,
-)
+from pyspark.sql.types import LongType
 
 # For Jupyter/SWAN notebook
 #    Do not use main function, customize it according to your needs. Leaving it to your taste.
 #    Delete "spark = get_spark_session()" line in main function
 #    Run: !git clone https://github.com/dmwm/CMSSpark.git
 #    Use: from CMSSpark.src.python.CMSSpark import schemas as cms_schemas  # Comment out next line
-from CMSSpark import schemas as cms_schemas
 
+# CMSSpark modules
+from CMSSpark import schemas as cms_schemas
+from CMSSpark.spark_utils import get_spark_session
+
+# global variables
 TODAY = datetime.today().strftime('%Y-%m-%d')
 HDFS_RUCIO_DIDS = '/project/awg/cms/rucio/{}/dids/part*.avro'.format(TODAY)
 HDFS_RUCIO_REPLICAS = '/project/awg/cms/rucio/{}/replicas/part*.avro'.format(TODAY)
@@ -47,13 +49,6 @@ TB_DENOMINATOR = 10 ** 12
 
 pd.options.display.float_format = '{:,.2f}'.format
 pd.set_option('display.max_colwidth', -1)
-
-
-def get_spark_session(yarn=True, verbose=False):
-    """Get or create the spark context and session.
-    """
-    sc = SparkContext(appName='cms-monitoring-rucio-datasets-last-access-ts')
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def get_n_months_ago_epoch_msec(n_months_ago):
@@ -391,7 +386,7 @@ def prep_pd_df_never_read_for_main_html(df_pd_main_datasets_never_read):
         'dataset', 'max_dataset_size_in_rses(TB)', 'min_dataset_size_in_rses(TB)', 'avg_dataset_size_in_rses(TB)',
         'sum_dataset_size_in_rses(TB)', 'last_create_time_of_dataset_in_all_rses', 'RSE(s)',
     ]]
-    # Filter datasets that their min datset size in RSE is less than 0.4TB
+    # Filter datasets that their min dataset size in RSE is less than 0.4TB
     df_pd_main_datasets_never_read = df_pd_main_datasets_never_read \
         .sort_values(by=['avg_dataset_size_in_rses(TB)'], ascending=False) \
         .reset_index(drop=True)
@@ -601,7 +596,7 @@ def main(is_disk=None, static_html_dir=None, output_dir=None, rses_pickle=None, 
 
     # Start Spark aggregations
     #
-    spark = get_spark_session()
+    spark = get_spark_session(app_name='cms-monitoring-rucio-datasets-last-access-ts')
     df_dbs_f_d = get_df_dbs_f_d(spark)
     df_replicas = get_df_replicas(spark, list(filtered_rses_id_name_map.values()))
     df_dids_files = get_df_dids_files(spark)

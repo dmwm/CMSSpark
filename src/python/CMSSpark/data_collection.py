@@ -1,68 +1,49 @@
 #!/usr/bin/env python
-#-*- coding: utf-8 -*-
-#pylint: disable=
-# Author: Justinas Rumševičius <justinas.rumsevicius AT gmail [DOT] com>
+# -*- coding: utf-8 -*-
 """
-Spark script to join data from DBS and AAA, CMSSW, EOS, JM streams on HDFS.
+File        : data_collection.py
+Author      : Justinas Rumševičius <justinas.rumsevicius AT gmail [DOT] com>
+Description : Spark script to join data from DBS and AAA, CMSSW, EOS, JM streams on HDFS.
 """
 
-import time
+# system modules
 import calendar
-import argparse
+import click
+import time
 
-from pyspark import SparkContext, StorageLevel
+from pyspark import StorageLevel
 from pyspark.sql import SQLContext
 
 # CMSSpark modules
+from CMSSpark import conf as c
 from CMSSpark.spark_utils import dbs_tables, cmssw_tables, aaa_tables, eos_tables, jm_tables
-from CMSSpark.spark_utils import spark_context, print_rows, split_dataset
 from CMSSpark.spark_utils import delete_hadoop_directory
+from CMSSpark.spark_utils import spark_context, split_dataset
 from CMSSpark.utils import elapsed_time
-
-class OptionParser():
-    def __init__(self):
-        "User based option parser"
-        desc = "Spark script to process DBS + [AAA, CMSSW, EOS, JM] metadata"
-
-        self.parser = argparse.ArgumentParser(prog='PROG', description=desc)
-
-        self.parser.add_argument("--inst", action="store",
-            dest="inst", default="global", help='DBS instance on HDFS: global (default), phys01, phys02, phys03')
-        self.parser.add_argument("--date", action="store",
-            dest="date", default="", help='Select data for specific date (YYYYMMDD)')
-        self.parser.add_argument("--yarn", action="store_true",
-            dest="yarn", default=False, help="Run job on analytics cluster via yarn resource manager")
-        self.parser.add_argument("--verbose", action="store_true",
-            dest="verbose", default=False, help="Verbose output")
-        self.parser.add_argument("--fout", action="store",
-            dest="fout", default="", help='Output directory path')
 
 
 def yesterday():
-
     # Current time - 24 hours
     return time.gmtime(time.time() - 60 * 60 * 24)
 
 
 def short_date_to_unix(date):
-
     # Convert short date string into UNIX timestamp (GMT)
     # Time (seconds) is multiplied by 1000 because Kibana uses milliseconds for timestamps.
     return int(calendar.timegm(time.strptime(date, '%Y/%m/%d'))) * 1000
 
 
 def short_date_string(date):
-
     # Convert given date into YYYY/MM/DD date format - 2017/07/05
     # Used by EOS and AAA
     # Date is with leading zeros (if needed)
 
-    if  not date:
+    if not date:
         # If no date is present, use yesterday as default
         date = time.strftime("%Y/%m/%d", yesterday())
         return date
 
-    if  len(date) != 8:
+    if len(date) != 8:
         raise Exception("Given date %s is not in YYYYMMDD format")
 
     year = date[:4]
@@ -72,16 +53,15 @@ def short_date_string(date):
 
 
 def long_date_string(date):
-
     # Convert given date into year=YYYY/month=MM/day=DD date format - year=2017/month=7/day=5
     # Used by CMSSW and JobMonitoring (CRAB)
     # Date is without leading zeros
 
-    if  not date:
+    if not date:
         date = time.strftime("year=%Y/month=%-m/date=%d", yesterday())
         return date
 
-    if  len(date) != 8:
+    if len(date) != 8:
         raise Exception("Given date %s is not in YYYYMMDD format")
 
     year = date[:4]
@@ -91,7 +71,6 @@ def long_date_string(date):
 
 
 def output_dataframe(fout, df, verbose=False):
-
     # Write out results back to HDFS
     # fout parameter defines area on HDFS
     # It is either absolute path or area under /user/USERNAME
@@ -117,7 +96,6 @@ def output_dataframe(fout, df, verbose=False):
 
 
 def run_query(query, sql_context, verbose=False):
-
     # This function runs query in given sql_context and outputs result to
     # directory specified by fout
 
@@ -136,7 +114,6 @@ def run_query(query, sql_context, verbose=False):
 
 
 def run_cmssw(date, fout, ctx, sql_context, verbose=False):
-
     if verbose:
         print('Starting CMSSW part')
 
@@ -200,8 +177,7 @@ def run_cmssw(date, fout, ctx, sql_context, verbose=False):
         print('Finished CMSSW part')
 
 
-def run_aaa(date, fout, ctx, sql_context, verbose=False):
-
+def run_aaa(date, fout, sql_context, verbose=False):
     if verbose:
         print('Starting AAA part')
 
@@ -261,8 +237,7 @@ def run_aaa(date, fout, ctx, sql_context, verbose=False):
         print('Finished AAA part')
 
 
-def run_eos(date, fout, ctx, sql_context, verbose=False):
-
+def run_eos(date, fout, sql_context, verbose=False):
     if verbose:
         print('Starting EOS part')
 
@@ -323,7 +298,6 @@ def run_eos(date, fout, ctx, sql_context, verbose=False):
 
 
 def run_jm(date, fout, ctx, sql_context, verbose=False):
-
     if verbose:
         print('Starting JobMonitoring part')
 
@@ -385,21 +359,19 @@ def run_jm(date, fout, ctx, sql_context, verbose=False):
         print('Finished JobMonitoring part')
 
 
-def main():
-    "Main function"
-    optmgr = OptionParser()
-    opts = optmgr.parser.parse_args()
-
-    print("Input arguments: %s" % opts)
+@click.command()
+@c.common_options(c.ARG_DATE, c.ARG_YARN, c.ARG_FOUT, c.ARG_VERBOSE)
+# Custom options
+@click.option("--inst", default="global", help="DBS instance on HDFS: global (default), phys01, phys02, phys03")
+def main(date, yarn, fout, verbose, inst):
+    """Main function"""
+    click.echo("data_collection")
+    click.echo("Spark script to process DBS + [AAA, CMSSW, EOS, JM] metadata")
+    click.echo(f'Input Arguments: date:{date}, yarn:{yarn}, verbose:{verbose}, fout:{fout}, inst:{inst}')
 
     start_time = time.time()
-    verbose = opts.verbose
-    yarn = opts.yarn
-    inst = opts.inst
-    date = opts.date
-    fout = opts.fout
 
-    if  inst.lower() in ['global', 'phys01', 'phys02', 'phys03']:
+    if inst.lower() in ['global', 'phys01', 'phys02', 'phys03']:
         inst = inst.upper()
     else:
         raise Exception('Unsupported DBS instance "%s"' % inst)
@@ -415,7 +387,7 @@ def main():
 
     aaa_start_time = time.time()
 
-    run_aaa(date, fout, ctx, sql_context, verbose)
+    run_aaa(date, fout, sql_context, verbose)
 
     aaa_elapsed_time = elapsed_time(aaa_start_time)
     cmssw_start_time = time.time()
@@ -425,7 +397,7 @@ def main():
     cmssw_elapsed_time = elapsed_time(cmssw_start_time)
     eos_start_time = time.time()
 
-    run_eos(date, fout, ctx, sql_context, verbose)
+    run_eos(date, fout, sql_context, verbose)
 
     eos_elapsed_time = elapsed_time(eos_start_time)
     jm_start_time = time.time()

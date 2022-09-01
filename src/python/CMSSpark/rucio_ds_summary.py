@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-#
-# This Spark job creates datasets summary results by aggregating Rucio&DBS tables and
-#    save result to HDFS directory as a source to MongoDB of go web service
-# It does not include RSE details part, each row represents a dataset and its aggregated results in RSEs.
+"""
+File        : rucio_ds_summary.py
+Author      : Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+Description : This Spark job creates datasets summary results by aggregating Rucio&DBS tables and
+                save result to HDFS directory as a source to MongoDB of go web service
 
+It does not include RSE details part, each row represents a dataset and its aggregated results in RSEs.
+"""
+
+# system modules
 import json
 import logging
 import os
@@ -14,8 +18,6 @@ import time
 from datetime import datetime
 
 import click
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, countDistinct, first, greatest, lit, lower, when,
     avg as _avg,
@@ -28,12 +30,17 @@ from pyspark.sql.functions import (
 )
 from pyspark.sql.types import LongType
 
+# CMSSpark modules
+from CMSSpark.spark_utils import get_spark_session
+
+# CMSMonitoring modules
 try:
     from CMSMonitoring.StompAMQ7 import StompAMQ7
 except ImportError:
     print("ERROR: Could not import StompAMQ")
     sys.exit(1)
 
+# global variables
 TODAY = datetime.today().strftime('%Y-%m-%d')
 
 # Rucio
@@ -55,13 +62,6 @@ STR_TYPE_COLUMNS = ['RseType', 'IsDatasetValid', 'TierName', 'PhysicsGroupName',
 
 # Null string type column values will be replaced with
 NULL_STR_TYPE_COLUMN_VALUE = 'UNKNOWN'
-
-
-def get_spark_session(yarn=True, verbose=False):
-    """Get or create the spark context and session.
-    """
-    sc = SparkContext(appName='cms-monitoring-rucio-datasets-for-mongo')
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def get_df_rses(spark):
@@ -391,10 +391,13 @@ def send_to_amq(data, confs, batch_size):
 @click.option("--creds", required=True, help="secrets/cms-rucio-dailystats/creds.json")
 @click.option("--amq_batch_size", type=click.INT, required=False, help="AMQ transaction batch size",
               default=100)
-def main(creds, amq_batch_size):
+@click.option("--test", is_flag=True, default=False, required=False,
+              help="It will send only 10 documents to ElasticSearch. "
+                   "[!Attention!] Please provide test/training AMQ topic.")
+def main(creds, amq_batch_size, test):
     """Main function that run Spark dataframe creations and save results to HDFS directory as JSON lines
     """
-    spark = get_spark_session()
+    spark = get_spark_session(app_name='cms-monitoring-rucio-datasets-for-mongo')
     # Set TZ as UTC. Also set in the spark-submit confs.
     spark.conf.set("spark.sql.session.timeZone", "UTC")
 
@@ -415,13 +418,26 @@ def main(creds, amq_batch_size):
     print('Schema:')
     df.printSchema()
     total_size = 0
-    # Iterate over list of dicts returned from spark
-    for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
-        part_size = len(part)
-        print(f"Length of partition: {part_size}")
-        send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size)
-        total_size += part_size
-    print(f"Total document size: {total_size}")
+    if test:
+        _topic = creds_json["topic"].lower()
+        if ("train" not in _topic) and ("test" not in _topic):
+            print(f"Test failed. Topic \"{_topic}\" is not training or test topic.")
+            sys.exit(1)
+
+        for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
+            part_size = len(part)
+            print(f"Length of partition: {part_size}")
+            send_to_amq(data=part[:10], confs=creds_json, batch_size=amq_batch_size)
+            print(f"Test successfully finished and sent 10 documents to {_topic} AMQ topic.")
+            sys.exit(0)
+    else:
+        # Iterate over list of dicts returned from spark
+        for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
+            part_size = len(part)
+            print(f"Length of partition: {part_size}")
+            send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size)
+            total_size += part_size
+        print(f"Total document size: {total_size}")
 
 
 if __name__ == '__main__':

@@ -93,9 +93,9 @@ def run(fout, date, yarn=None, verbose=None, inst='GLOBAL', limit=100):
             new_key = '%s_%s' % (key, instance)
             tables[new_key] = val
     
-    daf = reduce(lambda a,b: a.unionAll(b), [tables['daf_%s' % x] for x in instances])
-    ddf = reduce(lambda a,b: a.unionAll(b), [tables['ddf_%s' % x] for x in instances])
-    fdf = reduce(lambda a,b: a.unionAll(b), [tables['fdf_%s' % x] for x in instances])
+    daf = reduce(lambda a,b: a.union_all(b), [tables['daf_%s' % x] for x in instances])
+    ddf = reduce(lambda a,b: a.union_all(b), [tables['ddf_%s' % x] for x in instances])
+    fdf = reduce(lambda a,b: a.union_all(b), [tables['fdf_%s' % x] for x in instances])
 
     dbs_fdf_cols = ['f_dataset_id', 'f_file_size']
     dbs_ddf_cols = ['d_dataset_id', 'd_dataset', 'd_dataset_access_type_id']

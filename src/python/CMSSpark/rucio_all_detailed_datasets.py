@@ -1,16 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-#
-# This Spark job creates detailed datasets(in each RSEs) results by aggregating Rucio&DBS tables and
-#    save result to HDFS directory as a source to MongoDB of go web service
+"""
+File        : rucio_all_detailed_datasets.py
+Author      : Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
+Description : This Spark job creates detailed datasets(in each RSEs) results by aggregating Rucio&DBS tables and
+                save result to HDFS directory as a source to MongoDB of go web service
+"""
 
+# system modules
 from datetime import datetime
 
 import click
 import pandas as pd
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     array_distinct, col, collect_set, concat_ws, countDistinct, first, flatten, from_unixtime, greatest, lit, lower,
     when,
@@ -26,9 +27,13 @@ from pyspark.sql.types import (
     DecimalType
 )
 
+# CMSSpark modules
+from CMSSpark.spark_utils import get_spark_session
+
 pd.options.display.float_format = '{:,.2f}'.format
 pd.set_option('display.max_colwidth', None)
 
+# global variables
 TODAY = datetime.today().strftime('%Y-%m-%d')
 # Rucio
 HDFS_RUCIO_RSES = f'/tmp/cmsmonit/rucio_daily_stats-{TODAY}/RSES/part*.avro'
@@ -41,13 +46,6 @@ HDFS_DBS_BLOCKS = f'/tmp/cmsmonit/rucio_daily_stats-{TODAY}/BLOCKS/part*.avro'
 HDFS_DBS_FILES = f'/tmp/cmsmonit/rucio_daily_stats-{TODAY}/FILES/part*.avro'
 PROD_ACCOUNTS = ['transfer_ops', 'wma_prod', 'wmcore_output', 'wmcore_transferor', 'crab_tape_recall', 'sync']
 SYNC_PREFIX = 'sync'
-
-
-def get_spark_session(yarn=True, verbose=False):
-    """Get or create the spark context and session.
-    """
-    sc = SparkContext(appName='cms-monitoring-rucio-detailed-datasets-for-mongo')
-    return SparkSession.builder.config(conf=sc._conf).getOrCreate()
 
 
 def get_df_rses(spark):
@@ -255,7 +253,7 @@ def main(hdfs_out_dir):
     write_format = 'json'
     write_mode = 'overwrite'
 
-    spark = get_spark_session()
+    spark = get_spark_session(app_name='cms-monitoring-rucio-detailed-datasets-for-mongo')
     # Set TZ as UTC. Also set in the spark-submit confs.
     spark.conf.set("spark.sql.session.timeZone", "UTC")
 
