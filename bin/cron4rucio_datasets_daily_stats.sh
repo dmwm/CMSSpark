@@ -7,9 +7,7 @@ set -e
 ##H    We need to run Sqoop dumps and Spark job sequentially.
 ##H    We don't keep the historical Sqoop dumps, used in this job, by having deleting past days' HDFS data in new runs.
 ##H
-##H Usage:
-##H    cron4rucio_datasets_daily_stats.sh \
-##H        <keytab> value <cmsr> value <rucio> value <amq> value <cmsmonitoring> value <stomp> value <eos> value
+##H Usage: cron4rucio_datasets_daily_stats.sh <ARGS>
 ##H
 ##H Example :
 ##H    cron4rucio_datasets_daily_stats.sh \
@@ -17,7 +15,7 @@ set -e
 ##H        --cmsmonitoring ./CMSMonitoring.zip --stomp ./stomp-v700.zip --eos /eos/user/c/cmsmonit/www/rucio_test \
 ##H        --p1 32000 --p2 32001 --host $MY_NODE_NAME --wdir $WDIR
 ##H Arguments:
-##H   - keytab              : Kerberos auth file: secrets/kerberos
+##H   - keytab              : Kerberos auth file: secrets/keytab
 ##H   - cmsr                : DBS oracle user&pass secret file: secrets/sqoop
 ##H   - rucio               : Rucio oracle user&pass secret file: secrets/rucio
 ##H   - amq                 : AMQ credentials and configurations json file for /topic/cms.rucio.dailystats:
@@ -26,7 +24,7 @@ set -e
 ##H   - stomp               : stomp.py==7.0.0 module as zip to be sent to Spark nodes which has lower versions.
 ##H   - eos                 : Base EOS directory to write datasets statistics in html format.
 ##H   - p1, p2, host, wdir  : [ALL FOR K8S] p1 and p2 spark required ports(driver and blockManager), host is k8s node dns alias, wdir is working directory
-##H   - test                : will run only test job which will send only 10 documents to AMQ topic. Please give test/training AMQ credentials
+##H   - test                : Flag that will run only test job which will send only 10 documents to AMQ topic. Please give test/training AMQ credentials
 ##H References:
 ##H   - some features&logics are copied from sqoop_utils.sh and cms-dbs3-full-copy.sh
 ##H   - getopt ref: https://www.shellscript.sh/tips/getopt/index.html
@@ -36,6 +34,8 @@ set -e
 ##H   - Delete or comment out 'run_spark 2>&1' line and uncomment '##TEST##run_test 2>&1' line
 ##H   - That's all
 ##H
+TZ=UTC
+START_TIME=$(date +%s)
 script_dir="$(
     cd -- "$(dirname "$0")" >/dev/null 2>&1
     pwd -P
@@ -69,7 +69,7 @@ while [[ $# -gt 0 ]]; do
     --amq)           AMQ_JSON_CREDS=$2    ; shift 2 ;;
     --cmsmonitoring) CMSMONITORING_ZIP=$2 ; shift 2 ;;
     --stomp)         STOMP_ZIP=$2         ; shift 2 ;;
-    --eos)           PORT1=$2             ; shift 2 ;;
+    --eos)           EOS_DIR=$2             ; shift 2 ;;
     --p1)            PORT1=$2             ; shift 2 ;;
     --p2)            PORT2=$2             ; shift 2 ;;
     --host)          K8SHOST=$2           ; shift 2 ;;
@@ -84,8 +84,6 @@ if [[ "$help" == 1 ]]; then
     util_usage_help
 fi
 # ------------------------------------------------------------------------------------------------------------- PREPARE
-TZ=UTC
-START_TIME=$(date +%s)
 # Define logs path for Spark imports which produce lots of info logs
 LOG_DIR="$WDIR"/logs/$(date +%Y%m%d)
 mkdir -p "$LOG_DIR"
@@ -215,8 +213,7 @@ util4logi "dumps are finished. Time spent: $(util_secs_to_human "$(($(date +%s) 
 util4logi "spark job starts"
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 spark_submit_args=(
-    --master yarn --conf spark.ui.showConsoleProgress=false --conf "spark.driver.bindAddress=0.0.0.0"
-    --conf spark.executor.memory=8g --conf spark.driver.memory=8g
+    --master yarn --conf spark.ui.showConsoleProgress=false --conf "spark.driver.bindAddress=0.0.0.0" --driver-memory=8g --executor-memory=8g
     --conf "spark.driver.host=${K8SHOST}" --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
     --packages org.apache.spark:spark-avro_2.12:3.2.1 --py-files "${CMSMONITORING_ZIP},${STOMP_ZIP}"
 )
@@ -244,4 +241,6 @@ fi
 
 util4logi "last 10 lines of spark job log"
 tail -10 "${LOG_DIR}/spark-job.log"
-util4logi "all finished, time spent: $(util_secs_to_human "$(($(date +%s) - START_TIME))")"
+
+duration=$(($(date +%s) - START_TIME))
+util4logi "all finished, time spent: $(util_secs_to_human $duration)"

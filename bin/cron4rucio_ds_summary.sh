@@ -22,6 +22,8 @@ set -e
 ##H   - p1, p2, host, wdir : [ALL FOR K8S] p1 and p2 spark required ports(driver and blockManager), host is k8s node dns alias, wdir is working directory
 ##H   - test                : will run only test job which will send only 10 documents to AMQ topic. Please give test/training AMQ credentials
 ##H
+TZ=UTC
+START_TIME=$(date +%s)
 script_dir="$(
     cd -- "$(dirname "$0")" >/dev/null 2>&1
     pwd -P
@@ -67,8 +69,6 @@ if [[ "$help" == 1 ]]; then
     util_usage_help
 fi
 # ------------------------------------------------------------------------------------------------------------- PREPARE
-TZ=UTC
-START_TIME=$(date +%s)
 # Define logs path for Spark imports which produce lots of info logs
 LOG_DIR="$WDIR"/logs/$(date +%Y%m%d)
 mkdir -p "$LOG_DIR"
@@ -90,8 +90,7 @@ util4logi "authenticated with ${KERBEROS_USER} user's keytab"
 util4logi "spark job starts"
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 spark_submit_args=(
-    --master yarn --conf spark.ui.showConsoleProgress=false --conf "spark.driver.bindAddress=0.0.0.0"
-    --conf spark.executor.memory=8g --conf spark.driver.memory=8g
+    --master yarn --conf spark.ui.showConsoleProgress=false --conf "spark.driver.bindAddress=0.0.0.0" --driver-memory=8g --executor-memory=8g
     --conf "spark.driver.host=${K8SHOST}" --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
     --packages org.apache.spark:spark-avro_2.12:3.2.1 --py-files "${CMSMONITORING_ZIP},${STOMP_ZIP}"
 )
@@ -117,4 +116,6 @@ fi
 
 util4logi "last 10 lines of spark job log"
 tail -10 "${LOG_DIR}/spark-rucio_ds_summary.log"
-util4logi "all finished, time spent: $(util_secs_to_human "$(($(date +%s) - START_TIME))")"
+
+duration=$(($(date +%s) - START_TIME))
+util4logi "all finished, time spent: $(util_secs_to_human $duration)"
