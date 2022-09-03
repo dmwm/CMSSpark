@@ -94,7 +94,7 @@ Using a "colors_file" you can customize your plot. An example of the content of 
 
 ### cronjob (acronjob)
 
-The [cron_genCRSGplots.sh](../../bin/cron_genCRSGplots.sh) have been created to generate the yearly plots. It will accept two positional parameters, the base output folder and the image output format. Any additional parameter will be added to the python script call. 
+The [cron_genCRSGplots.sh](../../bin/degraded/cron_genCRSGplots.sh) have been created to generate the yearly plots. It will accept two positional parameters, the base output folder and the image output format. Any additional parameter will be added to the python script call. 
 
 To add it as a `acron` job you need to run `acrontab -e` and add an entry like this:
 

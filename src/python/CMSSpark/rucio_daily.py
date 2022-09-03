@@ -7,14 +7,14 @@ Description : Rucio daily dumps. More explanation required!
 """
 
 # system modules
-import argparse
-import time
 import logging
-from datetime import date, datetime
+import time
+from datetime import date
 
-from pyspark.sql import SparkSession
+import click
 import pyspark.sql.functions as fn
 import pyspark.sql.types as types
+from pyspark.sql import SparkSession
 
 # CMSSpark modules
 from CMSSpark import schemas
@@ -25,54 +25,10 @@ logger.addHandler(logging.StreamHandler())
 # global variables
 RUCIO_HDFS_FOLDER = "/project/awg/cms/rucio/{fdate}/replicas/part*.avro"
 CMS_DBS_HDFS_FOLDER = "/project/awg/cms/CMS_DBS3_PROD_GLOBAL/old/FILES/part-m-00000"
+_VALID_DATE_FORMATS = ["%Y-%m-%d"]
 
 
-def valid_date(str_date):
-    """Is the string a valid date in the desired format?"""
-    try:
-        datetime.strptime(str_date, "%Y-%m-%d")
-        return str_date
-    except ValueError:
-        msg = "Not a valid month: '{0}'.".format(str_date)
-        raise argparse.ArgumentTypeError(msg)
-
-
-class OptionParser:
-    """
-    Custom option parser.
-    """
-
-    def __init__(self):
-        """User based option parser"""
-        desc = """This script dumps Rucio daily data."""
-        self.parser = argparse.ArgumentParser(prog="Rucio daily dumps", usage=desc)
-        self.parser.add_argument(
-            "--fdate",
-            action="store",
-            dest="fdate",
-            default=None,
-            help="""
-            Date of the dbs dump file date. Eg. 2021-01-25.
-            Default is current day.
-            """,
-            type=valid_date,
-        )
-        self.parser.add_argument(
-            "--output_folder",
-            action="store",
-            dest="output_folder",
-            default=None,
-            help="HDFS path.",
-        )
-        self.parser.add_argument(
-            "--verbose",
-            action="store_true",
-            help="Prints additional logging info",
-            default=False,
-        )
-
-
-def run(rucio_path, dbs_path, output, verbose):
+def run(rucio_path, dbs_path, output):
     start = time.time()
     spark = SparkSession.builder.appName("rucio_dumps_test").getOrCreate()
     csvreader = spark.read.format("csv") \
@@ -109,25 +65,27 @@ def run(rucio_path, dbs_path, output, verbose):
     logger.info("Elapsed Time: {min} min, {sec} sec.".format(min=(end - start) // 60, sec=(end - start) % 60))
 
 
-def main():
+@click.command()
+@click.option("--fdate", required=False, default=date.today().strftime("%Y-%m-%d"),
+              type=click.DateTime(_VALID_DATE_FORMATS),
+              help="YYYY-MM-DD date of the dbs dump file date. Default is current day.")
+@click.option("--output", required=True, help="HDFS path: /cms/rucio_daily")
+@click.option("--verbose", is_flag=True, default=False, required=False, help="Prints additional logging info")
+def main(fdate, output, verbose):
     """Main function"""
-    verbose = False
-    optmgr = OptionParser()
-    opts = optmgr.parser.parse_args()
-    if opts.verbose:
+    click.echo('rucio_daily')
+    click.echo('This script dumps Rucio daily data')
+    click.echo(f'Input Arguments: fdate:{fdate}, output:{output}, verbose:{verbose}')
+    if verbose:
         logger.setLevel(logging.INFO)
-        verbose = True
-    if not opts.fdate:
-        opts.fdate = date.today().strftime("%Y-%m-%d")
-    if not opts.output_folder.endswith("/"):
-        opts.output_folder = opts.output_folder + "/"
-    rucio_path = RUCIO_HDFS_FOLDER.format(fdate=opts.fdate)
-    output = opts.output_folder + "rucio/" + opts.fdate.replace("-", "/") + "/"
-    logger.info("\n%s", opts)
+    if not output.endswith("/"):
+        output = output + "/"
+    rucio_path = RUCIO_HDFS_FOLDER.format(fdate=fdate)
+    output = output + "rucio/" + fdate.replace("-", "/") + "/"
     logger.info("Input rucio path: %s", rucio_path)
     logger.info("Input dbs path: %s", CMS_DBS_HDFS_FOLDER)
-    logger.info("Output path: %s\n", output)
-    run(rucio_path, CMS_DBS_HDFS_FOLDER, output, verbose)
+    logger.info("Output path: %s", output)
+    run(rucio_path, CMS_DBS_HDFS_FOLDER, output)
 
 
 if __name__ == "__main__":
