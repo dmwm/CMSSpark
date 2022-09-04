@@ -8,7 +8,7 @@ set -e
 ##H    cron4hpc_at_cms.sh --keytab ./keytab --output <DIR> --p1 32000 --p2 32001 --host $MY_NODE_NAME --wdir $WDIR
 ##H Arguments:
 ##H   - keytab             : Kerberos auth file: secrets/keytab
-##H   - output             : Output directory. If not given, $HOME/output_hpc_at_cms will be used. I.e /eos/user/c/cmsmonit/www/crabPop/data
+##H   - output             : Output directory. If not given, $HOME/output_hpc_at_cms will be used. I.e /eos/user/c/cmsmonit/www/hpc
 ##H   - p1, p2, host, wdir : [ALL FOR K8S] p1 and p2 spark required ports(driver and blockManager), host is k8s node dns alias, wdir is working directory
 ##H   - test               : Flag that will process 2 months of data instead of 1 year.
 ##H How to test:
@@ -71,13 +71,7 @@ util4logi "authenticated with Kerberos user: ${KERBEROS_USER}"
 
 # Check and set OUTPUT_DIR
 if [[ -n "$OUTPUT_DIR" ]]; then
-    if [ ! -d "$OUTPUT_DIR" ]; then
-        util4logw "output directory does not exist, creating..: ${OUTPUT_DIR}}"
-        if [ "$(mkdir -p "$OUTPUT_DIR" >/dev/null)" -ne 0 ]; then
-            util4loge "cannot create output directory: ${OUTPUT_DIR}"
-            exit 1
-        fi
-    fi
+    util_check_and_create_dir "$OUTPUT_DIR"
 else
     OUTPUT_DIR=$HOME/output_hpc_at_cms
 fi

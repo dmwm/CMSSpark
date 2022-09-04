@@ -156,14 +156,14 @@ def generate_top_datasets_plot(pdf, output_folder, filename):
 @click.option("--start_date", type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option("--end_date", type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option("--generate_plots", default=False, is_flag=True, help="Additional to the csv, generate the plot(s)")
-@click.option("--output", default="./output", help="local output directory")
-def main(start_date, end_date, output, generate_plots=False):
+@click.option("--output_folder", default="./output", help="local output directory")
+def main(start_date, end_date, output_folder, generate_plots=False):
     cp_pdf = get_crab_popularity_ds(start_date, end_date)
-    os.makedirs(output, exist_ok=True)
+    os.makedirs(output_folder, exist_ok=True)
     filename = f"CRAB_popularity_{start_date.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
-    cp_pdf.to_csv(os.path.join(output, f"{filename}.csv"))
+    cp_pdf.to_csv(os.path.join(output_folder, f"{filename}.csv"))
     if generate_plots:
-        generate_top_datasets_plot(cp_pdf, output, filename)
+        generate_top_datasets_plot(cp_pdf, output_folder, filename)
 
 
 if __name__ == "__main__":
