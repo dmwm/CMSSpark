@@ -73,13 +73,7 @@ util4logi "authenticated with Kerberos user: ${KERBEROS_USER}"
 
 # Check and set OUTPUT_DIR
 if [[ -n "$OUTPUT_DIR" ]]; then
-    if [ ! -d "$OUTPUT_DIR" ]; then
-        util4logw "output directory does not exist, creating..: ${OUTPUT_DIR}}"
-        if [ "$(mkdir -p "$OUTPUT_DIR" >/dev/null)" -ne 0 ]; then
-            util4loge "cannot create output directory: ${OUTPUT_DIR}"
-            exit 1
-        fi
-    fi
+    util_check_and_create_dir "$OUTPUT_DIR"
 else
     OUTPUT_DIR=$HOME/output
 fi
