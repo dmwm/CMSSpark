@@ -6,7 +6,7 @@ set -e
 ##H Usage: cron4hpc_usage.sh <ARGS>
 ##H Example :
 ##H    cron4hpc_usage.sh \
-##H        --keytab ./keytab --output /eos/user/c/cmsmonit/www/foo --url https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage \
+##H        --keytab ./keytab --output /eos/user/c/cmsmonit/www/hpc_usage --url https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage \
 ##H        --p1 32000 --p2 32001 --host $MY_NODE_NAME --wdir $WDIR
 ##H        --iterative
 ##H Arguments:
@@ -83,13 +83,8 @@ KERBEROS_USER=$(util_kerberos_auth_with_keytab "$KEYTAB_SECRET")
 util4logi "authenticated with Kerberos user: ${KERBEROS_USER}"
 
 # Requires kerberos ticket to reach the EOS directory
-if [ ! -d "$OUTPUT_DIR" ]; then
-    util4logw "EOS directory does not exist, creating..: ${OUTPUT_DIR}}"
-    if [ "$(mkdir -p "$OUTPUT_DIR" >/dev/null)" -ne 0 ]; then
-        util4loge "cannot create output directory: ${OUTPUT_DIR}"
-        exit 1
-    fi
-fi
+util_check_and_create_dir "$OUTPUT_DIR"
+
 # ----------------------------------------------------------------------------------------------------------------- RUN
 util4logi "output directory: ${OUTPUT_DIR}"
 util4logi "spark job starting.."
