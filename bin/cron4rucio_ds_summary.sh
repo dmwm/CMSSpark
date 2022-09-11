@@ -10,7 +10,7 @@ set -e
 ##H        <keytab> value <amq> value <cmsmonitoring> value <stomp> value
 ##H
 ##H Example :
-##H    cron4rucio_datasets_daily_stats.sh \
+##H    cron4rucio_ds_summary.sh \
 ##H        --keytab ./keytab --amq ./amq-creds.json --cmsmonitoring ./CMSMonitoring.zip --stomp ./stomp-v700.zip \
 ##H        --p1 32000 --p2 32001 --host $MY_NODE_NAME --wdir $WDIR
 ##H Arguments with values:
