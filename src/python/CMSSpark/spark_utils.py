@@ -784,7 +784,7 @@ def get_candidate_files(start_date, end_date, spark, base, day_delta=1):
     # but if we are looking at recent days the compaction procedure could
     # have not run yet so we will considerate also the .tmp folders.
     candidate_files = [
-        f"{base}/{(st_date + timedelta(days=i)).strftime('%Y/%m/%d')}{{,.tmp}}"
+        f"{base}/{(st_date + timedelta(days=i)).strftime('%Y/%m/%d')}"
         for i in range(0, days)
     ]
     fsystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
