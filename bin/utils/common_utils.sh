@@ -1,4 +1,6 @@
 #!/bin/bash
+# Utils for cron scripts
+# Author: Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
 
 #######################################
 # info log function
@@ -129,6 +131,24 @@ util_check_and_create_dir() {
             util4loge "cannot create output directory: ${dir}"
             exit 1
         fi
+    fi
+}
+
+#######################################
+# Util to check if PYTHONPATH is successfully defined as including CMSSpark
+#  Assumption:
+#    Either python or python3 alias should be exist in the system
+#  Returns:
+#    success: 0 and info log
+#    fail   : exits with exit-code 1
+#######################################
+util_check_pythonpath_for_cmsspark() {
+    # OR operation, if both python and python3 fails, it will fail
+    if python3 -c "import CMSSpark" >/dev/null 2>&1 || python -c "import CMSSpark" >/dev/null 2>&1; then
+        util4logi "CMSSpark is in PYTHONPATH"
+    else
+        util4log3 "CMSSpark is not in PYTHONPATH, exiting"
+        exit 1
     fi
 }
 
