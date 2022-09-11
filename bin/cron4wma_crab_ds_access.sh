@@ -95,8 +95,11 @@ util4logi "LOG_DIR: ${LOG_DIR}"
 # ------------------------------------------------------------------------------------------------------- RUN SPARK JOB
 # Required for Spark job in K8s
 util4logi "spark job starts"
+
+# Executor memory 16g is required because this spark job do heavy joins on 10 tables, half of them are big ones
 spark_submit_args=(
-    --master yarn --conf spark.ui.showConsoleProgress=false --conf "spark.driver.bindAddress=0.0.0.0" --driver-memory=8g --executor-memory=8g
+    --master yarn --conf spark.ui.showConsoleProgress=false --conf "spark.driver.bindAddress=0.0.0.0"
+    --driver-memory=8g --executor-memory=16g
     --conf "spark.driver.host=${K8SHOST}" --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
     --packages org.apache.spark:spark-avro_2.12:3.2.1 --py-files "${CMSMONITORING_ZIP},${STOMP_ZIP}"
 )
