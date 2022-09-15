@@ -11,53 +11,51 @@ addr=cms-comp-monit-alerts@cern.ch
 export PATH=$PATH:/usr/hdp/hadoop/bin
 export HADOOP_CONF_DIR=/etc/hadoop/conf
 
-# find out which date we should use to run the script
-year=`date +'%Y'`
-month=`date +'%m'`
-day=`date +'%d'`
 hdir=hdfs:///project/monitoring/archive/condor/raw/metric
-tmpDirs=`hadoop fs -ls ${hdir}/$year/$month | grep tmp$ | awk '{print $8}' | sed -e "s,\.tmp,,g" -e "s,${hdir},,g"`
-pat=`echo $tmpDirs | tr ' ' '|'`
-lastSnapshot=`hadoop fs -ls ${hdir}/$year/$month | egrep -v ${pat} | tail -1 | awk '{print $8}'`
-#echo "Last available snapshot"
-#echo $lastSnapshot
-date=`echo $lastSnapshot | sed -e "s,${hdir},,g" -e "s,/,,g"`
+currentMonth=$(date +'%Y/%m')
+previousMonth=$(date --date='1 month ago' +'%Y/%m')
+# List all folders from current and prev month, exclude .tmp folders in grep, sort them, get the latest non tmp folder
+lastSnapshot=$(hadoop fs -ls "${hdir}/${currentMonth}"/ "${hdir}/${previousMonth}/" | grep -v .tmp$ | grep $hdir | awk '{print $8}' | sort -nr | head -1)
+echo "Last available snapshot: ${lastSnapshot}"
+
+date=$(echo "$lastSnapshot" | sed -e "s,${hdir},,g" -e "s,/,,g")
 odir=hdfs:///cms/dbs_condor
 
 # set log area and environment
 me=$(dirname "$0")
-wdir=`echo $me | sed -e "s,/bin,,g"`
+wdir=$(echo $me | sed -e "s,/bin,,g")
 mkdir -p $wdir/logs
-log=$wdir/logs/dbs_condor-`date +%Y%m%d`.log
+log=$wdir/logs/dbs_condor-$(date +%Y%m%d).log
 export PYTHONPATH=$wdir/src/python:$PYTHONPATH
 export PATH=$wdir/bin:$PATH
 
-echo "Start job for $year/$month/$day ..." >> $log 2>&1
-hadoop fs -ls ${hdir}/$year/$month >> $log 2>&1
-echo "Date to run: $date" >> $log 2>&1
+echo "Start job for ${date+'%Y/%m/%d'} ..." >>$log 2>&1
+hadoop fs -ls ${hdir}/"$currentMonth"/ >>$log 2>&1
+echo "Date to run for (lastSnapshot): $date" >>$log 2>&1
 
 # check if we got a date to run
 if [ -z "${date}" ]; then
-    echo "No date to run" >> $log 2>&1
-    exit
-fi
-dotmp=`echo $date | grep tmp`
-if [ -n "${dotmp}" ]; then
-    echo "Date ends with tmp" >> $log 2>&1
+    echo "No date to run" >>$log 2>&1
     exit
 fi
 
-# create appropriate area in our output directory, do not include day dir since it will be create by a job
-hadoop fs -mkdir -p ${odir}/campaign/${year}/${month}
-hadoop fs -mkdir -p ${odir}/dataset/${year}/${month}
-hadoop fs -mkdir -p ${odir}/release/${year}/${month}
-hadoop fs -mkdir -p ${odir}/era/${year}/${month}
+dotmp=$(echo $date | grep tmp)
+if [ -n "${dotmp}" ]; then
+    echo "Date ends with tmp" >>$log 2>&1
+    exit
+fi
+
+# create appropriate area in our output directory, do not include day dir since it will be created by a job
+hadoop fs -mkdir -p ${odir}/campaign/"$currentMonth"
+hadoop fs -mkdir -p ${odir}/dataset/"$currentMonth"
+hadoop fs -mkdir -p ${odir}/release/"$currentMonth"
+hadoop fs -mkdir -p ${odir}/era/"$currentMonth"
 
 # check that we need to run
-oday=`echo $date | cut -c 7-8`
-check=`hadoop fs -ls ${odir}/dataset/${year}/${month}/${oday} 2> /dev/null`
+oday=$(echo $date | cut -c 7-8)
+check=$(hadoop fs -ls ${odir}/dataset/"$currentMonth"/${oday} 2>/dev/null)
 if [ -n "${check}" ]; then
-    echo "No dir to run" >> $log 2>&1
+    echo "No dir to run" >>$log 2>&1
     exit
 fi
 
@@ -65,7 +63,7 @@ fi
 cmd="$wdir/bin/run_spark dbs_condor.py --yarn --fout=$odir --date=$date"
 #echo "Will execute ..."
 #echo $cmd
-msg="Error while executing $cmd on $USER@`hostname` log at $log"
+msg="Error while executing $cmd on $USER@$(hostname) log at $log"
 set -e
 #trap "echo \"$msg\" | mail -s \"Cron alert run_spark dbs_condor\" \"$addr\"" ERR
 # Call func function on exit
@@ -76,15 +74,15 @@ function func() {
     if [ $status -ne 0 ]; then
         local msg="cron4dbs_condor completed with non zero status"
         if [ -f /data/cms/bin/amtool ]; then
-            local expire=`date -d '+1 hour' --rfc-3339=ns | tr ' ' 'T'`
+            local expire=$(date -d '+1 hour' --rfc-3339=ns | tr ' ' 'T')
             local urls="http://cms-monitoring.cern.ch:30093 http://cms-monitoring-ha1.cern.ch:30093 http://cms-monitoring-ha2.cern.ch:30093"
             for url in $urls; do
                 /data/cms/bin/amtool alert add cron4dbs_condor \
                     alertname=cron4dbs_condor severity=medium tag=cronjob alert=amtool \
                     --end=$expire \
                     --annotation=summary="$msg" \
-                    --annotation=date="`date`" \
-                    --annotation=hostname="`hostname`" \
+                    --annotation=date="$(date)" \
+                    --annotation=hostname="$(hostname)" \
                     --annotation=status="$status" \
                     --annotation=command="$cmd" \
                     --annotation=log="$log" \
@@ -96,4 +94,4 @@ function func() {
     fi
 }
 
-$cmd >> $log 2>&1
+$cmd >>$log 2>&1
