@@ -67,7 +67,7 @@ NULL_STR_TYPE_COLUMN_VALUE = 'UNKNOWN'
 def get_df_rses(spark):
     """Get pandas dataframe of RSES
     """
-    df_rses = spark.read.format("com.databricks.spark.avro").load(HDFS_RUCIO_RSES) \
+    df_rses = spark.read.format("avro").load(HDFS_RUCIO_RSES) \
         .filter(col('DELETED_AT').isNull()) \
         .withColumn('rse_id', lower(_hex(col('ID')))) \
         .withColumn('rse_tier', _split(col('RSE'), '_').getItem(0)) \
