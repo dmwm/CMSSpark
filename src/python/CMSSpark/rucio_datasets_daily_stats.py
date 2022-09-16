@@ -109,7 +109,7 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
     #                -- ==================  Prepare main Spark dataframes  ===========================
 
     # Get RSES id, name, type, tier, country, kind from RSES table dump
-    df_rses = spark.read.format("com.databricks.spark.avro").load(hdfs_paths['RSES']) \
+    df_rses = spark.read.format("avro").load(hdfs_paths['RSES']) \
         .filter(col('DELETED_AT').isNull()) \
         .withColumn('replica_rse_id', lower(_hex(col('ID')))) \
         .withColumnRenamed('RSE', 'rse') \
@@ -124,7 +124,7 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
         .select(['replica_rse_id', 'rse', 'rse_type', 'rse_tier', 'rse_country', 'rse_kind'])
 
     # Rucio Dataset(D) refers to dbs block, so we used DBS terminology from the beginning
-    df_contents_f_to_b = spark.read.format("com.databricks.spark.avro").load(hdfs_paths['CONTENTS']) \
+    df_contents_f_to_b = spark.read.format("avro").load(hdfs_paths['CONTENTS']) \
         .filter(col("SCOPE") == "cms") \
         .filter(col("DID_TYPE") == "D") \
         .filter(col("CHILD_TYPE") == "F") \
@@ -134,7 +134,7 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
 
     # Rucio Dataset(D) refers to dbs block; Rucio Container(C) refers to dbs dataset.
     # We used DBS terminology from the beginning
-    df_contents_b_to_d = spark.read.format("com.databricks.spark.avro").load(hdfs_paths['CONTENTS']) \
+    df_contents_b_to_d = spark.read.format("avro").load(hdfs_paths['CONTENTS']) \
         .filter(col("SCOPE") == "cms") \
         .filter(col("DID_TYPE") == "C") \
         .filter(col("CHILD_TYPE") == "D") \
