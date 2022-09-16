@@ -51,7 +51,7 @@ SYNC_PREFIX = 'sync'
 def get_df_rses(spark):
     """Create rucio RSES table dataframe with some rse tag calculations
     """
-    return spark.read.format("com.databricks.spark.avro").load(HDFS_RUCIO_RSES) \
+    return spark.read.format("avro").load(HDFS_RUCIO_RSES) \
         .filter(col('DELETED_AT').isNull()) \
         .withColumn('rse_id', lower(_hex(col('ID')))) \
         .withColumn('rse_tier', _split(col('RSE'), '_').getItem(0)) \
