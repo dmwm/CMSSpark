@@ -154,7 +154,8 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
         .withColumnRenamed('LOGICAL_FILE_NAME', 'file') \
         .withColumnRenamed('DATASET_ID', 'dbs_file_ds_id') \
         .withColumnRenamed('FILE_SIZE', 'dbs_file_size') \
-        .select(['file', 'dbs_file_ds_id', 'dbs_file_size'])
+        .withColumnRenamed('EVENT_COUNT', 'dbs_file_event_count') \
+        .select(['file', 'dbs_file_ds_id', 'dbs_file_size', 'dbs_file_event_count'])
 
     dbs_datasets = spark.read.format('avro').load(hdfs_paths['DATASETS'])
 
@@ -182,13 +183,13 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
 
     # Create enriched file df which adds dbs file size to replicas files. Left join select only replicas files
     df_files_enriched_with_dbs = df_replicas \
-        .join(dbs_files.select(['file', 'dbs_file_size']), ['file'], how='left') \
+        .join(dbs_files.select(['file', 'dbs_file_size', 'dbs_file_event_count']), ['file'], how='left') \
         .withColumn('joint_file_size',
                     when(col('replica_file_size').isNotNull(), col('replica_file_size'))
                     .when(col('dbs_file_size').isNotNull(), col('dbs_file_size'))
                     ) \
         .select(['file', 'replica_rse_id', 'replica_accessed_at', 'replica_created_at', 'lock_cnt',
-                 'replica_file_size', 'dbs_file_size', 'joint_file_size'])
+                 'replica_file_size', 'dbs_file_size', 'joint_file_size', 'dbs_file_event_count'])
 
     # -----------------------------------------------------------------------------------------------------------------
     #            -- ==================  only Rucio: Replicas and Contents  ======================= --
@@ -223,15 +224,16 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
 
     # Of course only files from Replicas processed, select only dbs related fields
     df_only_from_dbs = df_files_enriched_with_dbs \
-        .select(['file', 'replica_rse_id', 'dbs_file_size', 'replica_accessed_at', 'lock_cnt']) \
+        .select(['file', 'replica_rse_id', 'dbs_file_size', 'dbs_file_event_count', 'replica_accessed_at', 'lock_cnt']) \
         .join(df_dbs_ds_files, ['file'], how='left') \
         .filter(col('dbs_dataset').isNotNull()) \
-        .select(['file', 'dbs_dataset', 'replica_rse_id', 'dbs_file_size', 'replica_accessed_at',
-                 'is_d_name_from_dbs', 'lock_cnt'])
+        .select(['file', 'dbs_dataset', 'replica_rse_id', 'dbs_file_size', 'dbs_file_event_count',
+                 'replica_accessed_at', 'is_d_name_from_dbs', 'lock_cnt'])
 
     df_only_from_dbs = df_only_from_dbs \
         .groupby(['replica_rse_id', 'dbs_dataset']) \
         .agg(_sum(col('dbs_file_size')).alias('dbs_size'),
+             _sum(col('dbs_file_event_count')).alias('dbs_event_count'),
              _count(lit(1)).alias('dbs_n_files'),
              _sum(
                  when(col('replica_accessed_at').isNull(), 0).otherwise(1)
@@ -243,7 +245,7 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
                     when(col('dbs_locked_files') > 0, IS_DATASET_LOCKED[True])
                     .otherwise(IS_DATASET_LOCKED[False])
                     ) \
-        .select(['dbs_dataset', 'replica_rse_id', 'dbs_size', 'dbs_n_files', 'dbs_n_accessed_files',
+        .select(['dbs_dataset', 'replica_rse_id', 'dbs_size', 'dbs_event_count', 'dbs_n_files', 'dbs_n_accessed_files',
                  'is_d_name_from_dbs', 'dbs_locked_files', 'dbs_is_d_locked'])
 
     # Full outer join of Rucio and DBS to get all dataset-file maps
@@ -378,7 +380,7 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
                               'joint_last_created_at', 'joint_dbs_n_files', 'joint_rucio_n_files', 'joint_n_files',
                               'joint_n_accessed_files', 'all_f_in_dbs', 'all_f_in_rucio',
                               'rucio_size', 'rucio_n_files', 'rucio_n_accessed_files', 'rucio_has_ds_name',
-                              'dbs_size', 'dbs_n_files', 'dbs_n_accessed_files', 'dbs_has_ds_name',
+                              'dbs_size', 'dbs_event_count', 'dbs_n_files', 'dbs_n_accessed_files', 'dbs_has_ds_name',
                               'rucio_locked_files', 'rucio_is_d_locked', 'dbs_locked_files', 'dbs_is_d_locked',
                               'joint_locked_files', 'joint_is_d_locked'])
 
