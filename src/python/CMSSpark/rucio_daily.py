@@ -73,6 +73,9 @@ def run(rucio_path, dbs_path, output):
 @click.option("--verbose", is_flag=True, default=False, required=False, help="Prints additional logging info")
 def main(fdate, output, verbose):
     """Main function"""
+    # click.DateTime returns date with time
+    fdate = fdate.strftime("%Y-%m-%d")
+
     click.echo('rucio_daily')
     click.echo('This script dumps Rucio daily data')
     click.echo(f'Input Arguments: fdate:{fdate}, output:{output}, verbose:{verbose}')
