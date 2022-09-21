@@ -135,3 +135,31 @@ jobs:
           build-args: |
             CMSSPARK_TAG=${{ needs.init-job.outputs.git_tag }}
           tags: registry.cern.ch/cmsmonitoring/cmsmon-rucio-spark2mng:${{ needs.init-job.outputs.git_tag }}, registry.cern.ch/cmsmonitoring/cmsmon-rucio-spark2mng:latest
+
+  build-cmsmon-hdfs:
+    runs-on: ubuntu-latest
+    needs: [ init-job ]
+    if: (needs.init-job.outputs.action == 'all' || contains(needs.init-job.outputs.docker_individual_images, 'cmsmon-hdfs'))
+    name: Build cmsmon-hdfs
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref }}
+      - name: Get cmsmon-hdfs Dockerfile
+        run: |
+          curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/cmsmon-hdfs/Dockerfile
+      - name: Login to registry.cern.ch
+        uses: docker/login-action@v1
+        with:
+          registry: registry.cern.ch
+          username: ${{ secrets.CERN_LOGIN }}
+          password: ${{ secrets.CERN_TOKEN }}
+      - name: Publish cmsmon-hdfs image to registry.cern.ch
+        uses: docker/build-push-action@v2
+        with:
+          context: ./
+          file: ./Dockerfile
+          push: true
+          build-args: |
+            CMSSPARK_TAG=${{ needs.init-job.outputs.git_tag }}
+          tags: registry.cern.ch/cmsmonitoring/cmsmon-hdfs:${{ needs.init-job.outputs.git_tag }}, registry.cern.ch/cmsmonitoring/cmsmon-hdfs:latest

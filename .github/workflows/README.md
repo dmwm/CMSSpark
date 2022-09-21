@@ -24,6 +24,6 @@ management of GitHub actions.
         - `Build docker (cmsmon-rucio-ds) SOME COMMENTS`
         - `Build docker (cmsmon-rucio-spark2mng, condor-cpu-eff)`
         - `Build docker (cmsmon-rucio-spark2mng, condor-cpu-eff) foo foo`
-
+        - `Build docker (cmsmon-hdfs) to fix foo`
 
 > Docker images use `cmsmon-hadoop-base:spark3-latest` as base image. Therefore, that image:tag should be updated regularly (i.e. in each quarter).
