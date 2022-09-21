@@ -33,6 +33,7 @@
         /* First row bold */
         table td:nth-child(1) {
             font-weight: bold;
+            text-align: center;
         }
         /* Different background color for even and odd columns  */
         #dataframe tr:nth-child(even) {
@@ -60,18 +61,36 @@
     </style>
 </head>
 <body>
-    <div class="cms">
-        <img src="https://cds.cern.ch/record/1306150/files/cmsLogo_image.jpg"
-            alt="CMS" style="width: 5%; float:left">
-        <h3 style="width: 100%;">
-            CMS HPC Monthly CoreHrs
-        </h3>
-        <small>Last Update: ___UPDATE_TIME___</small>
-    </div>
-    <div class="w3-container" style="margin-left: 3%;">
-      <button style="font-size: 18px; background-color: white; color: black; border: 5px solid #f9ccac;" onclick="explainFunction()">
-        &darr; How to interpret this table &darr;
-      </button>
+    <div class="container-fluid no-padding" style="width: 100%">
+        <div class="row" style="background-color: #ECF2F9">
+            <div class="col-xs-6 col-sm-4">
+                <footer>
+                    <img alt="CERN CMS" src="https://cds.cern.ch/record/1306150/files/cmsLogo_image.jpg"
+                         width="60" height="60">
+                </footer>
+            </div>
+            <div class="col-xs-6 col-sm-4 align-self-center">
+                <h3> CMS HPC Monitoring of Core Hours </h3>
+            </div>
+            <small style="text-align: right;">Last Update: ___UPDATE_TIME___</small>
+            <div class="col-xs-6 col-sm-4 text-right">
+                <footer>
+                    <img alt="CERN CMS O&C" src="https://cds.cern.ch/record/1306150/files/cmsLogo_image.jpg" style="text-align: right;"
+                         width="60" height="60">
+                </footer>
+            </div>
+        </div>
+        <div id="navbar" class="collapse navbar-collapse">
+          <ul class="nav navbar-nav">
+            <li><div><a href="#" onclick="explainFunction()">&darr; How to interpret this table &darr;</a></div></li>
+            <li style="height: 100%;"> &nbsp; &#9551; &nbsp; </li>
+            <li style="text-align: center;"><div>YEARS: ____YEAR_PLOT_URLS____</div></li>
+            <li style="height: 100%;"> &nbsp; &nbsp; &nbsp; </li>
+            <li style="text-align: center;"><div>SITES: ____SITE_PLOT_URLS____</div></li>
+          </ul>
+        </div><!--/.nav-collapse -->
+        <div class="row" style="background-color: #ECF2F9">
+          </div>
     </div>
     <div id="explanations" style="display: none; margin-top: 2%;">
         <pre>
@@ -81,12 +100,7 @@
     This page shows the monthly CoreHrs sum of HPC sites.
         </pre>
 	</div>
-  <div>
-    ____SITE_PLOT_URLS____
-  </div>
-  <div>
-  ____YEAR_PLOT_URLS____
-  </div>
+
   <div>
 
   ____MAIN_BLOCK____
@@ -143,7 +157,7 @@
                 "orderCellsTop": true,
                 "dom": "fBrtpli",
                 "order": [[ 0, "asc" ]],
-                "pageLength" : 300,
+                "pageLength" : 3000,
                 "scrollX": false,
                 "oSearch": { "sSearch": searchString },
                 language: {
