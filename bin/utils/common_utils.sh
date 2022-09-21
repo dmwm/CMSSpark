@@ -212,3 +212,36 @@ util_setup_spark_lxplus7() {
     source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-swan-setconf.sh analytix 3.2 spark3
     export PATH="${PATH}:/usr/hdp/hadoop/bin/hadoop:/usr/hdp/spark3/bin:/usr/hdp/sqoop/bin"
 }
+
+#######################################
+# Util to send cronjob start metric to pushgateway
+#  Arguments:
+#    $1: cronjob name
+#  Usage:
+#    util_cron_send_start foo
+# PUSHGATEWAY_URL in test cluster
+# http://cmsmon-test-2tzv4rdqsho2-node-0:30091
+#######################################
+util_cron_send_start() {
+        cat <<EOF | curl --data-binary @- "$PUSHGATEWAY_URL"/metrics/job/cmsmon-cron/instance/"$(hostname)"
+        # TYPE cmsmon_cron_start gauge
+        # HELP cmsmon_cron_start cronjob START Unix time
+        cmsmon_cron_start{cron_name="${1}"} $(date +%s)
+EOF
+}
+
+#######################################
+# Util to send cronjob end metric to pushgateway
+#  Arguments:
+#    $1: cronjob name
+#    $2: cronjob exit status
+#  Usage:
+#    util_cron_send_start foo 210
+#######################################
+function send_end() {
+        cat <<EOF | curl --data-binary @- "$PUSHGATEWAY_URL"/metrics/job/cmsmon-cron/instance/"$(hostname)"
+        # TYPE cmsmon_cron_end gauge
+        # HELP cmsmon_cron_end cronjob END Unix time
+        cmsmon_cron_end{cron_name="${1}",status="${2}"} $(date +%s)
+EOF
+}
