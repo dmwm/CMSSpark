@@ -75,3 +75,13 @@ py_input_args=(--verbose --output "$OUTPUT_DIR" --fdate "$current_date")
 
 # log all to stdout
 spark-submit "${spark_submit_args[@]}" "$script_dir/../src/python/CMSSpark/rucio_daily.py" "${py_input_args[@]}" 2>&1
+
+# ---------------------------------------------------------------------------------------------------------------- TEST
+# This cron job runs daily, so last modification date of the output should be within 12 hours
+time_threshold=43200
+# Average directory size is 80 Mb, so 50 Mb can be given as the size threshold
+size_threshold=50000000
+current_date_hdfs="$(date +%Y/%m/%d)"
+
+/bin/bash "$script_dir/utils/check_utils.sh" check_hdfs "$OUTPUT_DIR/rucio/$current_date_hdfs" $time_threshold $size_threshold
+# Running commands after this point will change the exit code.

@@ -94,4 +94,23 @@ function func() {
     fi
 }
 
-$cmd >>$log 2>&1
+$cmd >> $log 2>&1
+
+# ---------------------------------------------------------------------------------------------------------------- TEST
+# This cron job runs daily, so last modification date of the output should be within 12 hours
+time_threshold=43200
+# Size thresholds
+campaign=200000000 # (20MB)
+dataset=200000000 # (20MB)
+era=100000 # (100KB)
+release=100000 # (100KB)
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+date_hdfs=$(date -d "yesterday" '+%Y/%m/%d')
+
+set -e
+/bin/bash  "$script_dir/utils/check_utils.sh" check_hdfs "$odir/campaign/$date_hdfs" $time_threshold $campaign
+/bin/bash  "$script_dir/utils/check_utils.sh" check_hdfs "$odir/dataset/$date_hdfs" $time_threshold $dataset
+/bin/bash  "$script_dir/utils/check_utils.sh" check_hdfs "$odir/era/$date_hdfs" $time_threshold $era
+/bin/bash  "$script_dir/utils/check_utils.sh" check_hdfs "$odir/release/$date_hdfs" $time_threshold $release
+# Running commands after this point will change the exit code.

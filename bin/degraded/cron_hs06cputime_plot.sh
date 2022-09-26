@@ -39,3 +39,16 @@ ln -s -f "$OUTPUT_DIR/T1/HS06CpuTimeHr_month_$(date -d "$START_DATE" +%Y%m%d)-$(
 ln -s -f "$OUTPUT_DIR/T1/HS06CpuTimeHr_month_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" "$OUTPUT_DIR/T1/HS06CpuTimeHr_month_latest.png"
 ln -s -f "$OUTPUT_DIR/T1/HS06CpuTimeHr_weekofyear_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).csv" "$OUTPUT_DIR/T1/HS06CpuTimeHr_weekofyear_latest.csv"
 ln -s -f "$OUTPUT_DIR/T1/HS06CpuTimeHr_weekofyear_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" "$OUTPUT_DIR/T1/HS06CpuTimeHr_weekofyear_latest.png"
+
+
+# ----- CRON SUCCESS CHECK -----
+# This cron job generates a plot monthly, so time treshold should be 32 days
+TIME_TRESHOLD=2764800
+# 30 14 19 * * /bin/bash $HOME/CMSSpark/bin/cron_hs06cputime_plot.sh /eos/user/c/cmsmonit/www/hs06cputime
+SIZE_TRESHOLD=10000 # (10KB)
+
+trap 'EC'=210 ERR
+/bin/bash "$SCRIPT_DIR"/utils/check_utils.sh check_file_status "$OUTPUT_DIR/T1/HS06CpuTimeHr_month_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" $TIME_TRESHOLD $SIZE_TRESHOLD || EC=$?
+/bin/bash "$SCRIPT_DIR"/utils/check_utils.sh check_file_status "$OUTPUT_DIR/T2/HS06CpuTimeHr_month_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" $TIME_TRESHOLD $SIZE_TRESHOLD || EC=$?
+exit $EC
+# RUNNING COMMANDS AFTER THIS POINT WILL CHANGE EXIT CODE
