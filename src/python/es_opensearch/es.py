@@ -9,7 +9,6 @@ Description : ES API for OpenSearch and ES8+.
 import datetime
 import json
 import logging
-import socket
 import sys
 import time
 
@@ -22,7 +21,7 @@ class EsInterface(object):
     It uses port 443 HTTPS port and url should end with /es, see `prepare_hostname` function
     """
     # Logging format
-    logging_fmt = '[%(asctime)s' + time.strftime('%z') + '] [%(levelname)s] %(message)s'
+    logging_fmt = '[%(asctime)s' + time.strftime('%z') + '] [ES] [%(levelname)s] %(message)s'
 
     # This producer adds this reserved timestamp key to all documents
     metadata_time_field = "EsProducerTime"
@@ -54,30 +53,30 @@ class EsInterface(object):
         if not es_conf:
             self.logger.error("Failed to create ElasticSearch interface, please provide es-conf parameter")
             sys.exit(1)
-        domain = socket.getfqdn().split(".", 1)[-1]
-        if domain == "cern.ch":
-            try:
-                with open(es_conf) as f:
-                    es_creds = json.load(f)
-            except Exception as e:
-                self.logger.error("Failed to read es_conf: %s - err: %s", es_conf, str(e))
-                sys.exit(1)
 
-            if any((key not in es_creds) for key in ["username", "password", "hostname"]):
-                self.logger.error("Not all required keys are provided: username, password, hostname. Conf file: %s",
-                                  es_conf)
-                sys.exit(1)
-            hostname = self.prepare_hostname(es_creds["hostname"])
-            self.logger.info("ElasticSearch host: %s", hostname)
-            self.handle = elasticsearch.Elasticsearch(
-                hosts=[hostname],
-                http_auth=(es_creds["username"], es_creds["password"]),
-                verify_certs=True,
-                ca_certs="/etc/pki/tls/certs/ca-bundle.trust.crt",
-            )
-        else:
-            # Default localhost ES connection interface
-            self.handle = elasticsearch.Elasticsearch()
+        try:
+            with open(es_conf) as f:
+                es_creds = json.load(f)
+        except Exception as e:
+            self.logger.error("Failed to read es_conf: %s - err: %s", es_conf, str(e))
+            sys.exit(1)
+
+        self.logger.info("Will be connected to ElasticSearch host: %s", es_creds['hostname'])
+        self.logger.info("ElasticSearch py version:%s", str(elasticsearch.__version__))
+
+        if any((key not in es_creds) for key in ["username", "password", "hostname"]):
+            self.logger.error("Not all required keys are provided: username, password, hostname. Conf file: %s",
+                              es_conf)
+            sys.exit(1)
+
+        hostname = self.prepare_hostname(es_creds["hostname"])
+        self.logger.info("ElasticSearch host: %s", hostname)
+        self.handle = elasticsearch.Elasticsearch(
+            hosts=[hostname],
+            http_auth=(es_creds["username"], es_creds["password"]),
+            verify_certs=True,
+            ca_certs="/etc/pki/tls/certs/ca-bundle.trust.crt",
+        )
 
     @staticmethod
     def prepare_hostname(hostname):
@@ -130,6 +129,7 @@ class EsInterface(object):
             }
         }
         mappings = {"dynamic_templates": [dynamic_string_template], "properties": props}
+        self.logger.debug("Mappings will be put: %s", str(mappings))
         return mappings
 
     @staticmethod
@@ -223,11 +223,11 @@ class EsInterface(object):
             try:
                 if settings and mappings:
                     self.handle.indices.put_mapping(mappings, index=index)
-                    self.handle.indices.put_settings(index=index, settings=settings)
+                    self.handle.indices.put_settings(settings, index=index)
                 elif mappings:
                     self.handle.indices.put_mapping(mappings, index=index)
                 elif settings:
-                    self.handle.indices.put_settings(index=index, settings=settings)
+                    self.handle.indices.put_settings(settings, index=index)
                 else:
                     return
             except Exception as e:
@@ -237,6 +237,8 @@ class EsInterface(object):
 
     def prepare_daily_index(self, index_template, **kwargs):
         """Special function to create index, settings and mappings
+
+        Supports only one flat data, not nested data.
 
         Args:
             index_template:
@@ -284,37 +286,43 @@ class EsInterface(object):
         self.put_mapping_and_setting(index=idx, mappings=mappings, settings=settings)
         self.logger.info("Index mappings and settings are ready: %s", idx)
 
-    def post_bulk(self, index, data, metadata, is_daily_index, **kwargs):
+    @staticmethod
+    def drop_nulls_in_dict(d):  # d: dict
+        """Drops the dict key if the value is None
+
+        ES mapping does not allow None values and drops the document completely.
+        """
+        return {k: v for k, v in d.items() if v is not None}  # dict
+
+    @staticmethod
+    def to_chunks(data, batch_size):
+        length = len(data)
+        for i in range(0, length, batch_size):
+            yield data[i:i + batch_size]
+
+    def post_bulk(self, index, data, metadata, is_daily_index, batch_size=100):
         """Send data
-
-        If index is daily and mapping/setting provided in kwargs, it creates mapping and settings for daily index.
-        This option should be considered.
-
-        ATTENTION: If index template is used, do not use kwargs to set mappings.
 
         Args:
             index: index template name if is_daily_index True, otherwise full index name
             data: list
             is_daily_index: if it is True, daily index will be created from `index`
             metadata: general metadata for documents
+            batch_size: chunk size
         """
         if is_daily_index:
             idx = self.get_daily_index(time.time(), index)
-            if kwargs:
-                self.prepare_daily_index(index_template=index, **kwargs)
         else:
             idx = index
 
         # Check and create daily index
         self.create_index(idx)
 
-        # Check and create daily index
-        self.create_index(idx)
-
         data = self.prepare_body(idx, data, metadata)
         try:
-            res = self.handle.bulk(body=data, index=idx, request_timeout=60)
-            if res.get("errors"):
-                return self.parse_errors(res)
+            for chunk in self.to_chunks(data, batch_size):
+                res = self.handle.bulk(body=chunk, index=idx, request_timeout=60)
+                if res.get("errors"):
+                    self.logger.error(self.parse_errors(res))
         except Exception as e:
             self.logger.error("Bulk post finished with error: %s", str(e))
