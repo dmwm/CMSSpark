@@ -36,7 +36,7 @@ from CMSSpark.spark_utils import get_spark_session, get_candidate_files
 _BASE_HDFS_CONDOR = '/project/monitoring/archive/condor/raw/metric'
 
 # Bottom to top bar stack order which set same colors for same site always
-_HPC_SITES_STACK_ORDER = ['ANL', 'BSC', 'CINECA', 'HOREKA', 'NERSC', 'OSG', 'PSC', 'RWTH', 'SDSC', 'TACC']
+_HPC_SITES_STACK_ORDER = ['ANL', 'ANVIL', 'BSC', 'CINECA', 'HOREKA', 'NERSC', 'OSG', 'PSC', 'RWTH', 'SDSC', 'TACC']
 
 # For new sites, please check list sizes
 DISCRETE_COLOR_MAP = {site: px.colors.qualitative.Pastel[i] for i, site in enumerate(_HPC_SITES_STACK_ORDER)}
@@ -90,6 +90,7 @@ def get_raw_df(spark, start_date, end_date):
             (col("RecordTime") < (end_date.replace(tzinfo=timezone.utc).timestamp() * 1000))
         ).filter(
             (col('Site') == 'T3_US_ANL') |  # ANL
+            (col('Site') == 'T3_US_Anvil') |  # ANVIL
             (col('Site') == 'T3_US_NERSC') |  # NERSC
             (col('Site') == 'T3_US_OSG') |  # OSG
             (col('Site') == 'T3_US_PSC') |  # PSC
@@ -107,6 +108,7 @@ def get_raw_df(spark, start_date, end_date):
         ).withColumn(
             'site_name',
             when(col('Site') == 'T3_US_ANL', lit("ANL"))
+            .when(col('Site') == 'T3_US_Anvil', lit("ANVIL"))
             .when(col('Site') == 'T3_US_NERSC', lit("NERSC"))
             .when(col('Site') == 'T3_US_OSG', lit("OSG"))
             .when(col('Site') == 'T3_US_PSC', lit("PSC"))
