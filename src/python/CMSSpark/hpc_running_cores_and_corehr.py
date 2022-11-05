@@ -48,6 +48,10 @@ _SITES_HTML_DIR = 'site_htmls'
 _YEARS_DIR = 'years'
 _PICKLE_DIR = 'pickles'
 
+# Producer cron prediod is in each 12 minutes. All time calculations are arranged according to this value.
+PRODUCER_MINUTE_PERIOD = 12
+NUMBER_OF_BINS_IN_DAY = (60 * 24) / PRODUCER_MINUTE_PERIOD
+
 
 def _get_schema():
     """Returns only required fields"""
@@ -134,7 +138,7 @@ def get_raw_df(spark, start_date, end_date):
 # ---------------------------------------------------------------------------------------------------------------------
 
 def get_daily_template_dataframe(spark, start_date, end_date):
-    """Creates a dummy dataframe from rows of all montbs and days between start and end time
+    """Creates a dummy dataframe from rows of all months and days between start and end time
 
     This is important to fill empty days and months with 0 values.
     """
@@ -166,7 +170,7 @@ def get_pd_df_core_hours_sum_of_daily(spark, raw_df, start_date, end_date):
 
     # Calculate sums
     df_spark_core_hr_daily = df_core_hr.groupby(['Site', 'month', 'dayofmonth']) \
-        .agg(_round(_sum("CoreHr")).alias("sum CoreHr"))
+        .agg(_round(_sum("CoreHr"), 1).alias("sum CoreHr"))
 
     # Fillna is important to fill all empty days with 0
     df_core_hr_daily = df_day_template.join(df_spark_core_hr_daily, ['Site', 'month', 'dayofmonth'], 'left') \
@@ -181,41 +185,40 @@ def get_core_hours_monthly_df_from_daily(df):
 
 
 def get_pd_df_running_cores_avg_of_daily(spark, raw_df, start_date, end_date):
-    """Prepare running cores: unique 12 minutes results
+    """Prepare running cores: unique 12(currently) minutes average results
 
     Running cores calculation is based on finding sum results in each 12 minutes which is producer frequency
     Then, getting averages over days or months
     """
     df_day_template = get_daily_template_dataframe(spark, start_date, end_date)
 
-    sec_12_min = 60 * 12
-    time_window_12m = from_unixtime(unix_timestamp('date') - unix_timestamp('date') % sec_12_min)
+    producer_seconds_period = 60 * PRODUCER_MINUTE_PERIOD
+    # Currently 12 minutes windows
+    time_window = from_unixtime(unix_timestamp('date') - unix_timestamp('date') % producer_seconds_period)
 
     # 1st group-by includes GlobaljobId to get running cores of GlobaljobId without duplicates in each 12 minutes window
-    # 2nd group-by gets sum of RequestCpus in 12 minutes window
-    # 3rd group-by gets avg of RequestCpus(12 minutes window) for each site for each day
+    # 2nd group-by gets sum of RequestCpus in a day
+    #   and then divide sum to NUMBER_OF_BINS_IN_DAY value to calculate the 12 minutes average.
     df_spark_running_cores_daily = raw_df \
         .filter(col('Status') == 'Running') \
-        .withColumn('12m_window', time_window_12m) \
-        .groupby(['Site', 'month', 'dayofmonth', '12m_window', 'GlobalJobId']
-                 ).agg(_max(col('RequestCpus')).alias('running_cores_of_single_job_in_12m')) \
-        .groupby(['Site', 'month', 'dayofmonth', '12m_window']
-                 ).agg(_sum(col('running_cores_of_single_job_in_12m')).alias('running_cores_12m_sum')) \
+        .withColumn('time_window', time_window) \
+        .groupby(['Site', 'month', 'dayofmonth', 'time_window', 'GlobalJobId']
+                 ).agg(_max(col('RequestCpus')).alias('running_cores_of_single_job_in_window')) \
         .groupby(['Site', 'month', 'dayofmonth']
-                 ).agg(_round(_avg(col('running_cores_12m_sum'))).alias('running_cores_avg_over_12m_sum'))
+                 ).agg(_round(_sum(col('running_cores_of_single_job_in_window')) / NUMBER_OF_BINS_IN_DAY, 1).alias(
+        'running_cores_daily_avg'))
 
     # Fillna is important to fill all empty days with 0
     df_running_cores_daily = df_day_template \
         .join(df_spark_running_cores_daily, ['Site', 'month', 'dayofmonth'], 'left') \
         .fillna(0).toPandas()
-
     return df_running_cores_daily
 
 
 def get_running_cores_monthly_df_from_daily(df):
     """Creates monthly df from daily one"""
     # group-by gets avg of RequestCpus(12 minutes window) for each site for each month
-    return df.groupby(['Site', 'month']).agg({'running_cores_avg_over_12m_sum': np.average}).reset_index()
+    return df.groupby(['Site', 'month']).agg({'running_cores_daily_avg': np.average}).reset_index()
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -258,8 +261,8 @@ def create_plot_of_daily_avg_of_running_cores(df_month, month, output_dir, url_p
     csv_fname = month + '_running_cores.csv'
     csv_output_path = os.path.join(os.path.join(output_dir, _CSV_DIR), csv_fname)
     csv_link = f"{url_prefix}/{_CSV_DIR}/{csv_fname}"
-    fig = px.bar(df_month, x="dayofmonth", y="running_cores_avg_over_12m_sum", color='Site',
-                 text="running_cores_avg_over_12m_sum",
+    fig = px.bar(df_month, x="dayofmonth", y="running_cores_daily_avg", color='Site',
+                 text="running_cores_daily_avg",
                  color_discrete_map=DISCRETE_COLOR_MAP,
                  category_orders={
                      'Site': _HPC_SITES_STACK_ORDER,
@@ -268,7 +271,7 @@ def create_plot_of_daily_avg_of_running_cores(df_month, month, output_dir, url_p
                  title='Number of running cores - daily averages - ' + month +
                        ' <b><a href="{}">[Source]</a></b>'.format(csv_link),
                  labels={
-                     'running_cores_avg_over_12m_sum': 'Number of cores',
+                     'running_cores_daily_avg': 'Number of cores',
                      'dayofmonth': 'Date ',
                  },
                  width=800, height=600,
@@ -332,8 +335,8 @@ def create_plot_of_core_hour_monthly(df, sorted_months, csv_link, title_extra=""
 
 
 def create_plot_of_running_cores_monthly(df, sorted_months, csv_link, title_extra=""):
-    fig = px.bar(df, x="month", y="running_cores_avg_over_12m_sum", color='Site',
-                 text="running_cores_avg_over_12m_sum",
+    fig = px.bar(df, x="month", y="running_cores_daily_avg", color='Site',
+                 text="running_cores_daily_avg",
                  color_discrete_map=DISCRETE_COLOR_MAP,
                  category_orders={
                      'Site': _HPC_SITES_STACK_ORDER,
@@ -342,7 +345,7 @@ def create_plot_of_running_cores_monthly(df, sorted_months, csv_link, title_extr
                  title='Number of running cores - Monthly average' + title_extra
                        + '<b><a href="{}">[Source]</a></b>'.format(csv_link),
                  labels={
-                     'running_cores_avg_over_12m_sum': 'Number of cores',
+                     'running_cores_daily_avg': 'Number of cores',
                      'month': 'Date '
                  },
                  width=800, height=600,
