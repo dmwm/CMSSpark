@@ -23,7 +23,7 @@ import numpy as np
 import plotly.express as px
 from pyspark.sql.functions import (
     col, concat_ws, format_string, from_unixtime, lit, unix_timestamp, when,
-    avg as _avg, dayofmonth as _dayofmonth, expr as _expr, explode as _explode,
+    dayofmonth as _dayofmonth, expr as _expr, explode as _explode,
     max as _max, month as _month, round as _round, sum as _sum, year as _year,
 )
 from pyspark.sql.types import StructType, LongType, StringType, StructField, DoubleType
@@ -36,7 +36,7 @@ from CMSSpark.spark_utils import get_spark_session, get_candidate_files
 _BASE_HDFS_CONDOR = '/project/monitoring/archive/condor/raw/metric'
 
 # Bottom to top bar stack order which set same colors for same site always
-_HPC_SITES_STACK_ORDER = ['ANL', 'BSC', 'CINECA', 'HOREKA', 'NERSC', 'OSG', 'PSC', 'RWTH', 'SDSC', 'TACC']
+_HPC_SITES_STACK_ORDER = ['ANL', 'ANVIL', 'BSC', 'CINECA', 'HOREKA', 'NERSC', 'OSG', 'PSC', 'RWTH', 'SDSC', 'TACC']
 
 # For new sites, please check list sizes
 DISCRETE_COLOR_MAP = {site: px.colors.qualitative.Pastel[i] for i, site in enumerate(_HPC_SITES_STACK_ORDER)}
@@ -90,6 +90,7 @@ def get_raw_df(spark, start_date, end_date):
             (col("RecordTime") < (end_date.replace(tzinfo=timezone.utc).timestamp() * 1000))
         ).filter(
             (col('Site') == 'T3_US_ANL') |  # ANL
+            (col('Site') == 'T3_US_Anvil') |  # ANVIL
             (col('Site') == 'T3_US_NERSC') |  # NERSC
             (col('Site') == 'T3_US_OSG') |  # OSG
             (col('Site') == 'T3_US_PSC') |  # PSC
@@ -107,6 +108,7 @@ def get_raw_df(spark, start_date, end_date):
         ).withColumn(
             'site_name',
             when(col('Site') == 'T3_US_ANL', lit("ANL"))
+            .when(col('Site') == 'T3_US_Anvil', lit("ANVIL"))
             .when(col('Site') == 'T3_US_NERSC', lit("NERSC"))
             .when(col('Site') == 'T3_US_OSG', lit("OSG"))
             .when(col('Site') == 'T3_US_PSC', lit("PSC"))
@@ -181,7 +183,10 @@ def get_pd_df_core_hours_sum_of_daily(spark, raw_df, start_date, end_date):
 
 def get_core_hours_monthly_df_from_daily(df):
     """Creates monthly df from daily one"""
-    return df.groupby(['Site', 'month']).agg({"sum CoreHr": np.sum}).reset_index()
+    return df.groupby(['Site', 'month']) \
+        .agg({"sum CoreHr": np.sum}) \
+        .round({'sum CoreHr': 2}) \
+        .reset_index()
 
 
 def get_pd_df_running_cores_avg_of_daily(spark, raw_df, start_date, end_date):
@@ -205,8 +210,9 @@ def get_pd_df_running_cores_avg_of_daily(spark, raw_df, start_date, end_date):
         .groupby(['Site', 'month', 'dayofmonth', 'time_window', 'GlobalJobId']
                  ).agg(_max(col('RequestCpus')).alias('running_cores_of_single_job_in_window')) \
         .groupby(['Site', 'month', 'dayofmonth']
-                 ).agg(_round(_sum(col('running_cores_of_single_job_in_window')) / NUMBER_OF_BINS_IN_DAY, 1).alias(
-        'running_cores_daily_avg'))
+                 ).agg(_round(_sum(col('running_cores_of_single_job_in_window')) / NUMBER_OF_BINS_IN_DAY, 1)
+                       .alias('running_cores_daily_avg')
+                       )
 
     # Fillna is important to fill all empty days with 0
     df_running_cores_daily = df_day_template \
@@ -218,7 +224,10 @@ def get_pd_df_running_cores_avg_of_daily(spark, raw_df, start_date, end_date):
 def get_running_cores_monthly_df_from_daily(df):
     """Creates monthly df from daily one"""
     # group-by gets avg of RequestCpus(12 minutes window) for each site for each month
-    return df.groupby(['Site', 'month']).agg({'running_cores_daily_avg': np.average}).reset_index()
+    return df.groupby(['Site', 'month']) \
+        .agg({'running_cores_daily_avg': np.average}) \
+        .round({'running_cores_daily_avg': 2}) \
+        .reset_index()
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -459,8 +468,8 @@ def prepare_year_urls_html_div(url_prefix, sorted_months):
     """Prepares each year's plot links. Will be replaced with ____YEAR_PLOT_URLS____ in html template"""
     html_div_year_links_block = []
     # all of them
-    all_core_hr_url = f"{url_prefix}/all.html"
-    html_a_template = f'<a href="{all_core_hr_url}" target="_blank">All Core Hours</a> '
+    all_url = f"{url_prefix}/all.html"
+    html_a_template = f'<a href="{all_url}" target="_blank">ALL MONTHLY</a> '
     html_div_year_links_block.append(html_a_template)
     # years
     years = sorted(set(datetime.strptime(m, "%Y-%m").year for m in sorted_months))
