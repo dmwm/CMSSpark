@@ -24,7 +24,7 @@ logger.addHandler(logging.StreamHandler())
 
 # global variables
 RUCIO_HDFS_FOLDER = "/project/awg/cms/rucio/{fdate}/replicas/part*.avro"
-CMS_DBS_HDFS_FOLDER = "/project/awg/cms/CMS_DBS3_PROD_GLOBAL/old/FILES/part-m-00000"
+CMS_DBS_HDFS_FOLDER = "/project/awg/cms/CMS_DBS3_PROD_GLOBAL/old/FILES/*.gz"
 _VALID_DATE_FORMATS = ["%Y-%m-%d"]
 
 

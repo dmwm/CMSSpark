@@ -42,8 +42,8 @@ from CMSSpark.spark_utils import get_spark_session
 TODAY = datetime.today().strftime('%Y-%m-%d')
 HDFS_RUCIO_DIDS = '/project/awg/cms/rucio/{}/dids/part*.avro'.format(TODAY)
 HDFS_RUCIO_REPLICAS = '/project/awg/cms/rucio/{}/replicas/part*.avro'.format(TODAY)
-HDFS_DBS_FILES = '/project/awg/cms/CMS_DBS3_PROD_GLOBAL/old/FILES/part-m-00000'
-HDFS_DBS_DATASETS = '/project/awg/cms/CMS_DBS3_PROD_GLOBAL/old/DATASETS/part-m-00000'
+HDFS_DBS_FILES = '/project/awg/cms/CMS_DBS3_PROD_GLOBAL/current/FILES/*.gz'
+HDFS_DBS_DATASETS = '/project/awg/cms/CMS_DBS3_PROD_GLOBAL/current/DATASETS/*.gz'
 BACKFILL_PREFIX = '/store/backfill/'  # will be filtered out
 TB_DENOMINATOR = 10 ** 12
 
