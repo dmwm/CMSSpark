@@ -20,10 +20,7 @@ set -e
 ##H    - 1st argument: should be full/relative path of python script or help
 ##H    - $PYTHONPATH should be set before running script
 ##H
-script_dir="$(
-    cd -- "$(dirname "$0")" >/dev/null 2>&1
-    pwd -P
-)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 # get common util functions
 . "$script_dir"/utils/common_utils.sh
 

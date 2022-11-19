@@ -120,7 +120,7 @@ def generate_plot(pdf, by, output_folder, filename):
 @click.option("--include_re", default="^T2_.*$", show_default=True,
               help="Regular expression to select the sites to include in the plot")
 @click.option("--exclude_re", default=".*_CERN.*", show_default=True,
-    help="Regular expression to select the sites to exclude of the plot")
+              help="Regular expression to select the sites to exclude of the plot")
 @click.option("--generate_plots", default=False, is_flag=True,
               help="Additional to the csv, generate the plot(s)")
 @click.option("--output_folder", default="./output", help="local output directory")
