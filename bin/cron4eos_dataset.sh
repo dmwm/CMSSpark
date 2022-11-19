@@ -1,18 +1,15 @@
 #!/bin/bash
 set -e
-##H cron4eos_dataset.sh
+##H cron4eos_dataset.sh <ARGS>
 ##H    Creates EOS datasets plots
 ##H
-##H Usage: cron4eos_dataset.sh <ARGS>
-##H Example :
-##H    cron4eos_dataset.sh --keytab ./keytab --output <DIR> --p1 32000 --p2 32001 --host $MY_NODE_NAME --wdir $WDIR
+##H Example: cron4eos_dataset.sh --keytab ./keytab --output <DIR> --p1 32000 --p2 32001 --host $MY_NODE_NAME --wdir $WDIR
 ##H Arguments:
 ##H   - keytab             : Kerberos auth file: secrets/keytab
 ##H   - output             : Output directory. If not given, $HOME/output will be used. I.e /eos/user/c/cmsmonit/www/EOS/data
 ##H   - p1, p2, host, wdir : [ALL FOR K8S] p1 and p2 spark required ports(driver and blockManager), host is k8s node dns alias, wdir is working directory
 ##H   - test               : Flag that will process 2 months of data instead of 1 year.
-##H How to test:
-##H   - Just provide test directory as output directory.
+##H How to test: Just provide a test directory as output directory.
 ##H
 TZ=UTC
 START_TIME=$(date +%s)
