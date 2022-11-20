@@ -10,10 +10,7 @@ set -e
 ##H   - conf                : Required configuration file path, run_aggregation.sh file for example
 ##H   - p1, p2, host  : [ALL FOR K8S] p1 and p2 spark required ports(driver and blockManager), host is k8s node dns alias
 ##H
-script_dir="$(
-    cd -- "$(dirname "$0")" >/dev/null 2>&1
-    pwd -P
-)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 # get common util functions
 . "$script_dir"/utils/common_utils.sh
 
@@ -53,10 +50,7 @@ fi
 util_check_vars CONF_FILE PORT1 PORT2 K8SHOST
 
 # CMSSpark/bin
-script_dir="$(
-    cd -- "$(dirname "$0")" >/dev/null 2>&1
-    pwd -P
-)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 
 # CMSSpark
 wdir="$(

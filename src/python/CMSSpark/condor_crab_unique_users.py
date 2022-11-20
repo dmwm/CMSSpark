@@ -110,8 +110,9 @@ def generate_plot(pdf, by, output_folder, filename):
     sorted_pd = pdf.sort_values(group_field, ascending=True)
     _dims = (18, 8.5)
     fig, ax = plt.subplots(figsize=_dims)
+    print(sorted_pd.head())
     plot = sns.barplot(
-        data=sorted_pd, x=group_field, y="count(DISTINCT CRAB_UserHN)", color="tab:blue"
+        data=sorted_pd, x=group_field, y="count(CRAB_UserHN)", color="tab:blue"
     )
     if group_field == "period":
         plot.set_xticklabels(plot.get_xticklabels(), rotation=30)
