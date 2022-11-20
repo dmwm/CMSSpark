@@ -171,15 +171,15 @@ def generate_dataset_file_days(period=("20190101", "20190131"), app_filter=None,
 
 @click.group()
 @click.option("--verbose", default=False, is_flag=True)
-@click.option("--parquetLocation", default=DEFAULT_PARQUET_LOCATION, envvar="PARQUET_LOCATION")
+@click.option("--parquet_location", default=DEFAULT_PARQUET_LOCATION, envvar="PARQUET_LOCATION")
 @click.pass_context
-def cli(ctx, verbose, parquetlocation):
+def cli(ctx, verbose, parquet_location):
     """
     Main Click command
     """
     ctx.obj["VERBOSE"] = verbose
     ctx.obj["SPARK"] = get_spark_session(app_name="cms-eos-dataset")
-    ctx.obj["PARQUET_LOCATION"] = parquetlocation
+    ctx.obj["PARQUET_LOCATION"] = parquet_location
 
 
 @cli.command()
