@@ -193,7 +193,7 @@ function util_setup_spark_k8s() {
     hadoop-set-default-conf.sh analytix
     source hadoop-setconf.sh analytix 3.2 spark3
     export SPARK_LOCAL_IP=127.0.0.1
-    export PYSPARK_PYTHON=/cvmfs/sft.cern.ch/lcg/releases/Python/3.9.12-9a1bc/x86_64-centos7-gcc8-opt/bin/python3
+    export PYSPARK_PYTHON=/cvmfs/sft.cern.ch/lcg/releases/Python/3.9.6-b0f98/x86_64-centos7-gcc8-opt/bin/python3
 }
 
 #######################################
@@ -229,6 +229,10 @@ function util_dotless_name() {
 #######################################
 function util_cron_send_start() {
     local script_name env
+    if [ -z "$PUSHGATEWAY_URL" ]; then
+        util4loge "PUSHGATEWAY_URL variable is not defined. Exiting.."
+        exit 1
+    fi
     script_name=$1
     env=$K8S_ENV
     script_name_wo_extension=$(util_dotless_name "$script_name")
@@ -250,6 +254,10 @@ EOF
 #######################################
 function util_cron_send_end() {
     local script_name env exit_code
+    if [ -z "$PUSHGATEWAY_URL" ]; then
+        util4loge "PUSHGATEWAY_URL variable is not defined. Exiting.."
+        exit 1
+    fi
     script_name=$1
     env=$K8S_ENV
     exit_code=$3
@@ -272,11 +280,11 @@ EOF
 #    $@: all
 #######################################
 function util_input_args_parser() {
-    unset -v KEYTAB_SECRET CMSR_SECRET RUCIO_SECRET AMQ_JSON_CREDS CMSMONITORING_ZIP STOMP_ZIP EOS_DIR PORT1 PORT2 K8SHOST WDIR OUTPUT_DIR CONF_FILE URL_PREFIX IS_ITERATIVE IS_K8S IS_TEST help
+    unset -v KEYTAB_SECRET CMSR_SECRET RUCIO_SECRET AMQ_JSON_CREDS CMSMONITORING_ZIP STOMP_ZIP EOS_DIR PORT1 PORT2 K8SHOST WDIR OUTPUT_DIR CONF_FILE URL_PREFIX LAST_N_DAYS IS_ITERATIVE IS_K8S IS_TEST help
     # Dictionary to keep variables
     declare -A arr
 
-    PARSED_ARGS=$(getopt --unquoted --options v,h --name "$(basename -- "$0")" --longoptions keytab:,cmsr:,rucio:,amq:,cmsmonitoring:,stomp:,eos:,p1:,p2:,host:,wdir:,output:,conf:,url:,iterative,k8s,test,help -- "$@")
+    PARSED_ARGS=$(getopt --unquoted --options v,h --name "$(basename -- "$0")" --longoptions keytab:,cmsr:,rucio:,amq:,cmsmonitoring:,stomp:,eos:,p1:,p2:,host:,wdir:,output:,conf:,url:,lastndays:,iterative,k8s,test,help -- "$@")
     VALID_ARGS=$?
     if [ "$VALID_ARGS" != "0" ]; then
         util4loge "Given args not valid: $*"
@@ -299,8 +307,9 @@ function util_input_args_parser() {
         --output)        arr["OUTPUT_DIR"]=$2        ; shift 2 ;;
         --conf)          arr["CONF_FILE"]=$2         ; shift 2 ;;
         --url)           arr["URL_PREFIX"]=$2        ; shift 2 ;;
+        --lastndays)     arr["LAST_N_DAYS"]=$2       ; shift 2 ;;
         --iterative)     arr["IS_ITERATIVE"]=1       ; shift   ;;
-        --k8s)           arr["IS_K8S"]=1            ; shift   ;;
+        --k8s)           arr["IS_K8S"]=1             ; shift   ;;
         --test)          arr["IS_TEST"]=1            ; shift   ;;
         -h | --help)     arr["help"]=1               ; shift   ;;
         *)               break                                 ;;

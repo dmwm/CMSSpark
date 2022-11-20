@@ -149,8 +149,8 @@ def _get_schema():
     )
 
 
-def _generate_main_page(selected_pd,  grouped_tiers, start_date, end_date, cms_type, workflow_column=None,
-                        filter_column=None,cpu_eff_outlier=0):
+def _generate_main_page(selected_pd, grouped_tiers, start_date, end_date, cms_type, workflow_column=None,
+                        filter_column=None, cpu_eff_outlier=0):
     """Create HTML page
 
     Header
