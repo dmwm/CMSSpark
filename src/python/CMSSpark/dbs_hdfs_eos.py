@@ -173,17 +173,19 @@ def generate_dataset_file_days(period=("20190101", "20190131"), app_filter=None,
 @click.option("--verbose", default=False, is_flag=True)
 @click.option("--parquet_location", default=DEFAULT_PARQUET_LOCATION, envvar="PARQUET_LOCATION")
 @click.pass_context
-def cli(ctx, verbose, parquetlocation):
-    """Main Click command"""
+def cli(ctx, verbose, parquet_location):
+    """
+    Main Click command
+    """
     ctx.obj["VERBOSE"] = verbose
     ctx.obj["SPARK"] = get_spark_session(app_name="cms-eos-dataset")
-    ctx.obj["PARQUET_LOCATION"] = parquetlocation
+    ctx.obj["PARQUET_LOCATION"] = parquet_location
 
 
 @cli.command()
 @click.option("--mode", default="append", type=click.Choice(["append", "overwrite", "fail"]),
               help="write mode for the index")
-@click.argument("date")
+@click.option("--date", type=str)
 @click.pass_context
 def run_update(ctx, date, mode):
     """Click function to update the eos dataset."""
@@ -193,7 +195,7 @@ def run_update(ctx, date, mode):
 @cli.command()
 @click.option("--outputDir", default=".", help="local output directory")
 @click.option("--only_csv", default=False, is_flag=True, help="only output the csv (no the png with the graph)")
-@click.argument("period", nargs=2, type=str)
+@click.option("--period", nargs=2, type=str)
 @click.pass_context
 def run_report_totals(ctx, period, outputdir, only_csv):
     """Click funtion to create the totals report"""
@@ -232,13 +234,13 @@ def run_report_totals(ctx, period, outputdir, only_csv):
 @cli.command()
 @click.option("--outputDir", default=".", help="local output directory")
 @click.option("--appfilter", default=None, help="a like expression to filter the filename e.g. %rm")
-@click.argument("period", nargs=2, type=str)
+@click.option("--period", nargs=2, type=str)
 @click.pass_context
 def get_filenames_per_day(ctx, period, outputdir, appfilter):
     """Generate a csv file with filenames/day/app
     
     This is a costly operation, It should be modified either to save to hdfs (or to a database directly)
-    or to only be used with filters (small time periods or with an specified app).
+    or to only be used with filters (small time periods or with a specified app).
     """
     _datasets_filenames = generate_dataset_file_days(
         period=period,

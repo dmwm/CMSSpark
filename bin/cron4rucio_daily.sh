@@ -12,10 +12,7 @@ set -e
 ##H How to test:
 ##H   - Just provide test hdfs directory as output directory. No need a test run, spark job will process only data of 1 day.
 ##H
-script_dir="$(
-    cd -- "$(dirname "$0")" >/dev/null 2>&1
-    pwd -P
-)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 # get common util functions
 . "$script_dir"/utils/common_utils.sh
 trap 'onFailExit' ERR

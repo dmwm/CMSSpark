@@ -31,10 +31,7 @@ set -e
 ##H
 TZ=UTC
 START_TIME=$(date +%s)
-script_dir="$(
-    cd -- "$(dirname "$0")" >/dev/null 2>&1
-    pwd -P
-)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 # get common util functions
 . "$script_dir"/utils/common_utils.sh
 

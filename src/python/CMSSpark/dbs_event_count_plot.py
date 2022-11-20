@@ -7,7 +7,7 @@ File        : dbs_event_count_plot.py
 Author      : Christian Ariza <christian.ariza AT gmail [DOT] com>
 Description : Create the event count plot used, for example, in the C-RSG report.
                 For additional documentation look at the notebook in the CMSSpark/src/notebooks folder.
-Notes       : We disabled wrong-import-position because matplotlib needs setup the backend before pyplot is imported.
+Notes       : We disabled wrong-import-position because matplotlib needs to setup the backend before pyplot is imported.
                 We disabled C0330 because pylint complains following the
                 old recommendation. Black follows the new indentation recommendation.
 """
@@ -260,31 +260,30 @@ def event_count_plot(start_date, end_date, output_folder, output_format, tiers, 
 @click.option("--colors_file", default=None, type=click.File('r'),
               help="A json file either with a list of colors (strings), or with a mapping of label and color. "
                    "If the file is not valid, or is not provided, a default palette will be generated.")
-@click.option("--tiers", multiple=True,
-              default=["GEN", "GEN-SIM", "GEN-RAW", "GEN-SIM-RECO", "AODSIM", "MINIAODSIM", "RAWAODSIM", "NANOAODSIM",
-                       "GEN-SIM-DIGI-RAW", "GEN-SIM-RAW", "GEN-SIM-DIGI-RECO"],
-              help="Space separated list of tiers to consider. eg: GEN GEN-SIM GEN-RAW GEN-SIM-RECO AODSIM MINIAODSIM "
-                   "RAWAODSIM NANOAODSIM GEN-SIM-DIGI-RAW GEN-SIM-RAW GEN-SIM-DIGI-RECO")
-@click.option("--remove", multiple=True, default="test,backfill,jobrobot,sam,bunnies,penguins".split(","),
-              help="Space separed list of case insensitive patterns. "
+@click.option("--tiers", type=str,
+              default="GEN,GEN-SIM,GEN-RAW,GEN-SIM-RECO,AODSIM,MINIAODSIM,RAWAODSIM,NANOAODSIM,GEN-SIM-DIGI-RAW,GEN-SIM-RAW,GEN-SIM-DIGI-RECO",
+              help="Comma separated list of tiers to consider. eg: GEN,GEN-SIM,GEN-RAW,GEN-SIM-RECO,AODSIM,MINIAODSIM")
+@click.option("--remove", default="test,backfill,jobrobot,sam,bunnies,penguins",
+              help="Comma separed list of case insensitive patterns. "
                    "The datasets which name match any of the patterns will be ignored.")
-@click.option("--skims", multiple=True, default=[],
-              help="Space separated list of skims. The skims are case sensitive. Datasets which match the given skims "
+@click.option("--skims", default="",
+              help="Comma separated list of skims. The skims are case sensitive. Datasets which match the given skims "
                    "will not be counted as part of the tier, but in a separated group named <tier>/<skim>.")
 @click.option("--attributes", default=None, help="matplotlib rc params file (JSON format)")
-@click.option("--skims", is_flag=True, default=False, help="Create also a csv file with the plot data")
+@click.option("--generate_csv", is_flag=True, default=False, help="Create also a csv file with the plot data")
 @click.option("--only_valid_files", is_flag=True, default=False, help="Only consider valid files, default False")
+@click.option("--test", is_flag=True, default=False, help="Only consider valid files, default False")
 @click.option("--verbose", is_flag=True, default=False, help="Prints additional logging info")
 def main(start_month, end_month, output_folder, output_format, colors_file, tiers, remove, skims, generate_csv,
-         only_valid_files, attributes, verbose):
+         only_valid_files, attributes, test, verbose):
     """Main function"""
-    click.echo('dbs_event_count_plot')
-    click.echo('This script create Event Count Plots based on the dbs data. '
-               'It prints the path of the created image in std output.')
+    # This script create Event Count Plots based on the dbs data. It prints the path of the created image in std output.
+    click.echo('--------------------------------------------------------------------------------------------')
     click.echo(f'Input Arguments: start_month:{start_month}, end_month:{end_month}, '
                f'output_folder:{output_folder}, output_format:{output_format}, colors_file:{colors_file}, '
                f'tiers:{tiers}, remove:{remove}, skims:{skims}, generate_csv:{generate_csv}, '
                f'only_valid_files:{only_valid_files}, attributes:{attributes}, verbose:{verbose}')
+    click.echo('--------------------------------------------------------------------------------------------')
     if verbose:
         logger.setLevel(logging.INFO)
     if not end_month:
@@ -294,7 +293,15 @@ def main(start_month, end_month, output_folder, output_format, colors_file, tier
         _end_date = datetime.strptime(f"{end_month}/01", "%Y/%m/01")
         _start_date = _end_date - relativedelta(months=11)
         start_month = _start_date.strftime("%Y/%m")
+
+    tiers = tiers.split(",")
+    skims = skims.split(",")
+    remove = remove.split(",")
     start_date = f"{start_month}/01"
+    if test:
+        # If test, give start_month as 1 month ago in bash script, this will handle the rest
+        start_date = f"{start_month}/27"
+
     # The query to the data exclude the last day,
     # so we will query to the first day of the next month
     _end_date = datetime.strptime(f"{end_month}/01", "%Y/%m/01") + relativedelta(months=1)
@@ -323,6 +330,9 @@ def main(start_month, end_month, output_folder, output_format, colors_file, tier
             verbose=verbose,
         )
         print(filename)
+        # Write filename to some file
+        with open(os.path.join(output_folder, output_format + "_output_path_for_ln.txt"), "w+") as f:
+            f.write(filename)
 
 
 if __name__ == "__main__":

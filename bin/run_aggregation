@@ -17,10 +17,7 @@ set -e
 ##H  py_files: required for spark-submit, see how to create them https://gist.github.com/mrceyhun/3ac99f929f78334e80e15c38870adc49
 ##H
 # TODO modify to run in K8s
-script_dir="$(
-    cd -- "$(dirname "$0")" >/dev/null 2>&1
-    pwd -P
-)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 # get common util functions
 . "$script_dir"/utils/common_utils.sh
 

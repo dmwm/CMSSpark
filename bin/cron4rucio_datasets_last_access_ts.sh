@@ -25,10 +25,7 @@ if [ "$1" == "-h" ] || [ "$1" == "-help" ] || [ "$1" == "--help" ] || [ "$1" == 
 fi
 
 # Prepare log file
-script_dir="$(
-    cd -- "$(dirname "$0")" >/dev/null 2>&1
-    pwd -P
-)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 mkdir -p "$script_dir"/../logs/cron4rucio
