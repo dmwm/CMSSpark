@@ -74,7 +74,7 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: ./
-          file: ./Dockerfile
+          file: ./Dockerfile-spark2mng
           push: true
           build-args: |
             CMSSPARK_TAG=${{ needs.init-job.outputs.git_tag }}
