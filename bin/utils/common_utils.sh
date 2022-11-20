@@ -272,11 +272,11 @@ EOF
 #    $@: all
 #######################################
 function util_input_args_parser() {
-    unset -v KEYTAB_SECRET CMSR_SECRET RUCIO_SECRET AMQ_JSON_CREDS CMSMONITORING_ZIP STOMP_ZIP EOS_DIR PORT1 PORT2 K8SHOST WDIR OUTPUT_DIR CONF_FILE URL_PREFIX IS_ITERATIVE IS_K8S IS_TEST help
+    unset -v KEYTAB_SECRET CMSR_SECRET RUCIO_SECRET AMQ_JSON_CREDS CMSMONITORING_ZIP STOMP_ZIP EOS_DIR PORT1 PORT2 K8SHOST WDIR OUTPUT_DIR CONF_FILE URL_PREFIX LAST_N_DAYS IS_ITERATIVE IS_K8S IS_TEST help
     # Dictionary to keep variables
     declare -A arr
 
-    PARSED_ARGS=$(getopt --unquoted --options v,h --name "$(basename -- "$0")" --longoptions keytab:,cmsr:,rucio:,amq:,cmsmonitoring:,stomp:,eos:,p1:,p2:,host:,wdir:,output:,conf:,url:,iterative,k8s,test,help -- "$@")
+    PARSED_ARGS=$(getopt --unquoted --options v,h --name "$(basename -- "$0")" --longoptions keytab:,cmsr:,rucio:,amq:,cmsmonitoring:,stomp:,eos:,p1:,p2:,host:,wdir:,output:,conf:,url:,lastndays:,iterative,k8s,test,help -- "$@")
     VALID_ARGS=$?
     if [ "$VALID_ARGS" != "0" ]; then
         util4loge "Given args not valid: $*"
