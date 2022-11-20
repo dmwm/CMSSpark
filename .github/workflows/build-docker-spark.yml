@@ -52,25 +52,25 @@ jobs:
           # Fail message
           echo "failure, NO REGEX IS MATCHED WITH THE TAG MESSAGE"
 
-  build-cmsmon-rucio-ds:
+  build-cmsmon-spark2mng:
     runs-on: ubuntu-latest
     needs: [ init-job ]
-    if: (needs.init-job.outputs.action == 'all' || contains(needs.init-job.outputs.docker_individual_images, 'cmsmon-rucio-ds'))
-    name: Build cmsmon-rucio-ds
+    if: (needs.init-job.outputs.action == 'all' || contains(needs.init-job.outputs.docker_individual_images, 'cmsmon-spark2mng'))
+    name: Build cmsmon-spark2mng
     steps:
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.ref }}
-      - name: Get cmsmon-rucio-ds Dockerfile
+      - name: Get cmsmon-spark2mng Dockerfile
         run: |
-          curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/cmsmon-rucio-ds/Dockerfile
+          curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/cmsmon-spark/Dockerfile-spark2mng
       - name: Login to registry.cern.ch
         uses: docker/login-action@v1
         with:
           registry: registry.cern.ch
           username: ${{ secrets.CERN_LOGIN }}
           password: ${{ secrets.CERN_TOKEN }}
-      - name: Publish cmsmon-rucio-ds image to registry.cern.ch
+      - name: Publish cmsmon-spark2mng image to registry.cern.ch
         uses: docker/build-push-action@v2
         with:
           context: ./
@@ -78,27 +78,27 @@ jobs:
           push: true
           build-args: |
             CMSSPARK_TAG=${{ needs.init-job.outputs.git_tag }}
-          tags: registry.cern.ch/cmsmonitoring/cmsmon-rucio-ds:${{ needs.init-job.outputs.git_tag }}, registry.cern.ch/cmsmonitoring/cmsmon-rucio-ds:latest
+          tags: registry.cern.ch/cmsmonitoring/cmsmon-spark2mng:${{ needs.init-job.outputs.git_tag }}, registry.cern.ch/cmsmonitoring/cmsmon-spark2mng:latest
 
-  build-condor-cpu-eff:
+  build-cmsmon-spark:
     runs-on: ubuntu-latest
     needs: [ init-job ]
-    if: (needs.init-job.outputs.action == 'all' || contains(needs.init-job.outputs.docker_individual_images, 'condor-cpu-eff'))
-    name: Build condor-cpu-eff
+    if: (needs.init-job.outputs.action == 'all' || contains(needs.init-job.outputs.docker_individual_images, 'cmsmon-spark'))
+    name: Build cmsmon-spark
     steps:
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.ref }}
-      - name: Get condor-cpu-eff Dockerfile
+      - name: Get cmsmon-spark Dockerfile
         run: |
-          curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/condor-cpu-eff/Dockerfile
+          curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/cmsmon-spark/Dockerfile
       - name: Login to registry.cern.ch
         uses: docker/login-action@v1
         with:
           registry: registry.cern.ch
           username: ${{ secrets.CERN_LOGIN }}
           password: ${{ secrets.CERN_TOKEN }}
-      - name: Publish condor-cpu-eff image to registry.cern.ch
+      - name: Publish cmsmon-spark image to registry.cern.ch
         uses: docker/build-push-action@v2
         with:
           context: ./
@@ -106,60 +106,4 @@ jobs:
           push: true
           build-args: |
             CMSSPARK_TAG=${{ needs.init-job.outputs.git_tag }}
-          tags: registry.cern.ch/cmsmonitoring/condor-cpu-eff:${{ needs.init-job.outputs.git_tag }}, registry.cern.ch/cmsmonitoring/condor-cpu-eff:latest
-
-  build-cmsmon-rucio-spark2mng:
-    runs-on: ubuntu-latest
-    needs: [ init-job ]
-    if: (needs.init-job.outputs.action == 'all' || contains(needs.init-job.outputs.docker_individual_images, 'cmsmon-rucio-spark2mng'))
-    name: Build cmsmon-rucio-spark2mng
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.ref }}
-      - name: Get cmsmon-rucio-spark2mng Dockerfile
-        run: |
-          curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/cmsmon-rucio-spark2mng/Dockerfile
-      - name: Login to registry.cern.ch
-        uses: docker/login-action@v1
-        with:
-          registry: registry.cern.ch
-          username: ${{ secrets.CERN_LOGIN }}
-          password: ${{ secrets.CERN_TOKEN }}
-      - name: Publish cmsmon-rucio-spark2mng image to registry.cern.ch
-        uses: docker/build-push-action@v2
-        with:
-          context: ./
-          file: ./Dockerfile
-          push: true
-          build-args: |
-            CMSSPARK_TAG=${{ needs.init-job.outputs.git_tag }}
-          tags: registry.cern.ch/cmsmonitoring/cmsmon-rucio-spark2mng:${{ needs.init-job.outputs.git_tag }}, registry.cern.ch/cmsmonitoring/cmsmon-rucio-spark2mng:latest
-
-  build-cmsmon-hdfs:
-    runs-on: ubuntu-latest
-    needs: [ init-job ]
-    if: (needs.init-job.outputs.action == 'all' || contains(needs.init-job.outputs.docker_individual_images, 'cmsmon-hdfs'))
-    name: Build cmsmon-hdfs
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.ref }}
-      - name: Get cmsmon-hdfs Dockerfile
-        run: |
-          curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/cmsmon-hdfs/Dockerfile
-      - name: Login to registry.cern.ch
-        uses: docker/login-action@v1
-        with:
-          registry: registry.cern.ch
-          username: ${{ secrets.CERN_LOGIN }}
-          password: ${{ secrets.CERN_TOKEN }}
-      - name: Publish cmsmon-hdfs image to registry.cern.ch
-        uses: docker/build-push-action@v2
-        with:
-          context: ./
-          file: ./Dockerfile
-          push: true
-          build-args: |
-            CMSSPARK_TAG=${{ needs.init-job.outputs.git_tag }}
-          tags: registry.cern.ch/cmsmonitoring/cmsmon-hdfs:${{ needs.init-job.outputs.git_tag }}, registry.cern.ch/cmsmonitoring/cmsmon-hdfs:latest
+          tags: registry.cern.ch/cmsmonitoring/cmsmon-spark:${{ needs.init-job.outputs.git_tag }}, registry.cern.ch/cmsmonitoring/cmsmon-spark:latest
