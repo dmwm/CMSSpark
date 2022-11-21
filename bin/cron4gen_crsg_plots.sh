@@ -39,7 +39,7 @@ util4logi "authenticated with Kerberos user: ${KERBEROS_USER}"
 util_check_and_create_dir "$OUTPUT_DIR"
 
 # ----------------------------------------------------------------------------------------------------------- FUNCTIONS
-util4logi "spark job starting.."
+util4logi "${myname} Spark Job is starting..."
 
 spark_submit_args=(
     --master yarn --conf spark.ui.showConsoleProgress=false --conf spark.sql.session.timeZone=UTC

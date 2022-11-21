@@ -59,7 +59,7 @@ CPU_EFF_OUTLIER_DIR="${CPU_EFF_DIR}_outlier"
 CMS_TYPES=("analysis" "production" "folding@home" "test")
 
 # ---------------------------------------------------------------------------------------------------------------------
-util4logi "Condor cpu efficiency starts"
+util4logi "${myname} Spark Job is starting..."
 for type in "${CMS_TYPES[@]}"; do
     SUB_FOLDER=$(echo "$type" | sed -e 's/[^[:alnum:]]/-/g' | tr -s '-' | tr '[:upper:]' '[:lower:]')
 

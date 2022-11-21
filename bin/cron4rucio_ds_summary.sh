@@ -84,7 +84,7 @@ util4logi "authenticated with ${KERBEROS_USER} user's keytab"
 
 # ------------------------------------------------------------------------------------------------------- RUN SPARK JOB
 # Required for Spark job in K8s
-util4logi "spark job starts"
+util4logi "cron4rucio_ds_summary Spark Job is starting..."
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 spark_submit_args=(
     --master yarn --conf spark.ui.showConsoleProgress=false --conf "spark.driver.bindAddress=0.0.0.0" --driver-memory=8g --executor-memory=8g

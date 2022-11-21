@@ -176,7 +176,7 @@ util4logi "dumps are finished. Time spent: $(util_secs_to_human "$(($(date +%s) 
 
 # ------------------------------------------------------------------------------------------------------- RUN SPARK JOB
 # Required for Spark job in K8s
-util4logi "spark job starts"
+util4logi "${myname} Spark Job is starting..."
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 spark_submit_args=(
     --master yarn --conf spark.ui.showConsoleProgress=false --conf spark.sql.session.timeZone=UTC
