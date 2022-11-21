@@ -43,7 +43,7 @@ LOG_DIR="$WDIR"/logs/$(date +%Y%m%d)
 mkdir -p "$LOG_DIR"
 # ----------------------------------------------------------------------------------------------------------------- RUN
 spark_confs=(
-    --master yarn --conf spark.ui.showConsoleProgress=false
+    --master yarn --conf spark.ui.showConsoleProgress=false --conf spark.sql.session.timeZone=UTC
     --driver-memory=8g --executor-memory=8g --executor-cores=4 --num-executors=30
     --conf "spark.driver.bindAddress=0.0.0.0" --conf "spark.driver.host=${K8SHOST}"
     --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
