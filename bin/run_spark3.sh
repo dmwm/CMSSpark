@@ -96,7 +96,7 @@ fi
 conf+=(
     --master yarn
     --conf spark.executor.memory=5g --conf spark.driver.memory=4g
-    --packages org.apache.spark:spark-avro_2.12:3.2.1
+    --packages org.apache.spark:spark-avro_2.12:3.3.1
 )
 
 util4logi "PYTHONPATH: $PYTHONPATH"
