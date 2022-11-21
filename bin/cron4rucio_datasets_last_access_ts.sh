@@ -81,6 +81,7 @@ main() {
         --conf spark.executor.cores=4
         --conf spark.driver.memory=4g
         --conf spark.ui.showConsoleProgress=false
+        --conf spark.sql.session.timeZone=UTC
         --packages org.apache.spark:spark-avro_2.11:2.4.3
     )
 

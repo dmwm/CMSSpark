@@ -370,12 +370,12 @@ def send_to_amq(data, confs, batch_size):
         port = int(confs.get('port'))
         cert = confs.get('cert', None)
         ckey = confs.get('ckey', None)
-        stomp_amq = StompAMQ7(username=username, password=password, producer=producer, topic=topic,
-                              key=ckey, cert=cert, validation_schema=None, host_and_ports=[(host, port)],
-                              loglevel=logging.WARNING)
         # Slow: stomp_amq.send_as_tx(chunk, docType=doc_type)
         #
         for chunk in to_chunks(data, batch_size):
+            stomp_amq = StompAMQ7(username=username, password=password, producer=producer, topic=topic,
+                                  key=ckey, cert=cert, validation_schema=None, host_and_ports=[(host, port)],
+                                  loglevel=logging.WARNING)
             messages = []
             for msg in chunk:
                 notif, _, _ = stomp_amq.make_notification(payload=msg, doc_type=doc_type, producer=producer)

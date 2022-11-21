@@ -224,7 +224,8 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
 
     # Of course only files from Replicas processed, select only dbs related fields
     df_only_from_dbs = df_files_enriched_with_dbs \
-        .select(['file', 'replica_rse_id', 'dbs_file_size', 'dbs_file_event_count', 'replica_accessed_at', 'lock_cnt']) \
+        .select(['file', 'replica_rse_id', 'dbs_file_size', 'dbs_file_event_count', 'replica_accessed_at', 'lock_cnt']
+                ) \
         .join(df_dbs_ds_files, ['file'], how='left') \
         .filter(col('dbs_dataset').isNotNull()) \
         .select(['file', 'dbs_dataset', 'replica_rse_id', 'dbs_file_size', 'dbs_file_event_count',
@@ -436,12 +437,13 @@ def send_to_amq(data, confs, batch_size):
         port = int(confs.get('port'))
         cert = confs.get('cert', None)
         ckey = confs.get('ckey', None)
-        stomp_amq = StompAMQ7(username=username, password=password, producer=producer, topic=topic,
-                              key=ckey, cert=cert, validation_schema=None, host_and_ports=[(host, port)],
-                              loglevel=logging.WARNING)
         # Slow: stomp_amq.send_as_tx(chunk, docType=doc_type)
         #
         for chunk in to_chunks(data, batch_size):
+            # After each stomp_amq.send, we need to reconnect with this way.
+            stomp_amq = StompAMQ7(username=username, password=password, producer=producer, topic=topic,
+                                  key=ckey, cert=cert, validation_schema=None, host_and_ports=[(host, port)],
+                                  loglevel=logging.WARNING)
             messages = []
             for msg in chunk:
                 notif, _, _ = stomp_amq.make_notification(payload=msg, doc_type=doc_type, producer=producer)

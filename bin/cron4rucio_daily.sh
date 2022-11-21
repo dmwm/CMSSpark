@@ -66,7 +66,7 @@ util4logi "spark job starting.."
 spark_submit_args=(
     --master yarn --conf spark.ui.showConsoleProgress=false --conf "spark.driver.bindAddress=0.0.0.0" --driver-memory=8g --executor-memory=8g
     --conf "spark.driver.host=${K8SHOST}" --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
-    --packages org.apache.spark:spark-avro_2.12:3.2.1
+    --packages org.apache.spark:spark-avro_2.12:3.3.1
 )
 py_input_args=(--verbose --output "$OUTPUT_DIR" --fdate "$current_date")
 
