@@ -44,9 +44,9 @@ util4logi "spark job starting.."
 
 spark_submit_args=(
     --master yarn --conf spark.ui.showConsoleProgress=false
+    --driver-memory=4g --executor-memory=8g --executor-cores=4 --num-executors=30
     --conf "spark.driver.bindAddress=0.0.0.0" --conf "spark.driver.host=${K8SHOST}"
     --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
-    --driver-memory=8g --executor-memory=8g
     --packages org.apache.spark:spark-avro_2.12:3.2.1
 )
 
