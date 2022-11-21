@@ -116,7 +116,7 @@ function run_spark_and_mongo_import() {
     export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
     spark_submit_args=(
         --master yarn --conf spark.ui.showConsoleProgress=false --conf spark.sql.session.timeZone=UTC --conf "spark.driver.bindAddress=0.0.0.0"
-        --driver-memory=8g --executor-memory=8g --packages org.apache.spark:spark-avro_2.12:3.2.1
+        --driver-memory=8g --executor-memory=8g --packages org.apache.spark:spark-avro_2.12:3.3.1
         --conf "spark.driver.host=${K8SHOST}" --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
     )
     py_input_args=(--hdfs_out_dir "$hdfs_out_dir")

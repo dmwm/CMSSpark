@@ -45,7 +45,7 @@ mkdir -p "$LOG_DIR"
 
 # ----------------------------------------------------------------------------------------------------------------- RUN
 spark_confs=(
-    --master yarn --conf spark.ui.showConsoleProgress=false
+    --master yarn --conf spark.ui.showConsoleProgress=false --conf spark.sql.session.timeZone=UTC
     --driver-memory=4g --executor-memory=8g --executor-cores=4 --num-executors=30
     --conf "spark.driver.bindAddress=0.0.0.0" --conf "spark.driver.host=${K8SHOST}"
     --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
@@ -59,7 +59,7 @@ CPU_EFF_OUTLIER_DIR="${CPU_EFF_DIR}_outlier"
 CMS_TYPES=("analysis" "production" "folding@home" "test")
 
 # ---------------------------------------------------------------------------------------------------------------------
-util4logi "Condor cpu efficiency starts"
+util4logi "${myname} Spark Job is starting..."
 for type in "${CMS_TYPES[@]}"; do
     SUB_FOLDER=$(echo "$type" | sed -e 's/[^[:alnum:]]/-/g' | tr -s '-' | tr '[:upper:]' '[:lower:]')
 
