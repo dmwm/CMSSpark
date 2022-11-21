@@ -194,6 +194,9 @@ function util_setup_spark_k8s() {
     source hadoop-setconf.sh analytix 3.2 spark3
     export SPARK_LOCAL_IP=127.0.0.1
     export PYSPARK_PYTHON=/cvmfs/sft.cern.ch/lcg/releases/Python/3.9.6-b0f98/x86_64-centos7-gcc8-opt/bin/python3
+    # until IT changes this setting, we need to turn off info logs in this way. Don't try spark.sparkContext.setLogLevel('WARN'), doesn't work, since they are not spark logs but spark-submit logs.
+    sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' $SPARK_CONF_DIR/log4j2.properties
+
 }
 
 #######################################
