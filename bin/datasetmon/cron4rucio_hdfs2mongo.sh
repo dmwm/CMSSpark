@@ -1,8 +1,9 @@
 #!/bin/bash
+# shellcheck disable=SC2068
 set -e
 ##H Can only run in K8s, you may modify to run in local by arranging env vars
 ##H
-##H cron4rucio_hdfs_to_mongo.sh
+##H cron4rucio_hdfs2mongo.sh
 ##H    Gets "datasets" and "detailed_datasets" HDFS results to LOCAL directory and send to MongoDB.
 ##H
 ##H Arguments:
@@ -16,7 +17,7 @@ set -e
 ##H   - wdir          : working directory
 ##H
 ##H Usage Example:
-##H    ./cron4rucio_hdfs_to_mongo.sh --keytab ./keytab --mongohost $MONGO_HOST --mongoport $MONGO_PORT \
+##H    ./cron4rucio_hdfs2mongo.sh --keytab ./keytab --mongohost $MONGO_HOST --mongoport $MONGO_PORT \
 ##H        --mongouser $MONGO_ROOT_USERNAME --mongopass $MONGO_ROOT_PASSWORD --mongowritedb rucio --mongoauthdb admin --wdir $WDIR
 ##H
 ##H How to test:
@@ -27,80 +28,39 @@ set -e
 ##H
 TZ=UTC
 START_TIME=$(date +%s)
-script_dir="$(
-    cd -- "$(dirname "$0")" >/dev/null 2>&1
-    pwd -P
-)"
-# get common util functions
+myname=$(basename "$0")
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 . "$script_dir"/../utils/common_utils.sh
 
-trap 'onFailExit' ERR
-onFailExit() {
-    util4loge "finished with error!" || exit 1
-}
-# ------------------------------------------------------------------------------------------------------- GET USER ARGS
+if [ "$1" == "" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-help" ]; then
+    util_usage_help
+    exit 0
+fi
+util_cron_send_start "$myname"
+export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 unset -v KEYTAB_SECRET ARG_MONGOHOST ARG_MONGOPORT ARG_MONGOUSER ARG_MONGOPASS ARG_MONGOWRITEDB ARG_MONGOAUTHDB WDIR help
-[ "$#" -ne 0 ] || util_usage_help
-
-# --options (short options) is mandatory, and v is a dummy param.
-PARSED_ARGS=$(getopt --unquoted --options v,h --name "$(basename -- "$0")" --longoptions keytab:,mongohost:,mongoport:,mongouser:,mongopass:,mongowritedb:,mongoauthdb:,wdir:,,help -- "$@")
-
-VALID_ARGS=$?
-if [ "$VALID_ARGS" != "0" ]; then
-    util_usage_help
-fi
-
-util4logi "given arguments: $PARSED_ARGS"
-eval set -- "$PARSED_ARGS"
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-    --keytab)       KEYTAB_SECRET=$2     ; shift 2 ;;
-    --mongohost)    ARG_MONGOHOST=$2     ; shift 2 ;;
-    --mongoport)    ARG_MONGOPORT=$2     ; shift 2 ;;
-    --mongouser)    ARG_MONGOUSER=$2     ; shift 2 ;;
-    --mongopass)    ARG_MONGOPASS=$2     ; shift 2 ;;
-    --mongowritedb) ARG_MONGOWRITEDB=$2  ; shift 2 ;;
-    --mongoauthdb)  ARG_MONGOAUTHDB=$2   ; shift 2 ;;
-    --wdir)         WDIR=$2              ; shift 2 ;;
-    -h | --help)    help=1               ; shift   ;;
-    *)              break                          ;;
-    esac
-done
-
-#
-if [[ "$help" == 1 ]]; then
-    util_usage_help
-fi
-
 # ------------------------------------------------------------------------------------------------------------- PREPARE
-# Define logs path for Spark imports which produce lots of info logs
-LOG_DIR="$WDIR"/logs/$(date +%Y%m%d)
-mkdir -p "$LOG_DIR"
+util_input_args_parser $@
 
-# Check variables are set
+util4logi "Parameters: KEYTAB_SECRET:${KEYTAB_SECRET} ARG_MONGOHOST:${ARG_MONGOHOST} ARG_MONGOPORT:${ARG_MONGOPORT} ARG_MONGOUSER:${ARG_MONGOUSER} ARG_MONGOWRITEDB:${ARG_MONGOWRITEDB} ARG_MONGOAUTHDB:${ARG_MONGOAUTHDB} WDIR:${WDIR}"
 util_check_vars ARG_MONGOHOST ARG_MONGOPORT ARG_MONGOUSER ARG_MONGOPASS ARG_MONGOWRITEDB ARG_MONGOAUTHDB WDIR
-
-# Check files exist
-util_check_files "$KEYTAB_SECRET"
+util_setup_spark_k8s
 
 # Check commands/CLIs exist
 util_check_cmd mongoimport
 util_check_cmd mongosh
 
-# INITIALIZE ANALYTIX SPARK3
-util_setup_spark_k8s
-
-# Authenticate kerberos and get principle user name
 KERBEROS_USER=$(util_kerberos_auth_with_keytab "$KEYTAB_SECRET")
+util4logi "authenticated with Kerberos user: ${KERBEROS_USER}"
 
-# ------------------------------------------------------------------------------------------------------- RUN SPARK JOB
+# ---------------------------------------------------------------------------------------------------- RUN MONGO IMPORT
 # arg1: hdfs output directory
 # arg2: mongodb collection name [datasets or detailed_datasets]
 function run_mongo_import() {
     hdfs_out_dir=$1
     collection=$2
-    # Local directory in K8s pod to store Spark results which will be copied from HDFS. Create directory if not exist, delete file if exists.
+    # Local directory in K8s pod to store Spark results which will be copied from HDFS.
+    # Create directory if not exist, delete file if exists.
     local_json_merge_dir=$WDIR/results
     mkdir -p "$local_json_merge_dir"
     local_json_merge_file=$local_json_merge_dir/"${collection}.json"
@@ -109,26 +69,29 @@ function run_mongo_import() {
     # Copy files from HDFS to LOCAL directory as a single file
     hadoop fs -getmerge "$hdfs_out_dir"/part-*.json "$local_json_merge_file"
 
-    mongoimport --drop --type=json --host "$ARG_MONGOHOST" --port "$ARG_MONGOPORT" --username "$ARG_MONGOUSER" \
-        --password "$ARG_MONGOPASS" --authenticationDatabase "$ARG_MONGOAUTHDB" --db "$ARG_MONGOWRITEDB" \
+    mongoimport --drop --type=json \
+        --host "$ARG_MONGOHOST" --port "$ARG_MONGOPORT" --username "$ARG_MONGOUSER" --password "$ARG_MONGOPASS" \
+        --authenticationDatabase "$ARG_MONGOAUTHDB" --db "$ARG_MONGOWRITEDB" \
         --collection "$collection" --file "$local_json_merge_file"
-    util4logi "mongoimport finished for  ${collection}"
+    util4logi "Mongoimport finished. ${hdfs_out_dir} imported to collection: ${collection}"
 }
 
-###################### Run datasets
+###################### Import datasets
 # Arrange a temporary HDFS directory that current Kerberos user can use for datasets collection
-datasets_hdfs_out="/tmp/${KERBEROS_USER}/rucio_ds_for_mongo/$(date +%Y-%m-%d)"
-run_mongo_import "$datasets_hdfs_out" "datasets" 2>&1
+datasets_hdfs_path="/tmp/${KERBEROS_USER}/rucio_ds_for_mongo/$(date +%Y-%m-%d)"
+run_mongo_import "$datasets_hdfs_path" "datasets" 2>&1
 
-###################### Run detailed datasets
-detailed_datasets_hdfs_out="/tmp/${KERBEROS_USER}/rucio_detailed_ds_for_mongo/$(date +%Y-%m-%d)"
-run_mongo_import "$detailed_datasets_hdfs_out" "detailed_datasets" 2>&1
+###################### Import detailed datasets
+detailed_datasets_hdfs_path="/tmp/${KERBEROS_USER}/rucio_detailed_ds_for_mongo/$(date +%Y-%m-%d)"
+run_mongo_import "$detailed_datasets_hdfs_path" "detailed_datasets" 2>&1
 
 # ---------------------------------------------------------------------------------------- SOURCE TIMESTAMP MONGOIMPORT
-# Write current date to json file and import to MongoDB "source_timestamp" collection for Go Web Page.
+# Write current date to json file and import it to MongoDB "source_timestamp" collection for Go Web Page.
 echo "{\"createdAt\": \"$(date +%Y-%m-%d)\"}" >source_timestamp.json
-mongoimport --drop --type=json --host "$ARG_MONGOHOST" --port "$ARG_MONGOPORT" --username "$ARG_MONGOUSER" --password "$ARG_MONGOPASS" \
-    --authenticationDatabase "$ARG_MONGOAUTHDB" --db "$ARG_MONGOWRITEDB" --collection "source_timestamp" --file source_timestamp.json
+mongoimport --drop --type=json \
+    --host "$ARG_MONGOHOST" --port "$ARG_MONGOPORT" --username "$ARG_MONGOUSER" --password "$ARG_MONGOPASS" \
+    --authenticationDatabase "$ARG_MONGOAUTHDB" --db "$ARG_MONGOWRITEDB" \
+    --collection "source_timestamp" --file source_timestamp.json
 
 util4logi "source_timestamp collection is updated with current date"
 
@@ -140,4 +103,5 @@ util4logi "MongoDB indexes are created for datasets and detailed_datasets collec
 # -------------------------------------------------------------------------------------------------------------- FINISH
 # Print process wall clock time
 duration=$(($(date +%s) - START_TIME))
+util_cron_send_end "$myname" 0
 util4logi "all finished, time spent: $(util_secs_to_human $duration)"

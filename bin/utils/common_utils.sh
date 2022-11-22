@@ -95,7 +95,7 @@ function util_check_files() {
 #######################################
 function util_check_cmd() {
     if which "$1" >/dev/null; then
-        util4logi "$1 exists"
+        util4logi "Command $1 exists and in PATH."
     else
         util4loge "Please make sure you correctly set $1 executable path in PATH." && exit 1
     fi
