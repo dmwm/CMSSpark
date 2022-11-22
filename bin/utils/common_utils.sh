@@ -95,7 +95,7 @@ function util_check_files() {
 #######################################
 function util_check_cmd() {
     if which "$1" >/dev/null; then
-        util4logi "$1 exists"
+        util4logi "Command $1 exists and in PATH."
     else
         util4loge "Please make sure you correctly set $1 executable path in PATH." && exit 1
     fi
@@ -283,11 +283,11 @@ EOF
 #    $@: all
 #######################################
 function util_input_args_parser() {
-    unset -v KEYTAB_SECRET CMSR_SECRET RUCIO_SECRET AMQ_JSON_CREDS CMSMONITORING_ZIP STOMP_ZIP EOS_DIR PORT1 PORT2 K8SHOST WDIR OUTPUT_DIR CONF_FILE URL_PREFIX LAST_N_DAYS IS_ITERATIVE IS_K8S IS_TEST help
+    unset -v KEYTAB_SECRET CMSR_SECRET RUCIO_SECRET AMQ_JSON_CREDS CMSMONITORING_ZIP STOMP_ZIP EOS_DIR PORT1 PORT2 K8SHOST WDIR OUTPUT_DIR HDFS_PATH CONF_FILE URL_PREFIX LAST_N_DAYS IS_ITERATIVE IS_K8S IS_TEST help
     # Dictionary to keep variables
     declare -A arr
 
-    PARSED_ARGS=$(getopt --unquoted --options v,h --name "$(basename -- "$0")" --longoptions keytab:,cmsr:,rucio:,amq:,cmsmonitoring:,stomp:,eos:,p1:,p2:,host:,wdir:,output:,conf:,url:,lastndays:,iterative,k8s,test,help -- "$@")
+    PARSED_ARGS=$(getopt --unquoted --options v,h --name "$(basename -- "$0")" --longoptions keytab:,cmsr:,rucio:,amq:,cmsmonitoring:,stomp:,eos:,p1:,p2:,host:,wdir:,output:,hdfs:,conf:,url:,lastndays:,iterative,k8s,test,help -- "$@")
     VALID_ARGS=$?
     if [ "$VALID_ARGS" != "0" ]; then
         util4loge "Given args not valid: $*"
@@ -308,6 +308,7 @@ function util_input_args_parser() {
         --host)          arr["K8SHOST"]=$2           ; shift 2 ;;
         --wdir)          arr["WDIR"]=$2              ; shift 2 ;;
         --output)        arr["OUTPUT_DIR"]=$2        ; shift 2 ;;
+        --hdfs)          arr["HDFS_PATH"]=$2         ; shift 2 ;;
         --conf)          arr["CONF_FILE"]=$2         ; shift 2 ;;
         --url)           arr["URL_PREFIX"]=$2        ; shift 2 ;;
         --lastndays)     arr["LAST_N_DAYS"]=$2       ; shift 2 ;;
