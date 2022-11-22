@@ -18,8 +18,8 @@ import shutil
 from datetime import datetime, timedelta, timezone
 
 import click
-import pandas as pd
 import numpy as np
+import pandas as pd
 import plotly.express as px
 from pyspark.sql.functions import (
     col, concat_ws, format_string, from_unixtime, lit, unix_timestamp, when,
@@ -48,7 +48,7 @@ _SITES_HTML_DIR = 'site_htmls'
 _YEARS_DIR = 'years'
 _PICKLE_DIR = 'pickles'
 
-# Producer cron prediod is in each 12 minutes. All time calculations are arranged according to this value.
+# Producer cron period is in each 12 minutes. All time calculations are arranged according to this value.
 PRODUCER_MINUTE_PERIOD = 12
 NUMBER_OF_BINS_IN_DAY = (60 * 24) / PRODUCER_MINUTE_PERIOD
 
@@ -592,9 +592,6 @@ def main(start_date, end_date, output_dir, iterative, url_prefix, html_template,
     url_prefix = url_prefix.rstrip("/")  # no slash at the end
     output_dir = output_dir.rstrip("/")  # no slash at the end
 
-    # get raw df
-    df_raw = get_raw_df(spark, start_date, end_date)
-
     # Create subdirectories if they do not exist
     for d in [_CSV_DIR, _HTML_DIR, _SITES_HTML_DIR, _YEARS_DIR,
               os.path.join(_PICKLE_DIR, 'new'), os.path.join(_PICKLE_DIR, 'old'),
@@ -607,6 +604,9 @@ def main(start_date, end_date, output_dir, iterative, url_prefix, html_template,
     if iterative:
         print("[INFO] Iterative process is starting...")
         start_date, end_date, curr_month_str, prev_month_str = dates_iterative()
+
+        # get raw df
+        df_raw = get_raw_df(spark, start_date, end_date)
 
         # Read existing pickle files and get df
         prev_df_chd = pd.read_pickle(f'{output_dir}/{_PICKLE_DIR}/new/core_hr_daily.pkl')
@@ -637,6 +637,11 @@ def main(start_date, end_date, output_dir, iterative, url_prefix, html_template,
         print("[INFO] df_core_hr_monthly shape:", df_core_hr_monthly.shape)
         print("[INFO] df_core_hr_monthly shape:", df_running_cores_monthly.shape)
     else:
+        if not (start_date and end_date):
+            raise Exception("Start date or end date is not provided in non-iterative run")
+        # get raw df
+        df_raw = get_raw_df(spark, start_date, end_date)
+
         # RUN spark for new data
         df_core_hr_daily = get_pd_df_core_hours_sum_of_daily(spark, df_raw, start_date, end_date)
         df_running_cores_daily = get_pd_df_running_cores_avg_of_daily(spark, df_raw, start_date, end_date)
@@ -647,6 +652,9 @@ def main(start_date, end_date, output_dir, iterative, url_prefix, html_template,
         if save_pickle:
             df_core_hr_daily.to_pickle(f'{output_dir}/{_PICKLE_DIR}/raw/core_hr_daily.pkl')
             df_running_cores_daily.to_pickle(f'{output_dir}/{_PICKLE_DIR}/raw/running_cores_daily.pkl')
+        print("[INFO] ------------------------------------------------->")
+        print("[INFO] COPY pickles/raw files to pickles/new after full run to use in --iterative mode later.")
+        print("[INFO] <-------------------------------------------------")
 
     # Set date order of yyyy-mm month strings
     sorted_months = sorted(df_core_hr_daily.month.unique(), key=lambda m: datetime.strptime(m, "%Y-%m"))
@@ -690,8 +698,8 @@ def main(start_date, end_date, output_dir, iterative, url_prefix, html_template,
 
     if iterative:
         # This should be run as a last step,
-        # because we don't want to lost current pickle by replacing it with the new problematic df
-        for pkl in ['core_hr_daily.pkl', 'running_cores_daily.pkl', 'core_hr_monthly.pkl']:
+        # because we don't want to lose current pickle by replacing it with the new problematic df in case
+        for pkl in ['core_hr_daily.pkl', 'running_cores_daily.pkl']:
             shutil.copy2(f'{output_dir}/{_PICKLE_DIR}/new/{pkl}', f'{output_dir}/{_PICKLE_DIR}/old/{pkl}')
 
         # Save current dataframes to "pickles/new" directory
