@@ -15,10 +15,7 @@ set -e
 TZ=UTC
 START_TIME=$(date +%s)
 myname=$(basename "$0")
-script_dir="$(
-    cd -- "$(dirname "$0")" >/dev/null 2>&1
-    pwd -P
-)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 . "$script_dir"/utils/common_utils.sh
 
 if [ "$1" == "" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-help" ]; then
