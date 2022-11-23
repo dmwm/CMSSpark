@@ -60,9 +60,9 @@ function run_spark() {
 
 END_DATE="$(date +%Y-%m-01)"
 START_DATE="$(date -d "$END_DATE -1 year" +%Y-%m-01)"
-# If test, process only 2 months
+# If test, process only 1 months
 if [[ "$IS_TEST" == 1 ]]; then
-    START_DATE="$(date -d "$END_DATE -2 month" +%Y-%m-01)"
+    START_DATE="$(date -d "$END_DATE -1 month" +%Y-%m-01)"
 fi
 
 util4logi "Totals for dataset/datablock from $START_DATE to $END_DATE"
