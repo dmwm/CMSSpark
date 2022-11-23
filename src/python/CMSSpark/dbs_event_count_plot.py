@@ -211,14 +211,14 @@ def get_events_by_tier_month(spark, start_date, end_date,
     return grouped.toPandas()
 
 
-def event_count_plot(start_date, end_date, output_folder, output_format, tiers, remove_patterns, skims,
+def event_count_plot(start_date, end_date, output_folder, output_formats, tiers, remove_patterns, skims,
                      colors_file=None, generate_csv=False, only_valid_files=False, attributes=None, verbose=False):
     """
     args:
         - start_date: String with the start date in format yyyy/MM/dd
         - end_date: String with the end date format yyyy/MM/dd
         - output_folder: Path of the output folder.
-        - output_format: png/pdf
+        - output_formats: list of formata like [png, pdf]
         - tiers: List of tiers
         - remove_patterns: List of remove patterns
         - skims: List of skim patterns
@@ -239,15 +239,20 @@ def event_count_plot(start_date, end_date, output_folder, output_format, tiers, 
     )
     start_date_f = event_count_pdf.month.min()
     end_date_f = event_count_pdf.month.max()
-    image_filename = f"event_count_{start_date_f}-{end_date_f}.{output_format}"
+    events_fig = plot_tiers_month(event_count_pdf, colors_file, attributes)
+
     os.makedirs(output_folder, exist_ok=True)
     if generate_csv:
         csv_filename = f"event_count_{start_date_f}-{end_date_f}.csv"
         event_count_pdf.to_csv(os.path.join(output_folder, csv_filename))
-    events_fig = plot_tiers_month(event_count_pdf, colors_file, attributes)
-    image_path = os.path.join(output_folder, image_filename)
-    events_fig.savefig(image_path, format=output_format, bbox_inches='tight')
-    return os.path.abspath(image_path)
+
+    image_paths = []
+    for output_format in output_formats:
+        image_filename = f"event_count_{start_date_f}-{end_date_f}.{output_format}"
+        image_path = os.path.join(output_folder, image_filename)
+        events_fig.savefig(image_path, format=output_format, bbox_inches='tight')
+        image_paths.append(os.path.abspath(image_path))
+    return image_paths
 
 
 @click.command()
@@ -261,10 +266,11 @@ def event_count_plot(start_date, end_date, output_folder, output_format, tiers, 
               help="A json file either with a list of colors (strings), or with a mapping of label and color. "
                    "If the file is not valid, or is not provided, a default palette will be generated.")
 @click.option("--tiers", type=str,
-              default="GEN,GEN-SIM,GEN-RAW,GEN-SIM-RECO,AODSIM,MINIAODSIM,RAWAODSIM,NANOAODSIM,GEN-SIM-DIGI-RAW,GEN-SIM-RAW,GEN-SIM-DIGI-RECO",
+              default="GEN,GEN-SIM,GEN-RAW,GEN-SIM-RECO,AODSIM,MINIAODSIM,"
+                      "RAWAODSIM,NANOAODSIM,GEN-SIM-DIGI-RAW,GEN-SIM-RAW,GEN-SIM-DIGI-RECO",
               help="Comma separated list of tiers to consider. eg: GEN,GEN-SIM,GEN-RAW,GEN-SIM-RECO,AODSIM,MINIAODSIM")
 @click.option("--remove", default="test,backfill,jobrobot,sam,bunnies,penguins",
-              help="Comma separed list of case insensitive patterns. "
+              help="Comma separated list of case insensitive patterns. "
                    "The datasets which name match any of the patterns will be ignored.")
 @click.option("--skims", default="",
               help="Comma separated list of skims. The skims are case sensitive. Datasets which match the given skims "
@@ -314,23 +320,23 @@ def main(start_month, end_month, output_folder, output_format, colors_file, tier
     output_formats = ["pdf"]
     if output_format != "pdf":
         output_formats.append(output_format)
-    for output_format in output_formats:
-        filename = event_count_plot(
-            start_date,
-            end_date,
-            output_folder,
-            output_format,
-            tiers,
-            remove,
-            skims,
-            colors_file=colors_file,
-            generate_csv=generate_csv,
-            only_valid_files=only_valid_files,
-            attributes=attributes,
-            verbose=verbose,
-        )
+    image_file_names = event_count_plot(
+        start_date,
+        end_date,
+        output_folder,
+        output_formats,
+        tiers,
+        remove,
+        skims,
+        colors_file=colors_file,
+        generate_csv=generate_csv,
+        only_valid_files=only_valid_files,
+        attributes=attributes,
+        verbose=verbose,
+    )
+    for filename in image_file_names:
         print(filename)
-        # Write filename to some file
+        # Write filename to some generic file which will be written by bash script to create symbolic link
         with open(os.path.join(output_folder, output_format + "_output_path_for_ln.txt"), "w+") as f:
             f.write(filename)
 
