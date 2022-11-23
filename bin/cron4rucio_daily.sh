@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2068
 set -e
 ##H cron4rucio_daily.sh
 ##H    Daily Rucio dumps
@@ -12,63 +13,47 @@ set -e
 ##H How to test:
 ##H   - Just provide test hdfs directory as output directory. No need a test run, spark job will process only data of 1 day.
 ##H
+TZ=UTC
+START_TIME=$(date +%s)
+myname=$(basename "$0")
 script_dir="$(cd "$(dirname "$0")" && pwd)"
-# get common util functions
 . "$script_dir"/utils/common_utils.sh
-trap 'onFailExit' ERR
-onFailExit() {
-    util4loge "finished with error!" || exit 1
-}
-# ------------------------------------------------------------------------------------------------------- GET USER ARGS
-unset -v KEYTAB_SECRET OUTPUT_DIR PORT1 PORT2 K8SHOST WDIR help
-[ "$#" -ne 0 ] || util_usage_help
 
-# --options (short options) is mandatory, and v is a dummy param.
-PARSED_ARGS=$(getopt --unquoted --options v,h --name "$(basename -- "$0")" --longoptions keytab:,output:,p1:,p2:,host:,wdir:,help -- "$@")
-VALID_ARGS=$?
-if [ "$VALID_ARGS" != "0" ]; then
+if [ "$1" == "" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-help" ]; then
     util_usage_help
+    exit 0
 fi
-
-util4logi "Given arguments: $PARSED_ARGS"
-eval set -- "$PARSED_ARGS"
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-    --keytab)    KEYTAB_SECRET=$2     ; shift 2 ;;
-    --output)    OUTPUT_DIR=$2        ; shift 2 ;;
-    --p1)        PORT1=$2             ; shift 2 ;;
-    --p2)        PORT2=$2             ; shift 2 ;;
-    --host)      K8SHOST=$2           ; shift 2 ;;
-    --wdir)      WDIR=$2              ; shift 2 ;;
-    -h | --help) help=1               ; shift   ;;
-    *)           break                          ;;
-    esac
-done
-
-if [[ "$help" == 1 ]]; then
-    util_usage_help
-fi
-# ------------------------------------------------------------------------------------------------------------- PREPARE
-# check variables set
-util_check_vars OUTPUT_DIR PORT1 PORT2 K8SHOST WDIR
+util_cron_send_start "$myname"
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
-current_date="$(date +%Y-%m-%d)"
 
-# INITIALIZE ANALYTIX SPARK3
+unset -v KEYTAB_SECRET OUTPUT_DIR PORT1 PORT2 K8SHOST WDIR
+# ------------------------------------------------------------------------------------------------------------- PREPARE
+util_input_args_parser $@
+
+util4logi "Parameters: KEYTAB_SECRET:${KEYTAB_SECRET} OUTPUT_DIR:${OUTPUT_DIR} PORT1:${PORT1} PORT2:${PORT2} K8SHOST:${K8SHOST} WDIR:${WDIR} IS_TEST:${IS_TEST}"
+util_check_vars PORT1 PORT2 K8SHOST
 util_setup_spark_k8s
 
-# Authenticate kerberos and get principle user name
 KERBEROS_USER=$(util_kerberos_auth_with_keytab "$KEYTAB_SECRET")
 util4logi "authenticated with Kerberos user: ${KERBEROS_USER}"
+util_check_and_create_dir "$OUTPUT_DIR"
+
 # ----------------------------------------------------------------------------------------------------------------- RUN
+util4logi "${myname} Spark Job is starting..."
 util4logi "output directory: ${OUTPUT_DIR}"
-util4logi "spark job starting.."
+current_date="$(date +%Y-%m-%d)"
+
 spark_submit_args=(
-    --master yarn --conf spark.ui.showConsoleProgress=false --conf "spark.driver.bindAddress=0.0.0.0" --driver-memory=8g --executor-memory=8g
-    --conf "spark.driver.host=${K8SHOST}" --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
-    --packages org.apache.spark:spark-avro_2.12:3.3.1
+    --master yarn --conf spark.ui.showConsoleProgress=false
+    --conf "spark.driver.bindAddress=0.0.0.0" --conf "spark.driver.host=${K8SHOST}"
+    --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
+    --driver-memory=8g --executor-memory=8g --packages org.apache.spark:spark-avro_2.12:3.3.1
 )
 py_input_args=(--verbose --output "$OUTPUT_DIR" --fdate "$current_date")
 
 # log all to stdout
 spark-submit "${spark_submit_args[@]}" "$script_dir/../src/python/CMSSpark/rucio_daily.py" "${py_input_args[@]}" 2>&1
+
+duration=$(($(date +%s) - START_TIME))
+util_cron_send_end "$myname" 0
+util4logi "all finished, time spent: $(util_secs_to_human $duration)"
