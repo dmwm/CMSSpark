@@ -57,16 +57,16 @@ function run_spark() {
 
 END_DATE="$(date +%Y-%m-01)"
 START_DATE="$(date -d "$END_DATE -1 year" +%Y-%m-01)"
-# If test, process only 2 months
+# If test, process only 1 months
 if [[ "$IS_TEST" == 1 ]]; then
-    START_DATE="$(date -d "$END_DATE -2 month" +%Y-%m-01)"
+    START_DATE="$(date -d "$END_DATE -1 month" +%Y-%m-01)"
 fi
 
 util4logi "Plots from $START_DATE to $END_DATE"
 
 # T2 sites excluding cern.
 run_spark --generate_plots --by "month" --output_folder "$OUTPUT_DIR/T2" --start_date "$START_DATE" --end_date "$END_DATE"
-/bin/bash "$script_dir/run_hs06cputime_plot.sh" --generate_plots --by "weekofyear" --output_folder "$OUTPUT_DIR/T2" --start_date "$START_DATE" --end_date "$END_DATE"
+run_spark --generate_plots --by "weekofyear" --output_folder "$OUTPUT_DIR/T2" --start_date "$START_DATE" --end_date "$END_DATE"
 
 ln -s -f "$OUTPUT_DIR/T2/HS06CpuTimeHr_month_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).csv" "$OUTPUT_DIR/T2/HS06CpuTimeHr_month_latest.csv"
 ln -s -f "$OUTPUT_DIR/T2/HS06CpuTimeHr_month_$(date -d "$START_DATE" +%Y%m%d)-$(date -d "$END_DATE" +%Y%m%d).png" "$OUTPUT_DIR/T2/HS06CpuTimeHr_month_latest.png"

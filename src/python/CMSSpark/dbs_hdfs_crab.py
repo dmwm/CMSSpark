@@ -15,17 +15,10 @@ import click
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pyspark.sql.functions import (
-    regexp_extract,
-    max as _max,
-    min as _min,
-    col,
-    lit,
-    count,
-    sum as _sum,
-    countDistinct,
+    col, count, countDistinct, lit, regexp_extract,
+    max as _max, min as _min, sum as _sum,
 )
 from pyspark.sql.types import StructType, LongType, StringType, StructField
-
 
 # CMSSpark modules
 from CMSSpark.spark_utils import get_candidate_files, get_spark_session
@@ -47,32 +40,19 @@ def _get_crab_condor_schema():
                     ]
                 ),
             ),
-            StructField(
-                "data",
-                StructType(
-                    [
-                        StructField(
-                            "GlobalJobId", StringType(), nullable=False
+            StructField("data",
+                        StructType(
+                            [
+                                StructField("GlobalJobId", StringType(), nullable=False),
+                                StructField("RecordTime", LongType(), nullable=False),
+                                StructField("Status", StringType(), nullable=True),
+                                StructField("ChirpCMSSWReadBytes", LongType(), nullable=True),
+                                StructField("CRAB_DataBlock", StringType(), nullable=True),
+                                StructField("CRAB_Workflow", StringType(), nullable=True),
+                                StructField("CMSPrimaryPrimaryDataset", StringType(), nullable=True),
+                            ]
                         ),
-                        StructField("RecordTime", LongType(), nullable=False),
-                        StructField("Status", StringType(), nullable=True),
-                        StructField(
-                            "ChirpCMSSWReadBytes", LongType(), nullable=True
                         ),
-                        StructField(
-                            "CRAB_DataBlock", StringType(), nullable=True
-                        ),
-                        StructField(
-                            "CRAB_Workflow", StringType(), nullable=True
-                        ),
-                        StructField(
-                            "CMSPrimaryPrimaryDataset",
-                            StringType(),
-                            nullable=True,
-                        ),
-                    ]
-                ),
-            ),
         ]
     )
     return schema
@@ -101,9 +81,7 @@ def get_crab_popularity_ds(start_date, end_date, base=_BASE_HDFS_CONDOR):
             """Status in ('Completed', 'Removed') AND
                               CRAB_DataBlock is not NULL  AND
                               timestamp >= {} AND
-                              timestamp <= {}""".format(
-                start, end
-            )
+                              timestamp <= {}""".format(start, end)
         )
         .repartition("CRAB_DataBlock")
         .drop_duplicates(["GlobalJobId"])
@@ -131,13 +109,11 @@ def get_crab_popularity_ds(start_date, end_date, base=_BASE_HDFS_CONDOR):
 def generate_top_datasets_plot(pdf, output_folder, filename):
     datablocks_pd = (
         pdf.groupby("Dataset")
-        .agg(
-            {
-                "job_count": "sum",
-                "max(RecordTime)": "max",
-                "min(RecordTime)": "min",
-            }
-        )
+        .agg({
+            "job_count": "sum",
+            "max(RecordTime)": "max",
+            "min(RecordTime)": "min",
+        })
         .sort_values("job_count", ascending=False)
         .reset_index()
     )
@@ -146,10 +122,7 @@ def generate_top_datasets_plot(pdf, output_folder, filename):
     plot = sns.barplot(
         data=datablocks_pd[:20], x="job_count", y="Dataset"
     )
-    fig.savefig(
-        os.path.join(output_folder, f"{filename}_top_jc.png"),
-        bbox_inches="tight",
-    )
+    fig.savefig(os.path.join(output_folder, f"{filename}_top_jc.png"), bbox_inches="tight")
 
 
 @click.command()
