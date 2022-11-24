@@ -195,8 +195,7 @@ function util_setup_spark_k8s() {
     export SPARK_LOCAL_IP=127.0.0.1
     export PYSPARK_PYTHON=/cvmfs/sft.cern.ch/lcg/releases/Python/3.9.6-b0f98/x86_64-centos7-gcc8-opt/bin/python3
     # until IT changes this setting, we need to turn off info logs in this way. Don't try spark.sparkContext.setLogLevel('WARN'), doesn't work, since they are not spark logs but spark-submit logs.
-    sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' $SPARK_CONF_DIR/log4j2.properties
-
+    sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' "$SPARK_CONF_DIR"/log4j2.properties
 }
 
 #######################################
@@ -231,18 +230,19 @@ function util_dotless_name() {
 #    util_cron_send_start foo test
 #######################################
 function util_cron_send_start() {
-    local script_name env
+    local script_name_with_extension env
     if [ -z "$PUSHGATEWAY_URL" ]; then
         util4loge "PUSHGATEWAY_URL variable is not defined. Exiting.."
         exit 1
     fi
-    script_name=$1
-    env=$K8S_ENV
-    script_name_wo_extension=$(util_dotless_name "$script_name")
-    cat <<EOF | curl --data-binary @- "$PUSHGATEWAY_URL"/metrics/job/cmsmon-cron/instance/"$(hostname)"
-# TYPE cmsmon_cron_start_${env}_${script_name_wo_extension} gauge
-# HELP cmsmon_cron_start_${env}_${script_name_wo_extension} cronjob START Unix time
-cmsmon_cron_start_${env}_${script_name_wo_extension}{} $(date +%s)
+    script_name_with_extension=$1
+    # If K8S_ENV is not set, use default tag
+    env=${K8S_ENV:-default}
+    script=$(util_dotless_name "$script_name_with_extension")
+    cat <<EOF | curl --data-binary @- "$PUSHGATEWAY_URL"/metrics/job/cmsmon-cron-"${env}"/instance/"$(hostname)"
+# TYPE cmsmon_cron_start_${env}_${script} gauge
+# HELP cmsmon_cron_start_${env}_${script} cronjob START Unix time
+cmsmon_cron_start_${env}_${script}{script="${script}", env="${env}"} $(date +%s)
 EOF
 }
 
@@ -256,19 +256,20 @@ EOF
 #    util_cron_send_end foo test 210
 #######################################
 function util_cron_send_end() {
-    local script_name env exit_code
+    local script_name_with_extension env exit_code
     if [ -z "$PUSHGATEWAY_URL" ]; then
         util4loge "PUSHGATEWAY_URL variable is not defined. Exiting.."
         exit 1
     fi
-    script_name=$1
-    env=$K8S_ENV
-    exit_code=$3
-    script_name_wo_extension=$(util_dotless_name "$script_name")
-    cat <<EOF | curl --data-binary @- "$PUSHGATEWAY_URL"/metrics/job/cmsmon-cron/instance/"$(hostname)"
-# TYPE cmsmon_cron_end_${env}_${script_name_wo_extension} gauge
-# HELP cmsmon_cron_end_${env}_${script_name_wo_extension} cronjob END Unix time
-cmsmon_cron_end_${env}_${script_name_wo_extension}{status="${exit_code}"} $(date +%s)
+    script_name_with_extension=$1
+    exit_code=$2
+    # If K8S_ENV is not set, use default tag
+    env=${K8S_ENV:-default}
+    script=$(util_dotless_name "$script_name_with_extension")
+    cat <<EOF | curl --data-binary @- "$PUSHGATEWAY_URL"/metrics/job/cmsmon-cron-"${env}"/instance/"$(hostname)"
+# TYPE cmsmon_cron_end_${env}_${script} gauge
+# HELP cmsmon_cron_end_${env}_${script} cronjob END Unix time
+cmsmon_cron_end_${env}_${script}{script="${script}", env="${env}", status="${exit_code}"} $(date +%s)
 EOF
 }
 # -------------------------------------------------------------------------------------------------
