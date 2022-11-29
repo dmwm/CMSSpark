@@ -38,7 +38,7 @@ if [ "$1" == "" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-hel
     util_usage_help
     exit 0
 fi
-util_cron_send_start "$myname"
+util_cron_send_start "$myname" "1d"
 unset -v KEYTAB_SECRET HDFS_PATH ARG_MONGOHOST ARG_MONGOPORT ARG_MONGOUSER ARG_MONGOPASS ARG_MONGOWRITEDB ARG_MONGOAUTHDB WDIR help
 # ------------------------------------------------------------------------------------------------------------- PREPARE
 util4datasetmon_input_args_parser $@
@@ -109,5 +109,5 @@ util4logi "MongoDB indexes are created for datasets and detailed_datasets collec
 # -------------------------------------------------------------------------------------------------------------- FINISH
 # Print process wall clock time
 duration=$(($(date +%s) - START_TIME))
-util_cron_send_end "$myname" 0
+util_cron_send_end "$myname" "1d" 0
 util4logi "all finished, time spent: $(util_secs_to_human $duration)"

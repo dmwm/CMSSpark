@@ -190,7 +190,7 @@ function util_setup_spark_k8s() {
     # check hava home
     util_set_java_home
 
-    hadoop-set-default-conf.sh analytix
+    hadoop-set-default-conf.sh analytix 'hadoop spark' 3.2
     source hadoop-setconf.sh analytix 3.2 spark3
     export SPARK_LOCAL_IP=127.0.0.1
     export PYSPARK_PYTHON=/cvmfs/sft.cern.ch/lcg/releases/Python/3.9.6-b0f98/x86_64-centos7-gcc8-opt/bin/python3
@@ -222,12 +222,12 @@ function util_dotless_name() {
 }
 
 #######################################
-# Util to send cronjob start time to pushgateway
+# Util to send cronjob start time to pushgateway, depends on K8S_ENV
 #  Arguments:
 #    $1: cronjob name
-#    $2: environment, prod/dev/test
+#    $2: period (10m, 1h, 1d, 1M)
 #  Usage:
-#    util_cron_send_start foo test
+#    util_cron_send_start foo 1d
 #######################################
 function util_cron_send_start() {
     local script_name_with_extension env
@@ -236,24 +236,25 @@ function util_cron_send_start() {
         exit 1
     fi
     script_name_with_extension=$1
+    period=$2
     # If K8S_ENV is not set, use default tag
     env=${K8S_ENV:-default}
     script=$(util_dotless_name "$script_name_with_extension")
     cat <<EOF | curl --data-binary @- "$PUSHGATEWAY_URL"/metrics/job/cmsmon-cron-"${env}"/instance/"$(hostname)"
 # TYPE cmsmon_cron_start_${env}_${script} gauge
 # HELP cmsmon_cron_start_${env}_${script} cronjob START Unix time
-cmsmon_cron_start_${env}_${script}{script="${script}", env="${env}"} $(date +%s)
+cmsmon_cron_start_${env}_${script}{script="${script}", env="${env}", period="${period}"} $(date +%s)
 EOF
 }
 
 #######################################
-# Util to send cronjob end time to pushgateway
+# Util to send cronjob end time to pushgateway, depends on K8S_ENV
 #  Arguments:
 #    $1: cronjob name
-#    $2: environment, prod/dev/test
+#    $2: period (10m, 1h, 1d, 1M)
 #    $3: cronjob exit status
 #  Usage:
-#    util_cron_send_end foo test 210
+#    util_cron_send_end foo 1d 210
 #######################################
 function util_cron_send_end() {
     local script_name_with_extension env exit_code
@@ -262,14 +263,15 @@ function util_cron_send_end() {
         exit 1
     fi
     script_name_with_extension=$1
-    exit_code=$2
+    period=$2
+    exit_code=$3
     # If K8S_ENV is not set, use default tag
     env=${K8S_ENV:-default}
     script=$(util_dotless_name "$script_name_with_extension")
     cat <<EOF | curl --data-binary @- "$PUSHGATEWAY_URL"/metrics/job/cmsmon-cron-"${env}"/instance/"$(hostname)"
 # TYPE cmsmon_cron_end_${env}_${script} gauge
 # HELP cmsmon_cron_end_${env}_${script} cronjob END Unix time
-cmsmon_cron_end_${env}_${script}{script="${script}", env="${env}", status="${exit_code}"} $(date +%s)
+cmsmon_cron_end_${env}_${script}{script="${script}", env="${env}", period="${period}", status="${exit_code}"} $(date +%s)
 EOF
 }
 # -------------------------------------------------------------------------------------------------

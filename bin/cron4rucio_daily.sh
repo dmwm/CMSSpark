@@ -23,7 +23,7 @@ if [ "$1" == "" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-hel
     util_usage_help
     exit 0
 fi
-util_cron_send_start "$myname"
+util_cron_send_start "$myname" "1d"
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 
 unset -v KEYTAB_SECRET OUTPUT_DIR PORT1 PORT2 K8SHOST WDIR
@@ -54,5 +54,5 @@ py_input_args=(--verbose --output "$OUTPUT_DIR" --fdate "$current_date")
 spark-submit "${spark_submit_args[@]}" "$script_dir/../src/python/CMSSpark/rucio_daily.py" "${py_input_args[@]}" 2>&1
 
 duration=$(($(date +%s) - START_TIME))
-util_cron_send_end "$myname" 0
+util_cron_send_end "$myname" "1d" 0
 util4logi "all finished, time spent: $(util_secs_to_human $duration)"

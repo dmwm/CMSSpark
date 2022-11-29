@@ -26,7 +26,7 @@ if [ "$1" == "" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-hel
     util_usage_help
     exit 0
 fi
-util_cron_send_start "$myname"
+util_cron_send_start "$myname" "1d"
 export PYTHONPATH=$script_dir/../../src/python:$PYTHONPATH
 unset -v KEYTAB_SECRET HDFS_PATH PORT1 PORT2 K8SHOST WDIR
 # ------------------------------------------------------------------------------------------------------------- PREPARE
@@ -91,5 +91,5 @@ run_spark "rucio_all_detailed_datasets.py" "$detailed_datasets_hdfs_out" "$detai
 # -------------------------------------------------------------------------------------------------------------- FINISH
 # Print process wall clock time
 duration=$(($(date +%s) - START_TIME))
-util_cron_send_end "$myname" 0
+util_cron_send_end "$myname" "1d" 0
 util4logi "all finished, time spent: $(util_secs_to_human $duration)"

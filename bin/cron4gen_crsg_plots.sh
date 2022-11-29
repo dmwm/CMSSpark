@@ -23,7 +23,7 @@ if [ "$1" == "" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-hel
     util_usage_help
     exit 0
 fi
-util_cron_send_start "$myname"
+util_cron_send_start "$myname" "1M"
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 unset -v KEYTAB_SECRET OUTPUT_DIR PORT1 PORT2 K8SHOST WDIR IS_TEST
 
@@ -105,5 +105,5 @@ else
 fi
 
 duration=$(($(date +%s) - START_TIME))
-util_cron_send_end "$myname" 0
+util_cron_send_end "$myname" "1M" 0
 util4logi "all finished, time spent: $(util_secs_to_human $duration)"
