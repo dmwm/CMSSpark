@@ -46,7 +46,7 @@ if [ "$1" == "" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-hel
     util_usage_help
     exit 0
 fi
-util_cron_send_start "$myname"
+util_cron_send_start "$myname" "1d"
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 
 unset -v KEYTAB_SECRET CMSR_SECRET RUCIO_SECRET AMQ_JSON_CREDS CMSMONITORING_ZIP STOMP_ZIP EOS_DIR PORT1 PORT2 K8SHOST WDIR IS_TEST help
@@ -215,5 +215,5 @@ util4logi "last 10 lines of spark job log"
 tail -10 "${LOG_DIR}/spark-job.log"
 
 duration=$(($(date +%s) - START_TIME))
-util_cron_send_end "$myname" 0
+util_cron_send_end "$myname" "1d" 0
 util4logi "all finished, time spent: $(util_secs_to_human $duration)"
