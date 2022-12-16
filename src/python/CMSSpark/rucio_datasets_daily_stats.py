@@ -171,13 +171,13 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
     # Prepare replicas
     df_replicas = spark.read.format('avro').load(hdfs_paths['REPLICAS']) \
         .filter(col("SCOPE") == "cms") \
+        .filter(col('STATE') == 'A') \
         .withColumn('replica_rse_id', lower(_hex(col('RSE_ID')))) \
         .withColumn('replica_file_size', col('BYTES').cast(LongType())) \
         .withColumnRenamed('NAME', 'file') \
         .withColumnRenamed('ACCESSED_AT', 'replica_accessed_at') \
         .withColumnRenamed('CREATED_AT', 'replica_created_at') \
         .withColumnRenamed('LOCK_CNT', 'lock_cnt') \
-        .withColumnRenamed('STATE', 'state') \
         .select(['file', 'replica_rse_id', 'replica_file_size',
                  'replica_accessed_at', 'replica_created_at', 'lock_cnt'])
 
