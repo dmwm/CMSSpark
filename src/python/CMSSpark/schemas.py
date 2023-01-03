@@ -109,11 +109,11 @@ def schema_datasets():
     :returns: StructType consisting StructField array
     """
     return StructType([
-        StructField("d_dataset_id", IntegerType(), True),
+        StructField("d_dataset_id", LongType(), True),
         StructField("d_dataset", StringType(), True),
         StructField("d_is_dataset_valid", IntegerType(), True),
-        StructField("d_primary_ds_id", IntegerType(), True),
-        StructField("d_processed_ds_id", IntegerType(), True),
+        StructField("d_primary_ds_id", LongType(), True),
+        StructField("d_processed_ds_id", LongType(), True),
         StructField("d_data_tier_id", IntegerType(), True),
         StructField("d_dataset_access_type_id", IntegerType(), True),
         StructField("d_acquisition_era_id", IntegerType(), True),
@@ -146,9 +146,9 @@ def schema_blocks():
     :returns: StructType consisting StructField array
     """
     return StructType([
-        StructField("b_block_id", IntegerType(), True),
+        StructField("b_block_id", LongType(), True),
         StructField("b_block_name", StringType(), True),
-        StructField("b_dataset_id", IntegerType(), True),
+        StructField("b_dataset_id", LongType(), True),
         StructField("b_open_for_writing", IntegerType(), True),
         StructField("b_origin_site_name", StringType(), True),
         StructField("b_block_size", DoubleType(), True),
@@ -184,14 +184,14 @@ def schema_files():
     :returns: StructType consisting StructField array
     """
     return StructType([
-        StructField("f_file_id", IntegerType(), True),
+        StructField("f_file_id", LongType(), True),
         StructField("f_logical_file_name", StringType(), True),
         StructField("f_is_file_valid", IntegerType(), True),
-        StructField("f_dataset_id", IntegerType(), True),
-        StructField("f_block_id", IntegerType(), True),
+        StructField("f_dataset_id", LongType(), True),
+        StructField("f_block_id", LongType(), True),
         StructField("f_file_type_id", IntegerType(), True),
         StructField("f_check_sum", StringType(), True),
-        StructField("f_event_count", IntegerType(), True),
+        StructField("f_event_count", LongType(), True),
         StructField("f_file_size", DoubleType(), True),
         StructField("f_branch_hash_id", IntegerType(), True),
         StructField("f_adler32", StringType(), True),
@@ -253,7 +253,7 @@ def schema_file_lumis():
     return StructType([
         StructField("fl_run_num", IntegerType(), True),
         StructField("fl_lumi_section_num", StringType(), True),
-        StructField("fl_file_id", IntegerType(), True)
+        StructField("fl_file_id", LongType(), True)
     ])
 
 
