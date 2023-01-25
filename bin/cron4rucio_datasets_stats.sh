@@ -3,15 +3,15 @@
 set -e
 ##H Can only run in K8s
 ##H
-##H cron4rucio_datasets_daily_stats.sh
-##H    Cron job of rucio_datasets_daily_stats.py which runs Sqoop dumps and send Spark agg results to MONIT via StompAMQ
+##H cron4rucio_datasets_stats.sh
+##H    Cron job of rucio_datasets_stats.py which runs Sqoop dumps and send Spark agg results to MONIT via StompAMQ
 ##H    We need to run Sqoop dumps and Spark job sequentially.
 ##H    We don't keep the historical Sqoop dumps, used in this job, by having deleting past days' HDFS data in new runs.
 ##H
-##H Usage: cron4rucio_datasets_daily_stats.sh <ARGS>
+##H Usage: cron4rucio_datasets_stats.sh <ARGS>
 ##H
 ##H Example :
-##H    cron4rucio_datasets_daily_stats.sh \
+##H    cron4rucio_datasets_stats.sh \
 ##H        --keytab ./keytab --cmsr ./cmsr_cstring --rucio ./rucio --amq ./amq-creds.json \
 ##H        --cmsmonitoring ./CMSMonitoring.zip --stomp ./stomp-v700.zip --eos /eos/user/c/cmsmonit/www/rucio_test \
 ##H        --p1 32000 --p2 32001 --host $MY_NODE_NAME --wdir $WDIR
@@ -42,12 +42,17 @@ myname=$(basename "$0")
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 . "$script_dir"/utils/common_utils.sh
 
+export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
+
+# producer metadata versioning. Please do not manually change the code, follow the git wf docker build.
+CMSSPARK_GIT_TAG=$(git --git-dir "$script_dir"/../.git describe --tags | tail -1)
+util4logi "CMSSPARK_GIT_TAG: $CMSSPARK_GIT_TAG"
+
 if [ "$1" == "" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ "$1" == "-help" ]; then
     util_usage_help
     exit 0
 fi
 util_cron_send_start "$myname" "1d"
-export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 
 unset -v KEYTAB_SECRET CMSR_SECRET RUCIO_SECRET AMQ_JSON_CREDS CMSMONITORING_ZIP STOMP_ZIP EOS_DIR PORT1 PORT2 K8SHOST WDIR IS_TEST help
 # ------------------------------------------------------------------------------------------------------------- PREPARE
@@ -177,7 +182,7 @@ util4logi "dumps are finished. Time spent: $(util_secs_to_human "$(($(date +%s) 
 # ------------------------------------------------------------------------------------------------------- RUN SPARK JOB
 # Required for Spark job in K8s
 util4logi "${myname} Spark Job is starting..."
-export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
+
 spark_submit_args=(
     --master yarn --conf spark.ui.showConsoleProgress=false --conf spark.sql.session.timeZone=UTC
     --driver-memory=8g --executor-memory=8g --executor-cores=4 --num-executors=30
@@ -189,17 +194,18 @@ py_input_args=(
     --creds "$AMQ_JSON_CREDS"
     --base_hdfs_dir "$BASE_SQOOP_DUMP_DIR"
     --base_eos_dir "$EOS_DIR"
+    --cmsspark_git_tag "$CMSSPARK_GIT_TAG"
     --amq_batch_size 1000
 )
 
 function run_spark() {
-    spark-submit "${spark_submit_args[@]}" "${script_dir}/../src/python/CMSSpark/rucio_datasets_daily_stats.py" \
+    spark-submit "${spark_submit_args[@]}" "${script_dir}/../src/python/CMSSpark/rucio_datasets_stats.py" \
         "${py_input_args[@]}" >>"${LOG_DIR}/spark-job.log" 2>&1
 }
 function run_test_spark() {
     # Test will send 10 documents to AMQ topic
     py_input_args+=(--test)
-    spark-submit "${spark_submit_args[@]}" "${script_dir}/../src/python/CMSSpark/rucio_datasets_daily_stats.py" \
+    spark-submit "${spark_submit_args[@]}" "${script_dir}/../src/python/CMSSpark/rucio_datasets_stats.py" \
         "${py_input_args[@]}" >>"${LOG_DIR}/spark-job.log" 2>&1
 }
 
