@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-File        : rucio_datasets_daily_stats.py
+File        : rucio_datasets_stats.py
 Author      : Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
 Description : Sends aggregated DBS and Rucio table dump results to MONIT(ElasticSearch) via AMQ
 
@@ -24,7 +24,7 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date as dt
 
 import click
 from pyspark.sql.functions import (
@@ -36,9 +36,7 @@ from pyspark.sql.functions import (
     split as _split,
     sum as _sum,
 )
-from pyspark.sql.types import (
-    LongType,
-)
+from pyspark.sql.types import LongType
 
 # CMSSpark modules
 from CMSSpark.spark_utils import get_spark_session
@@ -77,7 +75,10 @@ STR_TYPE_COLUMNS = ['all_f_in_dbs', 'all_f_in_rucio', 'rucio_has_ds_name', 'dbs_
                     'dbs_is_d_locked', 'joint_is_d_locked', 'dataset_id', 'is_dataset_valid', 'primary_ds_id',
                     'processed_ds_id', 'prep_id', 'data_tier_id', 'data_tier_name', 'physics_group_id',
                     'physics_group_name', 'acquisition_era_id', 'acquisition_era_name', 'dataset_access_type_id',
-                    'dataset_access_type', 'rse', 'rse_type', 'rse_tier', 'rse_country', 'rse_kind', ]
+                    'dataset_access_type', 'rse', 'rse_type', 'rse_tier', 'rse_country', 'rse_kind', 'cmsspark_git_tag']
+
+# UTC timestamp of start hour of spark job
+TSAMP_CURRENT_HOUR = int(datetime.utcnow().replace(minute=0, second=0, tzinfo=timezone.utc).timestamp()) * 1000
 
 
 def write_stats_to_eos(base_eos_dir, stats_dict):
@@ -101,10 +102,7 @@ def write_stats_to_eos(base_eos_dir, stats_dict):
         print("[ERROR] Could not write statistics to EOS, error:", str(e))
 
 
-def create_main_df(spark, hdfs_paths, base_eos_dir):
-    # UTC timestamp of start hour of spark job
-    ts_current_hour = int(datetime.utcnow().replace(minute=0, second=0, microsecond=0,
-                                                    tzinfo=timezone.utc).timestamp() * 1000)
+def create_main_df(spark, hdfs_paths, base_eos_dir, cmsspark_git_tag):
     # -----------------------------------------------------------------------------------------------------------------
     #                -- ==================  Prepare main Spark dataframes  ===========================
 
@@ -394,7 +392,10 @@ def create_main_df(spark, hdfs_paths, base_eos_dir):
         .drop('rse_id', 'replica_rse_id')
 
     # UTC timestamp of start hour of the spark job
-    df_main = df_main.withColumn('tstamp_hour', lit(ts_current_hour))
+    df_main = df_main.withColumn('tstamp_hour', lit(TSAMP_CURRENT_HOUR))
+
+    # Add git tag for producer versioning
+    df_main = df_main.withColumn('cmsspark_git_tag', lit(cmsspark_git_tag))
 
     # Fill null values of string type columns. Null values is hard to handle in ES queries.
     df_main = df_main.fillna(value=NULL_STR_TYPE_COLUMN_VALUE, subset=STR_TYPE_COLUMNS)
@@ -424,15 +425,18 @@ def to_chunks(data, samples=1000):
         yield data[i:i + samples]
 
 
-def send_to_amq(data, confs, batch_size):
+def send_to_amq(data, confs, batch_size, topic, doc_type):
     """Sends list of dictionary in chunks"""
     wait_seconds = 0.001
     if confs:
         username = confs.get('username', '')
         password = confs.get('password', '')
         producer = confs.get('producer')
-        doc_type = confs.get('type', None)
-        topic = confs.get('topic')
+        # To differentiate daily, weekly, monthly.
+        if not doc_type:
+            doc_type = confs.get('type', None)
+        if not topic:
+            topic = confs.get('topic')
         host = confs.get('host')
         port = int(confs.get('port'))
         cert = confs.get('cert', None)
@@ -460,19 +464,22 @@ def send_to_amq(data, confs, batch_size):
 @click.option("--base_hdfs_dir", required=True, help="Base HDFS path that includes Sqoop dumps")
 @click.option("--base_eos_dir", required=True, help="Base EOS path to write Spark job statistics",
               default="/eos/user/c/cmsmonit/www/rucio_daily_ds_stats", )
-@click.option("--amq_batch_size", type=click.INT, required=False, help="AMQ transaction batch size",
-              default=100)
+@click.option("--cmsspark_git_tag", required=True, help="data.cmsspark_git_tag field for producer versioning")
+@click.option("--amq_batch_size", type=click.INT, required=False, help="AMQ transaction batch size", default=100)
 @click.option("--test", is_flag=True, default=False, required=False,
               help="It will send only 10 documents to ElasticSearch. "
                    "[!Attention!] Please provide test/training AMQ topic.")
-def main(creds, base_hdfs_dir, base_eos_dir, amq_batch_size, test):
+def main(creds, base_hdfs_dir, base_eos_dir, amq_batch_size, cmsspark_git_tag, test):
     tables_hdfs_paths = {}
     for table in TABLES:
         tables_hdfs_paths[table] = f"{base_hdfs_dir}/{table}/part*.avro"
 
     spark = get_spark_session("cms-monitoring-rucio-daily-stats")
     creds_json = credentials(f_name=creds)
-    df = create_main_df(spark=spark, hdfs_paths=tables_hdfs_paths, base_eos_dir=base_eos_dir)
+    df = create_main_df(spark=spark,
+                        hdfs_paths=tables_hdfs_paths,
+                        base_eos_dir=base_eos_dir,
+                        cmsspark_git_tag=cmsspark_git_tag)
     print('Schema:')
     df.printSchema()
     total_size = 0
@@ -487,17 +494,33 @@ def main(creds, base_hdfs_dir, base_eos_dir, amq_batch_size, test):
         for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
             part_size = len(part)
             print(f"Length of partition: {part_size}")
-            send_to_amq(data=part[:10], confs=creds_json, batch_size=amq_batch_size)
+            send_to_amq(data=part[:10], confs=creds_json, batch_size=amq_batch_size, topic=None, doc_type=None)
             print(f"Test successfully finished and sent 10 documents to {_topic} AMQ topic.")
-            sys.exit(0)
-    else:
-        # Iterate over list of dicts returned from spark
-        for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
-            part_size = len(part)
-            print(f"Length of partition: {part_size}")
-            send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size)
-            total_size += part_size
-        print(f"Total document size: {total_size}")
+            break
+        sys.exit(0)
+    # ELSE
+
+    # Iterate over list of dicts returned from spark
+    for part in df.rdd.mapPartitions(lambda p: [[drop_nulls_in_dict(x.asDict()) for x in p]]).toLocalIterator():
+        part_size = len(part)
+        print(f"Length of partition: {part_size}")
+
+        # === DAILY ===
+        send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size,
+                    topic="/topic/cms.rucio.dailystats", doc_type="daily_stats")
+
+        # === WEEKLY : each Tuesday ===
+        if dt.today().isoweekday() == 2:
+            send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size,
+                        topic="/topic/cms.rucio.weeklystats", doc_type="weekly_stats")
+
+        # === MONTHLY : each month's 2nd day ===
+        if dt.today().day == 2:
+            send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size,
+                        topic="/topic/cms.rucio.monthlystats", doc_type="monthly_stats")
+
+        total_size += part_size
+    print(f"Total document size: {total_size}")
 
 
 if __name__ == "__main__":
