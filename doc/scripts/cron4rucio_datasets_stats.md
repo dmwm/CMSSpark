@@ -1,4 +1,4 @@
-## CMSSpark/bin/cron4rucio_datasets_daily_stats.sh
+## CMSSpark/bin/cron4rucio_datasets_stats.sh
 
 Dumps sqoop tables to temporary hdfs folder and then sends Spark job results to MONIT.
 
@@ -16,7 +16,7 @@ source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-swan-setconf.sh analytix
 # LCG_101 release setup gives py3.6 py3.9 driver-worker incompatibility error.
 #   Virtual environment will be used until the issue is solved in upstream
 #   Do not run `source /cvmfs/sft.cern.ch/lcg/views/LCG_101/x86_64-centos7-gcc8-opt/setup.sh`
-/cvmfs/sft.cern.ch/lcg/releases/Python/3.6.5-f74f0/x86_64-centos7-gcc8-opt/bin/python3.6 -m venv venv_pyspark
+/cvmfs/sft.cern.ch/lcg/releases/Python/3.9.12-9a1bc/x86_64-centos7-gcc8-opt/bin/python3 -m venv venv_pyspark
 source venv_pyspark/bin/activate
 pip install --upgrade pip
 pip install --no-cache-dir pandas click pyspark
@@ -29,8 +29,23 @@ cd ..
 rm -rf stomp-v700
 
 # Zip file and directory of CMSMonitoring
-svn export https://github.com/mrceyhun/CMSMonitoring.git/branches/f-stomp-v6+/src/python/CMSMonitoring
-zip -r CMSMonitoring.zip CMSMonitoring/*
+git clone https://github.com/dmwm/CMSMonitoring.git
+zip -r CMSMonitoring.zip CMSMonitoring/src/python/CMSMonitoring/*
 rm -rf CMSMonitoring
+
+# You can use following HDFS directories to reproduce
+TODAY = datetime.today().strftime('%Y-%m-%d')
+# dbs, CSV
+HDFS_DATASETS = f'/project/awg/cms/dbs/PROD_GLOBAL/{TODAY}/DATASETS/part-*.gz'
+HDFS_FILES = f'/project/awg/cms/dbs/PROD_GLOBAL/{TODAY}/FILES/part-*.gz'
+HDFS_DATA_TIERS = f'/project/awg/cms/dbs/PROD_GLOBAL/{TODAY}/DATA_TIERS/part-*.gz'
+HDFS_PHYSICS_GROUPS = f'/project/awg/cms/dbs/PROD_GLOBAL/{TODAY}/PHYSICS_GROUPS/part-*.gz'
+HDFS_ACQUISITION_ERAS = f'/project/awg/cms/dbs/PROD_GLOBAL/{TODAY}/ACQUISITION_ERAS/part-*.gz'
+HDFS_DATASET_ACCESS_TYPES = f'/project/awg/cms/dbs/PROD_GLOBAL/{TODAY}/DATASET_ACCESS_TYPES/part-*.gz'
+
+# rucio, AVRO
+HDFS_CONTENTS = f'/project/awg/cms/rucio/{TODAY}/contents/part*.avro'
+HDFS_REPLICAS = f'/project/awg/cms/rucio/{TODAY}/replicas/part*.avro'
+HDFS_RSES = f'/project/awg/cms/rucio/{TODAY}/rses/part*.avro'
 
 ```

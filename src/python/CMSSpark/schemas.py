@@ -30,6 +30,17 @@ def schema_processing_eras():
     ])
 
 
+def schema_physics_groups():
+    """DBS PHYSICS_GROUPS table schema
+
+    :returns: StructType consisting StructField array
+    """
+    return StructType([
+        StructField("physics_group_id", IntegerType(), True),
+        StructField("physics_group_name", StringType(), True)
+    ])
+
+
 def schema_acquisition_eras():
     """DBS ACQUISITION_ERAS table schema
 
