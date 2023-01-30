@@ -509,13 +509,13 @@ def main(creds, base_hdfs_dir, base_eos_dir, amq_batch_size, cmsspark_git_tag, t
         send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size,
                     topic="/topic/cms.rucio.dailystats", doc_type="daily_stats")
 
-        # === WEEKLY : each Tuesday ===
-        if dt.today().isoweekday() == 2:
+        # === WEEKLY : each Thursday ===
+        if dt.today().isoweekday() == 4:
             send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size,
                         topic="/topic/cms.rucio.weeklystats", doc_type="weekly_stats")
 
-        # === MONTHLY : each month's 2nd day ===
-        if dt.today().day == 2:
+        # === MONTHLY : each month's 3rd day ===
+        if dt.today().day == 3:
             send_to_amq(data=part, confs=creds_json, batch_size=amq_batch_size,
                         topic="/topic/cms.rucio.monthlystats", doc_type="monthly_stats")
 
