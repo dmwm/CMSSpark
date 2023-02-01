@@ -58,7 +58,7 @@ py_input_args=(--output_dir "$OUTPUT_DIR" --url_prefix "$URL_PREFIX" --html_temp
 
 # Add if iterative provided
 if [[ "$IS_ITERATIVE" == 1 ]]; then
-    py_input_args+=(--iterative)
+    py_input_args+=(--iterative --iterative_ndays_ago 10)
 fi
 
 # If it will be test run, it cannot be iterative data because no previous pickles will be exist. And start/end dates should be given.

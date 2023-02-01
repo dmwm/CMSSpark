@@ -97,6 +97,7 @@ def get_raw_df(spark, start_date, end_date):
             (col('Site') == 'T3_US_SDSC') |  # SDSC
             (col('Site') == 'T3_US_TACC') |  # TACC
             ((col('Site').endswith('_ES_PIC_BSC')) & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC')) |  # BSC
+            ((col('Site').endswith('_ES_PIC')) & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC')) |  # BSC
             ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0') == 'CNAF-CINECA')) |  # CINECA
             ((col('Site') == 'T1_DE_KIT') & (col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA')) |  # HOREKA
             ((col('Site') == 'T2_DE_RWTH') & (col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC'))  # RWTH
@@ -114,7 +115,7 @@ def get_raw_df(spark, start_date, end_date):
             .when(col('Site') == 'T3_US_PSC', lit("PSC"))
             .when(col('Site') == 'T3_US_SDSC', lit("SDSC"))
             .when(col('Site') == 'T3_US_TACC', lit("TACC"))
-            .when(col('Site').endswith('_ES_PIC_BSC'), lit("BSC"))
+            .when(col('Site').contains('ES_PIC') & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC'), lit("BSC"))
             .when(col('MachineAttrCMSSubSiteName0') == 'CNAF-CINECA', lit("CINECA"))
             .when(col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA', lit("HOREKA"))
             .when(col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC', lit("RWTH"))
@@ -545,13 +546,18 @@ def create_main_html(df_core_hr_monthly, html_template, output_dir, url_prefix, 
         f.write(main_html)
 
 
-def dates_iterative():
+def dates_iterative(iterative_ndays_ago):
     """Iteratively arrange start date and end date according
+
+    iterative_ndays_ago:
+        Assume current day is 2023-01-20, if iterative_ndays_ago=1, start date is 2023-01-1
+        Assume current day is 2023-02-01, if iterative_ndays_ago=1, start date is 2023-01-1
+        Assume current day is 2023-02-01, if iterative_ndays_ago=9, start date is 2023-01-1
     """
     # end date is 2 days ago
     end_date = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=2)
     # start date is first day of previous month
-    last_day_of_prev_month = datetime.today().replace(day=1) - timedelta(days=1)
+    last_day_of_prev_month = datetime.today().replace(day=1) - timedelta(days=iterative_ndays_ago)
     start_date = last_day_of_prev_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     # current month string
     curr_month_str = datetime.today().strftime('%Y-%m')
@@ -566,13 +572,16 @@ def dates_iterative():
 @click.option("--end_date", required=False, type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option("--iterative", required=False, is_flag=True, show_default=True, default=False,
               help="Iterative start and end date setting. Please set your cron job later than 3rd day of the month")
+@click.option("--iterative_ndays_ago", required=False, type=int, show_default=True, default=10,
+              help="If iterative, define how long of previous days of data you want to replace. "
+                   "Used in dates_iterative function, please read its docstring. Default 10 days.")
 @click.option("--url_prefix", default="https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage",
               help="CernBox eos folder link, will be used in plots to point to csv source data")
 @click.option('--html_template', required=True, default=None, type=str,
               help='Path of htmltemplate.html file: ~/CMSSpark/src/html/hpc/htmltemplate.html')
 @click.option('--save_pickle', required=False, default=True, type=bool,
               help='Stores df_core_hr_daily, df_running_cores_daily, df_core_hr_monthly to output_dir as pickle')
-def main(start_date, end_date, output_dir, iterative, url_prefix, html_template, save_pickle):
+def main(start_date, end_date, output_dir, iterative, iterative_ndays_ago, url_prefix, html_template, save_pickle):
     """
         Creates HPC resource usage in https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage/main.html
 
@@ -603,7 +612,7 @@ def main(start_date, end_date, output_dir, iterative, url_prefix, html_template,
 
     if iterative:
         print("[INFO] Iterative process is starting...")
-        start_date, end_date, curr_month_str, prev_month_str = dates_iterative()
+        start_date, end_date, curr_month_str, prev_month_str = dates_iterative(iterative_ndays_ago)
 
         # get raw df
         df_raw = get_raw_df(spark, start_date, end_date)
