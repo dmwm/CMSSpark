@@ -97,6 +97,7 @@ def get_raw_df(spark, start_date, end_date):
             (col('Site') == 'T3_US_SDSC') |  # SDSC
             (col('Site') == 'T3_US_TACC') |  # TACC
             ((col('Site').endswith('_ES_PIC_BSC')) & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC')) |  # BSC
+            ((col('Site').endswith('_ES_PIC')) & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC')) |  # BSC
             ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0') == 'CNAF-CINECA')) |  # CINECA
             ((col('Site') == 'T1_DE_KIT') & (col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA')) |  # HOREKA
             ((col('Site') == 'T2_DE_RWTH') & (col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC'))  # RWTH
@@ -114,7 +115,7 @@ def get_raw_df(spark, start_date, end_date):
             .when(col('Site') == 'T3_US_PSC', lit("PSC"))
             .when(col('Site') == 'T3_US_SDSC', lit("SDSC"))
             .when(col('Site') == 'T3_US_TACC', lit("TACC"))
-            .when(col('Site').endswith('_ES_PIC_BSC'), lit("BSC"))
+            .when(col('Site').contains('ES_PIC') & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC'), lit("BSC"))
             .when(col('MachineAttrCMSSubSiteName0') == 'CNAF-CINECA', lit("CINECA"))
             .when(col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA', lit("HOREKA"))
             .when(col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC', lit("RWTH"))
@@ -254,9 +255,9 @@ def create_plot_of_daily_sum_of_core_hours(df_month, month, output_dir, url_pref
                  width=800, height=600,
                  )
     fig.update_traces(texttemplate='%{text:.2s}', textposition='outside')
-    fig.update_xaxes(title_font=dict(size=18, family='Courier'), tickfont=dict(family='Rockwell', size=14),
+    fig.update_xaxes(title_font=dict(size=14, family='Courier'), tickfont=dict(family='Rockwell', size=10),
                      tickprefix=month + "-", tickangle=300, tickmode='linear')
-    fig.update_yaxes(separatethousands=True, title_font=dict(size=18, family='Courier'), automargin=True)
+    fig.update_yaxes(separatethousands=True, title_font=dict(size=14, family='Courier'), automargin=True)
     fig.update_layout(hovermode='x')
 
     # Write source data to csv
@@ -286,9 +287,9 @@ def create_plot_of_daily_avg_of_running_cores(df_month, month, output_dir, url_p
                  width=800, height=600,
                  )
     fig.update_traces(texttemplate='%{text:.2s}', textposition='outside')
-    fig.update_xaxes(title_font=dict(size=18, family='Courier'), tickfont=dict(family='Rockwell', size=14),
+    fig.update_xaxes(title_font=dict(size=14, family='Courier'), tickfont=dict(family='Rockwell', size=10),
                      tickprefix=month + "-", tickangle=300, tickmode='linear')
-    fig.update_yaxes(separatethousands=True, title_font=dict(size=18, family='Courier'), automargin=True)
+    fig.update_yaxes(separatethousands=True, title_font=dict(size=14, family='Courier'), automargin=True)
     fig.update_layout(hovermode='x')
 
     # Write source data to csv
@@ -336,9 +337,9 @@ def create_plot_of_core_hour_monthly(df, sorted_months, csv_link, title_extra=""
                  width=800, height=600,
                  )
     fig.update_traces(texttemplate='%{text:.2s}', textposition='outside')
-    fig.update_xaxes(title_font=dict(size=18, family='Courier'), tickfont=dict(size=14, family='Rockwell'),
+    fig.update_xaxes(title_font=dict(size=14, family='Courier'), tickfont=dict(size=10, family='Rockwell'),
                      dtick="M1", tickangle=300)
-    fig.update_yaxes(separatethousands=True, title_font=dict(size=18, family='Courier'), automargin=True)
+    fig.update_yaxes(separatethousands=True, title_font=dict(size=14, family='Courier'), automargin=True)
     fig.update_layout(hovermode='x')
     return fig
 
@@ -360,9 +361,9 @@ def create_plot_of_running_cores_monthly(df, sorted_months, csv_link, title_extr
                  width=800, height=600,
                  )
     fig.update_traces(texttemplate='%{text:.2s}', textposition='outside')
-    fig.update_xaxes(title_font=dict(size=18, family='Courier'), tickfont=dict(size=14, family='Rockwell'),
+    fig.update_xaxes(title_font=dict(size=14, family='Courier'), tickfont=dict(size=10, family='Rockwell'),
                      dtick="M1", tickangle=300)
-    fig.update_yaxes(separatethousands=True, title_font=dict(size=18, family='Courier'), automargin=True)
+    fig.update_yaxes(separatethousands=True, title_font=dict(size=14, family='Courier'), automargin=True)
     fig.update_layout(hovermode='x')
     return fig
 
@@ -545,19 +546,41 @@ def create_main_html(df_core_hr_monthly, html_template, output_dir, url_prefix, 
         f.write(main_html)
 
 
-def dates_iterative():
+def get_months_gen(start_year, start_month, end_year, end_month):
+    """Returns (Y, M) tuples generator"""
+    month, year = start_month, start_year
+    while (year, month) <= (end_year, end_month):
+        yield year, month
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+
+
+def get_month_range(start_date, end_date):
+    """Returns list of YYYY-MM strings between 2 date"""
+    year_month_tuples = list(get_months_gen(start_year=start_date.year, start_month=start_date.month,
+                                            end_year=end_date.year, end_month=end_date.month))
+    return [f"{y}-{m}" for y, m in year_month_tuples]
+
+
+def dates_iterative(iterative_ndays_ago):
     """Iteratively arrange start date and end date according
+    iterative_ndays_ago:
+        Assume current day is 2023-01-20, if iterative_ndays_ago=1, start date is 2023-01-1
+        Assume current day is 2023-02-01, if iterative_ndays_ago=9, start date is 2023-01-1
+        Assume current day is 2023-02-01, if iterative_ndays_ago=32, start date is 2022-12-1
+        ! In any scenario, it starts from 1st day of start month !
     """
-    # end date is 2 days ago
+    # end date is 2 days ago of now
     end_date = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=2)
-    # start date is first day of previous month
-    last_day_of_prev_month = datetime.today().replace(day=1) - timedelta(days=1)
-    start_date = last_day_of_prev_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    # current month string
-    curr_month_str = datetime.today().strftime('%Y-%m')
-    # previous month string
-    prev_month_str = last_day_of_prev_month.strftime('%Y-%m')
-    return start_date, end_date, curr_month_str, prev_month_str
+
+    # start date is always first date of a month
+    safe_start_month = datetime.today().replace(day=1) - timedelta(days=iterative_ndays_ago)
+    start_date = safe_start_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    will_update_months_list = get_month_range(start_date=start_date, end_date=datetime.today())
+    return start_date, end_date, will_update_months_list
 
 
 @click.command()
@@ -566,13 +589,16 @@ def dates_iterative():
 @click.option("--end_date", required=False, type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option("--iterative", required=False, is_flag=True, show_default=True, default=False,
               help="Iterative start and end date setting. Please set your cron job later than 3rd day of the month")
+@click.option("--iterative_ndays_ago", required=False, type=int, show_default=True, default=10,
+              help="If iterative, define how long of previous days of data you want to replace. "
+                   "Used in dates_iterative function, please read its docstring. Default 10 days.")
 @click.option("--url_prefix", default="https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage",
               help="CernBox eos folder link, will be used in plots to point to csv source data")
 @click.option('--html_template', required=True, default=None, type=str,
               help='Path of htmltemplate.html file: ~/CMSSpark/src/html/hpc/htmltemplate.html')
 @click.option('--save_pickle', required=False, default=True, type=bool,
               help='Stores df_core_hr_daily, df_running_cores_daily, df_core_hr_monthly to output_dir as pickle')
-def main(start_date, end_date, output_dir, iterative, url_prefix, html_template, save_pickle):
+def main(start_date, end_date, output_dir, iterative, iterative_ndays_ago, url_prefix, html_template, save_pickle):
     """
         Creates HPC resource usage in https://cmsdatapop.web.cern.ch/cmsdatapop/hpc_usage/main.html
 
@@ -603,7 +629,7 @@ def main(start_date, end_date, output_dir, iterative, url_prefix, html_template,
 
     if iterative:
         print("[INFO] Iterative process is starting...")
-        start_date, end_date, curr_month_str, prev_month_str = dates_iterative()
+        start_date, end_date, will_update_months_list = dates_iterative(iterative_ndays_ago)
 
         # get raw df
         df_raw = get_raw_df(spark, start_date, end_date)
@@ -613,10 +639,10 @@ def main(start_date, end_date, output_dir, iterative, url_prefix, html_template,
         prev_df_rcd = pd.read_pickle(f'{output_dir}/{_PICKLE_DIR}/new/running_cores_daily.pkl')
 
         # drop last 2 months
-        prev_df_core_hr_daily = prev_df_chd[~ prev_df_chd.month.isin([curr_month_str, prev_month_str])]
-        prev_df_running_cores_daily = prev_df_rcd[~ prev_df_rcd.month.isin([curr_month_str, prev_month_str])]
+        prev_df_core_hr_daily = prev_df_chd[~ prev_df_chd.month.isin(will_update_months_list)]
+        prev_df_running_cores_daily = prev_df_rcd[~ prev_df_rcd.month.isin(will_update_months_list)]
 
-        print("[INFO]", curr_month_str, "and", prev_month_str, "months are dropped from saved dataframes")
+        print("[INFO]", will_update_months_list, "months are dropped from saved dataframes")
         print("[INFO] Data will be processed between", start_date, "-", end_date)
 
         # RUN spark for new data
