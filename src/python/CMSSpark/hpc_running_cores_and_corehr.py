@@ -561,7 +561,7 @@ def get_month_range(start_date, end_date):
     """Returns list of YYYY-MM strings between 2 date"""
     year_month_tuples = list(get_months_gen(start_year=start_date.year, start_month=start_date.month,
                                             end_year=end_date.year, end_month=end_date.month))
-    return [f"{y}-{m}" for y, m in year_month_tuples]
+    return [f"{y}-{m:02}" for y, m in year_month_tuples]
 
 
 def dates_iterative(iterative_ndays_ago):
@@ -573,10 +573,12 @@ def dates_iterative(iterative_ndays_ago):
         ! In any scenario, it starts from 1st day of start month !
     """
     # end date is 2 days ago of now
-    end_date = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=2)
+    end_date = datetime.today().replace(tzinfo=timezone.utc) \
+                   .replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=2)
 
     # start date is always first date of a month
-    safe_start_month = datetime.today().replace(day=1) - timedelta(days=iterative_ndays_ago)
+    safe_start_month = datetime.today().replace(tzinfo=timezone.utc) \
+                           .replace(day=1) - timedelta(days=iterative_ndays_ago)
     start_date = safe_start_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     will_update_months_list = get_month_range(start_date=start_date, end_date=datetime.today())
@@ -665,6 +667,8 @@ def main(start_date, end_date, output_dir, iterative, iterative_ndays_ago, url_p
     else:
         if not (start_date and end_date):
             raise Exception("Start date or end date is not provided in non-iterative run")
+        start_date = start_date.replace(tzinfo=timezone.utc)
+        end_date = end_date.replace(tzinfo=timezone.utc)
         # get raw df
         df_raw = get_raw_df(spark, start_date, end_date)
 
