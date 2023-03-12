@@ -62,26 +62,30 @@ CMS_TYPES=("analysis" "production" "folding@home" "test")
 util4logi "${myname} Spark Job is starting..."
 for type in "${CMS_TYPES[@]}"; do
     SUB_FOLDER=$(echo "$type" | sed -e 's/[^[:alnum:]]/-/g' | tr -s '-' | tr '[:upper:]' '[:lower:]')
-
-    util4logi "deleting old html and png files +60 days in dir: ${CPU_EFF_DIR}/${SUB_FOLDER}"
-    find "${CPU_EFF_DIR}/${SUB_FOLDER}" -type f \( -name '*.html' -o -name '*.png' \) -mtime +60 -delete || true
-    util4logi "old file deletion is finished in ${CPU_EFF_DIR}/${SUB_FOLDER}"
+    _type_output_dir="${CPU_EFF_DIR}/${SUB_FOLDER}"
+    # We should clean old files and empty directories which are not used in the web site anymore.
+    util4logi "deleting html and png files older than 60 days in dir: ${_type_output_dir}"
+    find "${_type_output_dir}" -type f \( -name '*.html' -o -name '*.png' \) -mtime +60 -delete
+    find "${_type_output_dir}" -empty -type d -delete
+    util4logi "old file deletion is finished"
 
     util4logi "Starting spark jobs for cpu_eff_outlier=0, folder: ${CPU_EFF_DIR}, CMS_TYPE: ${SUB_FOLDER}"
     spark-submit "${spark_confs[@]}" "$script_dir/../src/python/CMSSpark/condor_cpu_efficiency.py" \
-        --cms_type "$type" --output_folder "${CPU_EFF_DIR}/${SUB_FOLDER}" --last_n_days "$LAST_N_DAYS" --cpu_eff_outlier=0
+        --cms_type "$type" --output_folder "${_type_output_dir}" --last_n_days "$LAST_N_DAYS" --cpu_eff_outlier=0
 done
 
 for type in "${CMS_TYPES[@]}"; do
     SUB_FOLDER=$(echo "$type" | sed -e 's/[^[:alnum:]]/-/g' | tr -s '-' | tr '[:upper:]' '[:lower:]')
-
-    util4logi "deleting old html and png files +60 days in dir: ${CPU_EFF_OUTLIER_DIR}/${SUB_FOLDER}"
-    find "${CPU_EFF_OUTLIER_DIR}/${SUB_FOLDER}" -type f \( -name '*.html' -o -name '*.png' \) -mtime +60 -delete || true
-    util4logi "old file deletion is finished in ${CPU_EFF_OUTLIER_DIR}/${SUB_FOLDER}"
+    _type_output_dir="${CPU_EFF_OUTLIER_DIR}/${SUB_FOLDER}"
+    # We should clean old files and empty directories which are not used in the web site anymore.
+    util4logi "deleting html and png files older than 60 days in dir: ${_type_output_dir}"
+    find "${_type_output_dir}" -type f \( -name '*.html' -o -name '*.png' \) -mtime +60 -delete
+    find "${_type_output_dir}" -empty -type d -delete
+    util4logi "old file deletion is finished"
 
     util4logi "Starting spark jobs for cpu_eff_outlier=1, folder: ${CPU_EFF_OUTLIER_DIR}, CMS_TYPE: ${SUB_FOLDER}"
     spark-submit "${spark_confs[@]}" "$script_dir/../src/python/CMSSpark/condor_cpu_efficiency.py" \
-        --cms_type "$type" --output_folder "${CPU_EFF_OUTLIER_DIR}/${SUB_FOLDER}" --last_n_days "$LAST_N_DAYS" --cpu_eff_outlier=1
+        --cms_type "$type" --output_folder "${_type_output_dir}" --last_n_days "$LAST_N_DAYS" --cpu_eff_outlier=1
 done
 
 duration=$(($(date +%s) - START_TIME))

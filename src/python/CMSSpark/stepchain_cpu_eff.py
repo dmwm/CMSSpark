@@ -53,11 +53,12 @@ def get_schema():
             StructField('step_name', StringType(), nullable=False),
             StructField('jobCPU', DoubleType(), nullable=True),
             StructField('jobTime', DoubleType(), nullable=True),
-            StructField('ncores', IntegerType(), nullable=True),
+            StructField('nstreams', IntegerType(), nullable=True),
             StructField('nthreads', IntegerType(), nullable=True),
             StructField('era_len', IntegerType(), nullable=True),
             StructField('steps_len', IntegerType(), nullable=False),
             StructField('cpuEff', DoubleType(), nullable=True),
+            StructField('totalThreadsJobTime', DoubleType(), nullable=True),
         ]
     )
 
@@ -79,14 +80,16 @@ def udf_step_extract(row):
             count += 1
             step_res["step_name"] = step.name
             step_res['site'] = step.site
-            step_res['ncores'] = step.performance.cpu.NumberOfStreams
+            step_res['nstreams'] = step.performance.cpu.NumberOfStreams
             step_res['nthreads'] = step.performance.cpu.NumberOfThreads
             step_res['jobCPU'] = step.performance.cpu.TotalJobCPU
             step_res['jobTime'] = step.performance.cpu.TotalJobTime
             if step_res['jobCPU'] and step_res['nthreads'] and step_res['jobTime']:
                 step_res['cpuEff'] = round(100 * (step_res['jobCPU'] / step_res['nthreads']) / step_res['jobTime'], 2)
+                step_res['totalThreadsJobTime'] = step_res['jobTime'] * step_res['nthreads']
             else:
                 step_res['cpuEff'] = None
+                step_res['totalThreadsJobTime'] = None
             step_res['acquisitionEra'] = set()
             if step.output:
                 for outx in step.output:
@@ -211,8 +214,10 @@ def _generate_main_page(selected_pd, task_column, start_date, end_date):
             <strong>Individual step cpu efficiency calculation</strong>: <code>cpuEff=
             (jobCPU / nthreads) / jobTime </code>
           </li>
-          <li><strong>avg_jobCPU</strong>: <code>sum(jobCPU) / #jobs </code></li>
-          <li><strong>avg_jobTime</strong>: <code>sum(jobTime) / #jobs </code></li>
+          <li>
+            <strong>Average cpu efficiency calculation</strong>: <code>avg_cpueff=
+            (100 * sum("jobCPU") / sum("jobTime" * "nthreads") </code>
+          </li>
         </ul>
       <li>Script that produces this table: <a href=
             "https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/stepchain_cpu_eff.py"
@@ -370,23 +375,23 @@ def main(
                   """
     )
     df_rdd = df_raw.rdd.flatMap(lambda r: udf_step_extract(r))
-    df = spark.createDataFrame(df_rdd, schema=get_schema()).dropDuplicates().where(_col("ncores").isNotNull()).cache()
+    df = spark.createDataFrame(df_rdd, schema=get_schema()).dropDuplicates().where(_col("nstreams").isNotNull()).cache()
     df_details = df.groupby(["task", "site", "step_name"]).agg(
-        (100 * (_sum("jobCPU") / _mean("nthreads")) / _sum("jobTime")).alias("avg_cpueff"),
+        (100 * _sum("jobCPU") / _sum("totalThreadsJobTime")).alias("avg_cpueff"),
         _count(lit(1)).alias("#jobs"),
         _mean("steps_len").alias("#steps"),
         _mean("nthreads").alias("#nthreads"),
-        _mean("ncores").alias("#ncores"),
+        _mean("nstreams").alias("#nstreams"),
         (_sum("jobCPU") / _count(lit(1))).alias("avg_jobCPU"),
         (_sum("jobTime") / _count(lit(1))).alias("avg_jobTime"),
         _collect_set("acquisitionEra").alias("acquisitionEra"),
     ).withColumn("avg_cpueff", _col("avg_cpueff").cast(IntegerType())).toPandas()
     df_task = df.groupby(["task"]).agg(
-        (100 * (_sum("jobCPU") / _mean("nthreads")) / _sum("jobTime")).alias("avg_cpueff"),
+        (100 * _sum("jobCPU") / _sum("totalThreadsJobTime")).alias("avg_cpueff"),
         _count(lit(1)).alias("#jobs"),
         _mean("steps_len").alias("#steps"),
         _mean("nthreads").alias("#nthreads"),
-        _mean("ncores").alias("#ncores"),
+        _mean("nstreams").alias("#nstreams"),
         (_sum("jobCPU") / _count(lit(1))).alias("avg_jobCPU"),
         (_sum("jobTime") / _count(lit(1))).alias("avg_jobTime"),
     ).withColumn("avg_cpueff", _col("avg_cpueff").cast(IntegerType())).toPandas()
