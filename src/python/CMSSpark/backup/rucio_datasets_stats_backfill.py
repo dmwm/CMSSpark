@@ -238,7 +238,7 @@ def main():
 #     --driver-memory=8g --executor-memory=8g --executor-cores=4 --num-executors=30
 #     --conf "spark.driver.bindAddress=0.0.0.0" --conf "spark.driver.host=${MY_NODE_NAME}"
 #     --conf "spark.driver.port=31201" --conf "spark.driver.blockManager.port=31202"
-#     --packages org.apache.spark:spark-avro_2.12:3.3.1 --py-files "/data/CMSMonitoring.zip,/data/stomp-v700.zip"
+#     --packages org.apache.spark:spark-avro_2.12:3.4.0 --py-files "/data/CMSMonitoring.zip,/data/stomp-v700.zip"
 # )
 #
 #  -- run pyspark
