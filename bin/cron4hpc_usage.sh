@@ -52,7 +52,7 @@ spark_submit_args=(
     --conf "spark.driver.bindAddress=0.0.0.0" --conf "spark.driver.host=${K8SHOST}"
     --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
     --driver-memory=8g --executor-memory=8g
-    --packages org.apache.spark:spark-avro_2.12:3.3.1
+    --packages org.apache.spark:spark-avro_2.12:3.4.0
 )
 py_input_args=(--output_dir "$OUTPUT_DIR" --url_prefix "$URL_PREFIX" --html_template "$HTML_TEMPLATE")
 
