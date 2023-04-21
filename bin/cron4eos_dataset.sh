@@ -44,7 +44,7 @@ spark_submit_args=(
     --driver-memory=4g --executor-memory=8g --executor-cores=4 --num-executors=30
     --conf "spark.driver.bindAddress=0.0.0.0" --conf "spark.driver.host=${K8SHOST}"
     --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
-    --packages org.apache.spark:spark-avro_2.12:3.3.1
+    --packages org.apache.spark:spark-avro_2.12:3.4.0
 )
 
 # run spark function
