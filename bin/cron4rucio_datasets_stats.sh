@@ -185,7 +185,7 @@ util4logi "${myname} Spark Job is starting..."
 
 spark_submit_args=(
     --master yarn --conf spark.ui.showConsoleProgress=false --conf spark.sql.session.timeZone=UTC
-    --driver-memory=8g --executor-memory=8g --executor-cores=4 --num-executors=30
+    --driver-memory=8g --executor-memory=8g
     --conf "spark.driver.bindAddress=0.0.0.0" --conf "spark.driver.host=${K8SHOST}"
     --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
     --packages org.apache.spark:spark-avro_2.12:3.4.0 --py-files "${CMSMONITORING_ZIP},${STOMP_ZIP}"
