@@ -88,6 +88,7 @@ util4logi "cron4rucio_ds_summary Spark Job is starting..."
 export PYTHONPATH=$script_dir/../src/python:$PYTHONPATH
 spark_submit_args=(
     --master yarn --conf spark.ui.showConsoleProgress=false --conf "spark.driver.bindAddress=0.0.0.0" --driver-memory=8g --executor-memory=8g
+    --conf spark.shuffle.useOldFetchProtocol=true
     --conf "spark.driver.host=${K8SHOST}" --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
     --packages org.apache.spark:spark-avro_2.12:3.4.0 --py-files "${CMSMONITORING_ZIP},${STOMP_ZIP}"
 )
