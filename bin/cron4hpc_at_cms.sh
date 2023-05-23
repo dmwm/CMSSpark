@@ -41,6 +41,7 @@ util_check_and_create_dir "$OUTPUT_DIR"
 util4logi "${myname} Spark Job is starting..."
 spark_submit_args=(
     --master yarn --conf spark.ui.showConsoleProgress=false --conf spark.sql.session.timeZone=UTC
+    --conf spark.shuffle.useOldFetchProtocol=true
     --driver-memory=8g --executor-memory=8g --executor-cores=4 --num-executors=30
     --conf "spark.driver.bindAddress=0.0.0.0" --conf "spark.driver.host=${K8SHOST}"
     --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
