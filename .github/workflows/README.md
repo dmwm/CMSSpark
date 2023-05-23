@@ -2,25 +2,20 @@
 
 ### 1 - build-docker-spark.yml
 
-This wf builds docker images that use CMSSpark repository. It provides additional functionalities via Git tag **messages**.
+This wf builds `registry.cern.ch/cmsmonitoring/cmsmon-spark` docker image.
+
+> cmsmon-spark image uses `cmsmon-hadoop-base:spark3-latest` as base image. Therefore, that image:tag should be updated regularly (i.e. in each quarter).
 
 ##### How it works:
 
-Provided git tag will be used in the CMSSpark repository checkout. Git tag message will provide more interactive
-management of GitHub actions.
+Provided git tag will be used in the CMSSpark repository's git checkout.
 
-###### There are 2 conventions currently:
+---
 
-1. **Builds all docker images**: `Build docker all.*`
-    - Will build all docker images with given git tag version as docker tag. Put any comment after `Build docker all` string.  
-    - _Example_: `Build docker all`
-    - _Example_: `Build docker all SOME COMMENTS`
+### [Not in use] GH workflow to run multiple builds depending on tag message of same git tag
 
-2. **Builds individual docker images**: `Build docker [(](.+)[)]`
-    - Will build individual docker images which is provided in the git tag message. Put any comment after `Build docker (images)` string
-    - Docker image name(s) should be provided between parenthesis. 
-    - _Examples_:
-        - `Build docker (cmsmon-spark)`
-        - `Build docker (cmsmon-spark) SOME COMMENTS`
+This option is removed because our GH action builds one docker image triggered by one git tag currently.
 
-> Docker images use `cmsmon-hadoop-base:spark3-latest` as base image. Therefore, that image:tag should be updated regularly (i.e. in each quarter).
+Please check this commit if you want to build multiple docker images by defining keywords in git tag message and trigger them with same git tag: https://github.com/dmwm/CMSSpark/blob/5cc37deccb68cb2595ec087f25c0a60cfc9ac610/.github/workflows/build-docker-spark.yml
+
+Also, you can see a proper example in https://github.com/dmwm/CMSMonitoring/blob/585641fbfe010e27f27bf50de144d8f04018e7c3/.github/workflows/build-rucio-dataset-monitoring.yml
