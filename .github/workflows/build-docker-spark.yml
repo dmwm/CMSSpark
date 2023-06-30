@@ -20,7 +20,10 @@ jobs:
       - name: Get cmsmon-spark Dockerfile
         run: |
           curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/cmsmon-spark/Dockerfile
+      - name: Get helper script and make it executable
+        run: |
           curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/cmsmon-spark/install.sh
+          chmod +x install.sh
       - name: Login to registry.cern.ch
         uses: docker/login-action@v1
         with:
