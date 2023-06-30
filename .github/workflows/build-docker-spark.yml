@@ -19,7 +19,8 @@ jobs:
         run: echo "tag=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
       - name: Get cmsmon-spark Dockerfile
         run: |
-          curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/cmsmon-spark/
+          curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/cmsmon-spark/Dockerfile
+          curl -ksLO https://raw.githubusercontent.com/dmwm/CMSKubernetes/master/docker/cmsmon-spark/install.sh
       - name: Login to registry.cern.ch
         uses: docker/login-action@v1
         with:
