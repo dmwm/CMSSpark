@@ -61,7 +61,7 @@ def udf_step_extract(row):
     site_name, count = "UNKNOWN", 0
 
     result = {'host': host, 'ts': ts, 'wmaid': wmaid, 'wmats': wmats}
-    if 'steps' in row:
+    if 'steps' in row and row['steps']:
         for step in row['steps']:
             count += 1
             if step['site'] is not None:
