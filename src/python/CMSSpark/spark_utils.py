@@ -772,19 +772,12 @@ def get_candidate_files(start_date, end_date, spark, base, day_delta=1):
     ed_date = end_date + timedelta(days=day_delta)
     days = (ed_date - st_date).days
 
-    # pre_candidate_files = [
-    #     "{base}/{day}{{,.tmp}}".format(
-    #         base=base, day=(st_date + timedelta(days=i)).strftime("%Y/%m/%d")
-    #     )
-    #     for i in range(0, days)
-    # ]
-
     sc = spark.sparkContext
     # The candidate files are the folders to the specific dates,
     # but if we are looking at recent days the compaction procedure could
-    # have not run yet so we will considerate also the .tmp folders.
+    # have not run yet, so we will consider also the .tmp folders.
     candidate_files = [
-        f"{base}/{(st_date + timedelta(days=i)).strftime('%Y/%m/%d')}"
+        f"{base}/{(st_date + timedelta(days=i)).strftime('%Y/%m/%d')}{{,.tmp}}"
         for i in range(0, days)
     ]
     fsystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
