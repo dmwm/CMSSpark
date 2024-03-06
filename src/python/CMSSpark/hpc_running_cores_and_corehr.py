@@ -36,7 +36,7 @@ from CMSSpark.spark_utils import get_spark_session, get_candidate_files
 _BASE_HDFS_CONDOR = '/project/monitoring/archive/condor/raw/metric'
 
 # Bottom to top bar stack order which set same colors for same site always
-_HPC_SITES_STACK_ORDER = ['ANL', 'ANVIL', 'BSC', 'CINECA', 'HOREKA', 'NERSC', 'OSG', 'PSC', 'RWTH', 'SDSC', 'TACC']
+_HPC_SITES_STACK_ORDER = ['ANL', 'ANVIL', 'BSC', 'CINECA', 'HOREKA', 'NERSC', 'OSG', 'PSC', 'RWTH', 'SDSC', 'TACC', 'VEGA']
 
 # For new sites, please check list sizes
 DISCRETE_COLOR_MAP = {site: px.colors.qualitative.Pastel[i] for i, site in enumerate(_HPC_SITES_STACK_ORDER)}
@@ -89,18 +89,19 @@ def get_raw_df(spark, start_date, end_date):
             (col("RecordTime") >= (start_date.replace(tzinfo=timezone.utc).timestamp() * 1000)) &
             (col("RecordTime") < (end_date.replace(tzinfo=timezone.utc).timestamp() * 1000))
         ).filter(
-            (col('Site') == 'T3_US_ANL') |  # ANL
-            (col('Site') == 'T3_US_Anvil') |  # ANVIL
-            (col('Site') == 'T3_US_NERSC') |  # NERSC
-            (col('Site') == 'T3_US_OSG') |  # OSG
-            (col('Site') == 'T3_US_PSC') |  # PSC
-            (col('Site') == 'T3_US_SDSC') |  # SDSC
-            (col('Site') == 'T3_US_TACC') |  # TACC
-            ((col('Site').endswith('_ES_PIC_BSC')) & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC')) |  # BSC
-            ((col('Site').endswith('_ES_PIC')) & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC')) |  # BSC
-            ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0') == 'CNAF-CINECA')) |  # CINECA
-            ((col('Site') == 'T1_DE_KIT') & (col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA')) |  # HOREKA
-            ((col('Site') == 'T2_DE_RWTH') & (col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC'))  # RWTH
+            (col('Site') == 'T3_US_ANL')  # ANL
+            | (col('Site') == 'T3_US_Anvil')  # ANVIL
+            | (col('Site') == 'T3_US_NERSC')  # NERSC
+            | (col('Site') == 'T3_US_OSG')  # OSG
+            | (col('Site') == 'T3_US_PSC')  # PSC
+            | (col('Site') == 'T3_US_SDSC')  # SDSC
+            | (col('Site') == 'T3_US_TACC')  # TACC
+            | ((col('Site').endswith('_ES_PIC_BSC')) & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC'))  # BSC
+            | ((col('Site').endswith('_ES_PIC')) & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC'))  # BSC
+            | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0') == 'CNAF-CINECA'))  # CINECA
+            | ((col('Site') == 'T1_DE_KIT') & (col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA'))  # HOREKA
+            | ((col('Site') == 'T2_DE_RWTH') & (col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC'))  # RWTH
+            | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0') == 'CNAF-VEGA'))  # VEGA
         ).filter(
             col('Status').isin(['Running', 'Completed'])
         ).withColumn(
@@ -119,6 +120,7 @@ def get_raw_df(spark, start_date, end_date):
             .when(col('MachineAttrCMSSubSiteName0') == 'CNAF-CINECA', lit("CINECA"))
             .when(col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA', lit("HOREKA"))
             .when(col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC', lit("RWTH"))
+            .when(col('MachineAttrCMSSubSiteName0') == 'CNAF-VEGA', lit("VEGA"))
         ).withColumn(
             "RequestCpus",
             when(col("RequestCpus").isNotNull(), col("RequestCpus")).otherwise(lit(1)),
