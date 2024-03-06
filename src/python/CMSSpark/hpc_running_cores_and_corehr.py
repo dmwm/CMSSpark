@@ -36,7 +36,8 @@ from CMSSpark.spark_utils import get_spark_session, get_candidate_files
 _BASE_HDFS_CONDOR = '/project/monitoring/archive/condor/raw/metric'
 
 # Bottom to top bar stack order which set same colors for same site always
-_HPC_SITES_STACK_ORDER = ['ANL', 'ANVIL', 'BSC', 'CINECA', 'HOREKA', 'NERSC', 'OSG', 'PSC', 'RWTH', 'SDSC', 'TACC', 'VEGA']
+_HPC_SITES_STACK_ORDER = ['ANL', 'ANVIL', 'BSC', 'CINECA', 'HOREKA', 'NERSC', 'OSG', 'PSC', 'RWTH', 'SDSC', 'TACC',
+                          'VEGA']
 
 # For new sites, please check list sizes
 DISCRETE_COLOR_MAP = {site: px.colors.qualitative.Pastel[i] for i, site in enumerate(_HPC_SITES_STACK_ORDER)}
@@ -575,12 +576,12 @@ def dates_iterative(iterative_ndays_ago):
         ! In any scenario, it starts from 1st day of start month !
     """
     # end date is 2 days ago of now
-    end_date = datetime.today().replace(tzinfo=timezone.utc) \
-                   .replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=2)
+    end_date = datetime.today().replace(tzinfo=timezone.utc).replace(hour=0, minute=0, second=0,
+                                                                     microsecond=0) - timedelta(days=2)
 
     # start date is always first date of a month
-    safe_start_month = datetime.today().replace(tzinfo=timezone.utc) \
-                           .replace(day=1) - timedelta(days=iterative_ndays_ago)
+    safe_start_month = datetime.today().replace(tzinfo=timezone.utc).replace(day=1) - timedelta(
+        days=iterative_ndays_ago)
     start_date = safe_start_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     will_update_months_list = get_month_range(start_date=start_date, end_date=datetime.today())
