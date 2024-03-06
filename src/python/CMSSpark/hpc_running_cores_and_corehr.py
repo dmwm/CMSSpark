@@ -40,7 +40,7 @@ _HPC_SITES_STACK_ORDER = ['ANL', 'ANVIL', 'BSC', 'CINECA', 'HOREKA', 'NERSC', 'O
                           'VEGA']
 
 # For new sites, please check list sizes
-DISCRETE_COLOR_MAP = {site: px.colors.qualitative.Pastel[i] for i, site in enumerate(_HPC_SITES_STACK_ORDER)}
+DISCRETE_COLOR_MAP = {site: px.colors.qualitative.Dark24[i] for i, site in enumerate(_HPC_SITES_STACK_ORDER)}
 
 _VALID_DATE_FORMATS = ["%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"]
 _CSV_DIR = 'csv'
