@@ -99,7 +99,7 @@ def get_raw_df(spark, start_date, end_date):
             | (col('Site') == 'T3_US_TACC')  # TACC
             | ((col('Site').endswith('_ES_PIC_BSC')) & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC'))  # BSC
             | ((col('Site').endswith('_ES_PIC')) & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC'))  # BSC
-            | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0').isin(['CNAF-CINECA', 'CNAF-ARM', 'CNAF-LEONARDO'])))  # CINECA
+            | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0').isin(['CNAF-CINECA', 'CNAF-LEONARDO'])))  # CINECA
             | ((col('Site') == 'T1_DE_KIT') & (col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA'))  # HOREKA
             | ((col('Site') == 'T2_DE_RWTH') & (col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC'))  # RWTH
             | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0') == 'CNAF-VEGA'))  # VEGA
@@ -118,7 +118,7 @@ def get_raw_df(spark, start_date, end_date):
             .when(col('Site') == 'T3_US_SDSC', lit("SDSC"))
             .when(col('Site') == 'T3_US_TACC', lit("TACC"))
             .when(col('Site').contains('ES_PIC') & (col('MachineAttrCMSSubSiteName0') == 'PIC-BSC'), lit("BSC"))
-            .when(col('MachineAttrCMSSubSiteName0').isin(['CNAF-CINECA', 'CNAF-ARM', 'CNAF-LEONARDO']), lit("CINECA"))
+            .when(col('MachineAttrCMSSubSiteName0').isin(['CNAF-CINECA', 'CNAF-LEONARDO']), lit("CINECA"))
             .when(col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA', lit("HOREKA"))
             .when(col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC', lit("RWTH"))
             .when(col('MachineAttrCMSSubSiteName0') == 'CNAF-VEGA', lit("VEGA"))
