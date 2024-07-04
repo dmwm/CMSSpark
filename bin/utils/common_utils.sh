@@ -211,6 +211,15 @@ function util_setup_spark_lxplus7() {
 }
 # -------------------------------------------------------------------------------------------------
 
+#######################################
+# setup hadoop and spark in AlmaLinux 9
+#######################################
+function util_setup_spark_el9() {
+    source /cvmfs/sft.cern.ch/lcg/views/LCG_105a_swan/x86_64-el9-gcc13-opt/setup.sh
+    source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-swan-setconf.sh analytix 3.3 spark3
+}
+# -------------------------------------------------------------------------------------------------
+
 # ----------------------------------- PUSHGATEWAY UTILS -------------------------------------------
 #######################################
 # Returns left part of the dot containing string
