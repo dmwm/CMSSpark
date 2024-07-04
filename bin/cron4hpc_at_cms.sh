@@ -31,7 +31,7 @@ util_input_args_parser $@
 
 util4logi "Parameters: KEYTAB_SECRET:${KEYTAB_SECRET} OUTPUT_DIR:${OUTPUT_DIR} PORT1:${PORT1} PORT2:${PORT2} K8SHOST:${K8SHOST} WDIR:${WDIR} IS_TEST:${IS_TEST}"
 util_check_vars PORT1 PORT2 K8SHOST
-util_setup_spark_k8s
+util_setup_spark_el9
 
 KERBEROS_USER=$(util_kerberos_auth_with_keytab "$KEYTAB_SECRET")
 util4logi "authenticated with Kerberos user: ${KERBEROS_USER}"
