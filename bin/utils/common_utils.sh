@@ -73,13 +73,18 @@ function util_check_vars() {
 #    fail   : exits with exit-code 1
 #######################################
 function util_check_files() {
-    local var_check_flag file_names
-    unset var_check_flag
+    local var_check_flag
+    var_check_flag=false
     file_names=("$@")
     for file_name in "${file_names[@]}"; do
-        [ -e "${!file_name}" ] && util4loge "$file_name file does not exist, please check given args." && var_check_flag=true
+        if [ ! -e "$file_name" ]; then
+            util4loge "$file_name file does not exist, please check given args."
+            var_check_flag=true
+        fi
     done
-    [ -n "$var_check_flag" ] && exit 1
+    if [ "$var_check_flag" = true ]; then
+        exit 1
+    fi
     return 0
 }
 
@@ -187,13 +192,8 @@ function util_kerberos_auth_with_keytab() {
 # setup hadoop and spark in k8s
 #######################################
 function util_setup_spark_k8s() {
-    # check hava home
-    util_set_java_home
-
-    hadoop-set-default-conf.sh analytix 'hadoop spark' 3.2
-    source hadoop-setconf.sh analytix 3.2 spark3
-    export SPARK_LOCAL_IP=127.0.0.1
-    export PYSPARK_PYTHON=/cvmfs/sft.cern.ch/lcg/releases/Python/3.9.6-b0f98/x86_64-centos7-gcc8-opt/bin/python3
+    hadoop-set-default-conf.sh analytix
+    source hadoop-setconf.sh analytix 3.3 spark3
     # until IT changes this setting, we need to turn off info logs in this way. Don't try spark.sparkContext.setLogLevel('WARN'), doesn't work, since they are not spark logs but spark-submit logs.
     sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' "$SPARK_CONF_DIR"/log4j2.properties
 }
@@ -208,6 +208,15 @@ function util_setup_spark_lxplus7() {
     source /cvmfs/sft.cern.ch/lcg/views/LCG_101/x86_64-centos7-gcc8-opt/setup.sh
     source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-swan-setconf.sh analytix 3.2 spark3
     export PATH="${PATH}:/usr/hdp/hadoop/bin/hadoop:/usr/hdp/spark3/bin:/usr/hdp/sqoop/bin"
+}
+# -------------------------------------------------------------------------------------------------
+
+#######################################
+# setup hadoop and spark in AlmaLinux 9 using cvmfs
+#######################################
+function util_setup_spark_el9_cvmfs() {
+    source /cvmfs/sft.cern.ch/lcg/views/LCG_105a_swan/x86_64-el9-gcc13-opt/setup.sh
+    source /cvmfs/sft.cern.ch/lcg/etc/hadoop-confext/hadoop-swan-setconf.sh analytix 3.3 spark3
 }
 # -------------------------------------------------------------------------------------------------
 
