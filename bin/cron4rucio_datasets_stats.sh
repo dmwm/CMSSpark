@@ -103,7 +103,7 @@ BASE_SQOOP_DUMP_DIR="$SQOOP_DUMP_DIR_PREFIX"-$(date +%Y-%m-%d)
 
 # ------------------------------------------------------------------------------------------------- IMPORT SINGLE TABLE
 function dump_single_table() {
-    trap 'onFailExit' ERR
+    trap 'util_on_fail_exit' ERR
     local local_username=$1
     local local_password=$2
     local local_schema=$3
@@ -140,7 +140,7 @@ function dump_single_table() {
 # One each of Rucio or DBS at a time
 
 function import_rucio_tables() {
-    trap 'onFailExit' ERR
+    trap 'util_on_fail_exit' ERR
     rucio_username=$(grep username <"$RUCIO_SECRET" | awk '{print $2}')
     rucio_password=$(grep password <"$RUCIO_SECRET" | awk '{print $2}')
     {
@@ -153,7 +153,7 @@ function import_rucio_tables() {
 }
 
 function import_dbs_tables() {
-    trap 'onFailExit' ERR
+    trap 'util_on_fail_exit' ERR
     dbs_username=$(sed '2q;d' "$CMSR_SECRET")
     dbs_password=$(sed '3q;d' "$CMSR_SECRET")
     {
