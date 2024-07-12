@@ -6,7 +6,7 @@ Requirements:
 - OpenSearch cluster host name.
 - Secret file one line of 'username:password' of the OpenSearch. Ask to CMS Monitoring team.
 - Index mapping schema and settings, see get_index_schema() below.
-- Index template starting with 'test-' if you want to send to es-cms cluster "test" tenant
+- Index template starting with 'test-' if you want to send to os-cms cluster "test" tenant
 - `index_mod`: Let's assume you've an index_template of "test-foo". Depending on your input and provided timestamp, data
   will be sent to below indexes:
     - index_mod="": `test-foo`
@@ -44,7 +44,7 @@ def get_index_schema():
 
 
 _index_template = 'test-foo'
-client = osearch.get_es_client("es-cms1.cern.ch/es", 'secret_opensearch.txt', get_index_schema())
+client = osearch.get_es_client("os-cms.cern.ch/os", 'secret_opensearch.txt', get_index_schema())
 
 # index_mod="": 'test-foo', index_mod="Y": 'test-foo-YYYY', index_mod="M": 'test-foo-YYYY-MM', index_mod="D": 'test-foo-YYYY-MM-DD',
 idx = client.get_or_create_index(timestamp=time.time(), index_template=_index_template, index_mod="")
@@ -65,7 +65,7 @@ from CMSSpark.osearch import osearch
 for part in df.rdd.mapPartitions().toLocalIterator():
     # You can define below calls in a function for re-usability
     _index_template = 'test-foo'
-    client = osearch.get_es_client("es-cms1.cern.ch/es", 'secret_opensearch.txt', get_index_schema())
+    client = osearch.get_es_client("os-cms.cern.ch/os", 'secret_opensearch.txt', get_index_schema())
     print(f"Length of partition: {len(part)}")
     idx = client.get_or_create_index(timestamp=part[0]['timestamp'], index_template=_index_template,
                                      index_mod="D")  # sends to daily index
