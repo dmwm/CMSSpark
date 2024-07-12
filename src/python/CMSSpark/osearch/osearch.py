@@ -41,7 +41,7 @@ How to use:
 
     # ------------------------------- Big Spark dataframe -------------------------------------
     _index_template = 'test-foo'
-    client = osearch.get_es_client("os-cms.cern.ch/es", 'secret_opensearch.txt', get_index_schema())
+    client = osearch.get_es_client("os-cms.cern.ch/os", 'secret_opensearch.txt', get_index_schema())
     for part in df.rdd.mapPartitions().toLocalIterator():
         print(f"Length of partition: {len(part)}")
         # You can define below calls in a function for reusability
