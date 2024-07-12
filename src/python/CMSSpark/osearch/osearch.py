@@ -32,7 +32,7 @@ How to use:
         }
 
     _index_template = 'test-foo'
-    client = osearch.get_es_client("es-cms1.cern.ch/es", 'secret_opensearch.txt', get_index_schema())
+    client = osearch.get_es_client("os-cms.cern.ch/os", 'secret_opensearch.txt', get_index_schema())
 
     # index_mod="": 'test-foo', index_mod="Y": 'test-foo-YYYY', index_mod="M": 'test-foo-YYYY-MM', index_mod="D": 'test-foo-YYYY-MM-DD',
     idx = client.get_or_create_index(timestamp=time.time(), index_template=_index_template, index_mod="")
@@ -41,7 +41,7 @@ How to use:
 
     # ------------------------------- Big Spark dataframe -------------------------------------
     _index_template = 'test-foo'
-    client = osearch.get_es_client("es-cms1.cern.ch/es", 'secret_opensearch.txt', get_index_schema())
+    client = osearch.get_es_client("os-cms.cern.ch/es", 'secret_opensearch.txt', get_index_schema())
     for part in df.rdd.mapPartitions().toLocalIterator():
         print(f"Length of partition: {len(part)}")
         # You can define below calls in a function for reusability
@@ -58,13 +58,10 @@ import time
 from collections import Counter as collectionsCounter
 from datetime import datetime
 
-from opensearchpy import OpenSearch
+from opensearchpy import OpenSearch, exceptions
 
 # Global OpenSearch connection client
 _opensearch_client = None
-
-# Global index cache, keep tracks of indices that are already created with mapping in the OpenSearch instance
-_index_cache = set()
 
 
 def get_es_client(host, secret_file, index_mapping_and_settings):
@@ -126,12 +123,9 @@ class OpenSearchInterface(object):
                            empty string uses single index as "index_template"
 
         Returns yearly/monthly/daily index string depending on the index_mode and creates it if it does not exist.
-        - It checks if index mapping is already created by checking _index_cache set.
-        - And returns from _index_cache set if index exists
+        - It checks if index already exists and returns its name.
         - Else, it creates the index with mapping which happens in the first batch of the month ideally.
         """
-        global _index_cache
-
         timestamp = int(timestamp)
         if index_mod.upper() == "Y":
             idx = time.strftime("%s-%%Y" % index_template, datetime.utcfromtimestamp(timestamp).timetuple())
@@ -141,12 +135,18 @@ class OpenSearchInterface(object):
             idx = time.strftime("%s-%%Y-%%m-%%d" % index_template, datetime.utcfromtimestamp(timestamp).timetuple())
         else:
             idx = index_template
-
-        if idx in _index_cache:
+            
+        try:
+            self.handle.indices.get(idx)
+            logging.info(f"Index found: {idx}")
             return idx
-        get_es_client(self.host, self.secret_file, self.index_mapping_and_settings).make_mapping(idx=idx)
-        _index_cache.add(idx)
-        return idx
+        except exceptions.NotFoundError:
+            logging.info(f"Index {idx} doesn't exist, creating new index")
+            get_es_client(self.host, self.secret_file, self.index_mapping_and_settings).make_mapping(idx=idx)
+            return idx
+        except Exception as e:
+            logging.error(f"Couldn't get or create index: {e}")
+            return None
 
     @staticmethod
     def parse_errors(result):
