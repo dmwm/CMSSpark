@@ -3,7 +3,7 @@
 set -e
 ##H cron4wma_agent_count.sh
 ##H    Weekly cron job of wma_agent_count_to_opensearch.py
-##H    This cron job calculates daily agent count per host and send to OpenSearch es-cms test tenant WEEKLY
+##H    This cron job calculates daily agent count per host and send to OpenSearch os-cms test tenant WEEKLY
 ##H
 ##H Example: cron4wma_agent_count.sh --keytab ./keytab --conf ./secret_opensearch.txt --p1 32000 --p2 32001 --host $MY_NODE_NAME --wdir $WDIR
 ##H Arguments:
@@ -50,7 +50,7 @@ spark_submit_args=(
 _start_date=$(date -d "10 days ago" +%Y-%m-%d)
 _end_date=$(date -d "3 days ago" +%Y-%m-%d)
 ES_INDEX="test-wmarchive-agent-count"
-ES_HOST="es-cms1.cern.ch/es"
+ES_HOST="os-cms.cern.ch/os"
 
 util4logi "${myname} Spark Job is starting... between input dates of ${_start_date} - ${_end_date}"
 # ---------------------------------------------------------------------------------------------------------------------
