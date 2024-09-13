@@ -3,7 +3,7 @@
 """
 File        : wma_agent_count_to_opensearch.py
 Author      : Ceyhun Uzunoglu <ceyhunuzngl AT gmail [DOT] com>
-Description : Sends historical hourly aggregated WMArchive data to es-cms test tenant for debugging purpose
+Description : Sends historical hourly aggregated WMArchive data to os-cms test tenant for debugging purpose
               Hourly aggregated agent count per host with following fields:
               "wmats_midday": aggregation is daily, so we use midday timestamp of wmats
               "day": string yyyy-mm-dd
@@ -112,7 +112,7 @@ def send(part, opensearch_host, es_secret_file, es_index_template):
 @click.option("--start_date", required=False, type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option("--end_date", required=False, type=click.DateTime(_VALID_DATE_FORMATS))
 @click.option('--es_host', required=True, default=None, type=str,
-              help='OpenSearch host name without port: es-cms1.cern.ch/es')
+              help='OpenSearch host name without port: os-cms.cern.ch/os')
 @click.option('--es_secret_file', required=True, default=None, type=str,
               help='OpenSearch secret file that contains "user:pass" only')
 @click.option('--es_index', required=True, default=None, type=str,
