@@ -90,7 +90,7 @@ def get_crab_unique_users(start_date, end_date, by="month", base=_BASE_HDFS_COND
     grouped_sdf = (
         dfs_raw.dropDuplicates(["GlobalJobId"])
         .groupBy(["year", by])
-        .agg(countDistinct("CRAB_UserHN"))
+        .agg(countDistinct("CRAB_UserHN").alias("count_CRAB_UserHN"))
     )
     return grouped_sdf.toPandas()
 
@@ -99,7 +99,7 @@ def generate_plot(pdf, by, output_folder, filename):
     """
     Generates and save in the output_folder a bar plot
     for the given dataset. The dataset must include year,
-    either a month or a weekofyear, and count(DISTINCT CRAB_UserHN).
+    either a month or a weekofyear, and count_CRAB_UserHN.
     If the year is the same for all the records, only the month/weekofyear
     will be used in the labels, otherwise it will show year-month or
     year-weekofyear.
@@ -112,7 +112,7 @@ def generate_plot(pdf, by, output_folder, filename):
     fig, ax = plt.subplots(figsize=_dims)
     print(sorted_pd.head())
     plot = sns.barplot(
-        data=sorted_pd, x=group_field, y="count(CRAB_UserHN)", color="tab:blue"
+        data=sorted_pd, x=group_field, y="count_CRAB_UserHN", color="tab:blue"
     )
     if group_field == "period":
         plot.set_xticklabels(plot.get_xticklabels(), rotation=30)
