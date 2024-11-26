@@ -90,7 +90,7 @@ def get_crab_unique_users(start_date, end_date, by="month", base=_BASE_HDFS_COND
     grouped_sdf = (
         dfs_raw.dropDuplicates(["GlobalJobId"])
         .groupBy(["year", by])
-        .agg(countDistinct("CRAB_UserHN")).alias("count_CRAB_UserHN")
+        .agg(countDistinct("CRAB_UserHN").alias("count_CRAB_UserHN"))
     )
     return grouped_sdf.toPandas()
 
