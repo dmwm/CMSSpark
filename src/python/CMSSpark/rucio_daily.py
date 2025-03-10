@@ -24,7 +24,7 @@ logger.addHandler(logging.StreamHandler())
 
 # global variables
 RUCIO_HDFS_FOLDER = "/project/awg/cms/rucio/{fdate}/replicas/part*.avro"
-CMS_DBS_HDFS_FOLDER = "/project/awg/cms/CMS_DBS3_PROD_GLOBAL/current/FILES/*.gz"
+CMS_DBS_HDFS_FOLDER = "/project/awg/cms/dbs/PROD_GLOBAL/{fdate}/FILES/*.gz"
 _VALID_DATE_FORMATS = ["%Y-%m-%d"]
 
 
@@ -84,11 +84,12 @@ def main(fdate, output, verbose):
     if not output.endswith("/"):
         output = output + "/"
     rucio_path = RUCIO_HDFS_FOLDER.format(fdate=fdate)
+    dbs_path = CMS_DBS_HDFS_FOLDER.format(fdate=fdate)
     output = output + "rucio/" + fdate.replace("-", "/") + "/"
     logger.info("Input rucio path: %s", rucio_path)
-    logger.info("Input dbs path: %s", CMS_DBS_HDFS_FOLDER)
+    logger.info("Input dbs path: %s", dbs_path)
     logger.info("Output path: %s", output)
-    run(rucio_path, CMS_DBS_HDFS_FOLDER, output)
+    run(rucio_path, dbs_path, output)
 
 
 if __name__ == "__main__":
