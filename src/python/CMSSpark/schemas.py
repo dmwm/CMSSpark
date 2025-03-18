@@ -120,22 +120,22 @@ def schema_datasets():
     :returns: StructType consisting StructField array
     """
     return StructType([
-        StructField("d_dataset_id", LongType(), True),
-        StructField("d_dataset", StringType(), True),
-        StructField("d_is_dataset_valid", IntegerType(), True),
-        StructField("d_primary_ds_id", LongType(), True),
-        StructField("d_processed_ds_id", LongType(), True),
-        StructField("d_data_tier_id", IntegerType(), True),
-        StructField("d_dataset_access_type_id", IntegerType(), True),
-        StructField("d_acquisition_era_id", IntegerType(), True),
-        StructField("d_processing_era_id", IntegerType(), True),
-        StructField("d_physics_group_id", IntegerType(), True),
-        StructField("d_xtcrosssection", DoubleType(), True),
-        StructField("d_prep_id", StringType(), True),
-        StructField("d_creation_date", DoubleType(), True),
-        StructField("d_create_by", StringType(), True),
-        StructField("d_last_modification_date", DoubleType(), True),
-        StructField("d_last_modified_by", StringType(), True)
+        StructField("DATASET_ID", LongType(), True),
+        StructField("DATASET", StringType(), True),
+        StructField("IS_DATASET_VALID", IntegerType(), True),
+        StructField("PRIMARY_DS_ID", LongType(), True),
+        StructField("PROCESSED_DS_ID", LongType(), True),
+        StructField("DATA_TIER_ID", IntegerType(), True),
+        StructField("DATASET_ACCESS_TYPE_ID", IntegerType(), True),
+        StructField("ACQUISITION_ERA_ID", IntegerType(), True),
+        StructField("PROCESSING_ERA_ID", IntegerType(), True),
+        StructField("PHYSICS_GROUP_ID", IntegerType(), True),
+        StructField("XTCROSSSECTION", DoubleType(), True),
+        StructField("PREP_ID", StringType(), True),
+        StructField("CREATION_DATE", DoubleType(), True),
+        StructField("CREATE_BY", StringType(), True),
+        StructField("LAST_MODIFICATION_DATE", DoubleType(), True),
+        StructField("LAST_MODIFIED_BY", StringType(), True)
     ])
 
 
@@ -157,17 +157,17 @@ def schema_blocks():
     :returns: StructType consisting StructField array
     """
     return StructType([
-        StructField("b_block_id", LongType(), True),
-        StructField("b_block_name", StringType(), True),
-        StructField("b_dataset_id", LongType(), True),
-        StructField("b_open_for_writing", IntegerType(), True),
-        StructField("b_origin_site_name", StringType(), True),
-        StructField("b_block_size", DoubleType(), True),
-        StructField("b_file_count", IntegerType(), True),
-        StructField("b_creation_date", DoubleType(), True),
-        StructField("b_create_by", StringType(), True),
-        StructField("b_last_modification_date", DoubleType(), True),
-        StructField("b_last_modified_by", StringType(), True)
+        StructField("BLOCK_ID", LongType(), True),
+        StructField("BLOCK_NAME", StringType(), True),
+        StructField("DATASET_ID", LongType(), True),
+        StructField("OPEN_FOR_WRITING", IntegerType(), True),
+        StructField("ORIGIN_SITE_NAME", StringType(), True),
+        StructField("BLOCK_SIZE", DoubleType(), True),
+        StructField("FILE_COUNT", LongType(), True),
+        StructField("CREATION_DATE", DoubleType(), True),
+        StructField("CREATE_BY", StringType(), True),
+        StructField("LAST_MODIFICATION_DATE", DoubleType(), True),
+        StructField("LAST_MODIFIED_BY", StringType(), True)
     ])
 
 
@@ -195,23 +195,23 @@ def schema_files():
     :returns: StructType consisting StructField array
     """
     return StructType([
-        StructField("f_file_id", LongType(), True),
-        StructField("f_logical_file_name", StringType(), True),
-        StructField("f_is_file_valid", IntegerType(), True),
-        StructField("f_dataset_id", LongType(), True),
-        StructField("f_block_id", LongType(), True),
-        StructField("f_file_type_id", IntegerType(), True),
-        StructField("f_check_sum", StringType(), True),
-        StructField("f_event_count", LongType(), True),
-        StructField("f_file_size", DoubleType(), True),
-        StructField("f_branch_hash_id", IntegerType(), True),
-        StructField("f_adler32", StringType(), True),
-        StructField("f_md5", StringType(), True),
-        StructField("f_auto_cross_section", DoubleType(), True),
-        StructField("f_creation_date", DoubleType(), True),
-        StructField("f_create_by", StringType(), True),
-        StructField("f_last_modification_date", DoubleType(), True),
-        StructField("f_last_modified_by", StringType(), True)
+        StructField("FILE_ID", LongType(), True),
+        StructField("LOGICAL_FILE_NAME", StringType(), True),
+        StructField("IS_FILE_VALID", IntegerType(), True),
+        StructField("DATASET_ID", LongType(), True),
+        StructField("BLOCK_ID", LongType(), True),
+        StructField("FILE_TYPE_ID", IntegerType(), True),
+        StructField("CHECK_SUM", StringType(), True),
+        StructField("EVENT_COUNT", LongType(), True),
+        StructField("FILE_SIZE", DoubleType(), True),
+        StructField("BRANCH_HASH_ID", LongType(), True),
+        StructField("ADLER32", StringType(), True),
+        StructField("MD5", StringType(), True),
+        StructField("AUTO_CROSS_SECTION", DoubleType(), True),
+        StructField("CREATION_DATE", DoubleType(), True),
+        StructField("CREATE_BY", StringType(), True),
+        StructField("LAST_MODIFICATION_DATE", DoubleType(), True),
+        StructField("LAST_MODIFIED_BY", StringType(), True)
     ])
 
 
