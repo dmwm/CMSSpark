@@ -40,6 +40,7 @@ from pyspark.sql.types import LongType
 
 # CMSSpark modules
 from CMSSpark.spark_utils import get_spark_session
+from CMSSpark import schemas
 
 # CMSMonitoring modules
 try:
@@ -47,12 +48,6 @@ try:
 except ImportError:
     print("ERROR: Could not import StompAMQ")
     sys.exit(1)
-
-# global variables
-
-# used Oracle tables
-TABLES = ['REPLICAS', 'CONTENTS', 'RSES', 'FILES', 'DATASETS', 'DATA_TIERS', 'PHYSICS_GROUPS',
-          'ACQUISITION_ERAS', 'DATASET_ACCESS_TYPES']
 
 # Used to set string value for "is dataset from rucio or dbs"
 BOOL_STR = {True: 'True', False: 'False'}
@@ -80,6 +75,13 @@ STR_TYPE_COLUMNS = ['all_f_in_dbs', 'all_f_in_rucio', 'rucio_has_ds_name', 'dbs_
 # UTC timestamp of start hour of spark job
 TSAMP_CURRENT_HOUR = int(datetime.utcnow().replace(minute=0, second=0, tzinfo=timezone.utc).timestamp()) * 1000
 
+RUCIO_HDFS_FOLDER = "/project/awg/cms/rucio"
+CMS_DBS_HDFS_FOLDER = "/project/awg/cms/dbs/PROD_GLOBAL"
+_VALID_DATE_FORMATS = ["%Y-%m-%d"]
+
+RUCIO_TABLES = ['replicas', 'contents', 'rses']
+DBS_TABLES = ['FILES', 'DATASETS', 'DATA_TIERS', 'PHYSICS_GROUPS', 'ACQUISITION_ERAS', 'DATASET_ACCESS_TYPES']
+
 
 def write_stats_to_eos(base_eos_dir, stats_dict):
     """Writes some Spark job statistics about datasets of DBS and Rucio to EOS file in html format"""
@@ -105,9 +107,12 @@ def write_stats_to_eos(base_eos_dir, stats_dict):
 def create_main_df(spark, hdfs_paths, base_eos_dir, cmsspark_git_tag):
     # -----------------------------------------------------------------------------------------------------------------
     #                -- ==================  Prepare main Spark dataframes  ===========================
+    csvreader = spark.read.format("csv") \
+        .option("nullValue", "null") \
+        .option("mode", "FAILFAST")
 
     # Get RSES id, name, type, tier, country, kind from RSES table dump
-    df_rses = spark.read.format("avro").load(hdfs_paths['RSES']) \
+    df_rses = spark.read.format("avro").load(hdfs_paths['rses']) \
         .filter(col('DELETED_AT').isNull()) \
         .withColumn('replica_rse_id', lower(_hex(col('ID')))) \
         .withColumnRenamed('RSE', 'rse') \
@@ -122,7 +127,7 @@ def create_main_df(spark, hdfs_paths, base_eos_dir, cmsspark_git_tag):
         .select(['replica_rse_id', 'rse', 'rse_type', 'rse_tier', 'rse_country', 'rse_kind'])
 
     # Rucio Dataset(D) refers to dbs block, so we used DBS terminology from the beginning
-    df_contents_f_to_b = spark.read.format("avro").load(hdfs_paths['CONTENTS']) \
+    df_contents_f_to_b = spark.read.format("avro").load(hdfs_paths['contents']) \
         .filter(col("SCOPE") == "cms") \
         .filter(col("DID_TYPE") == "D") \
         .filter(col("CHILD_TYPE") == "F") \
@@ -132,7 +137,7 @@ def create_main_df(spark, hdfs_paths, base_eos_dir, cmsspark_git_tag):
 
     # Rucio Dataset(D) refers to dbs block; Rucio Container(C) refers to dbs dataset.
     # We used DBS terminology from the beginning
-    df_contents_b_to_d = spark.read.format("avro").load(hdfs_paths['CONTENTS']) \
+    df_contents_b_to_d = spark.read.format("avro").load(hdfs_paths['contents']) \
         .filter(col("SCOPE") == "cms") \
         .filter(col("DID_TYPE") == "C") \
         .filter(col("CHILD_TYPE") == "D") \
@@ -148,26 +153,30 @@ def create_main_df(spark, hdfs_paths, base_eos_dir, cmsspark_git_tag):
         .withColumn('is_d_name_from_rucio', lit(BOOL_STR[True])) \
         .select(["contents_dataset", "file", "is_d_name_from_rucio"])
 
-    dbs_files = spark.read.format('avro').load(hdfs_paths['FILES']) \
-        .withColumnRenamed('LOGICAL_FILE_NAME', 'file') \
-        .withColumnRenamed('DATASET_ID', 'dbs_file_ds_id') \
-        .withColumnRenamed('FILE_SIZE', 'dbs_file_size') \
-        .withColumnRenamed('EVENT_COUNT', 'dbs_file_event_count') \
+    dbs_files = csvreader.schema(schema_files()).load(hdfs_paths['FILES']) \
+        .withColumnRenamed('f_logical_file_name', 'file') \
+        .withColumnRenamed('f_dataset_id', 'dbs_file_ds_id') \
+        .withColumnRenamed('f_file_size', 'dbs_file_size') \
+        .withColumnRenamed('f_event_count', 'dbs_file_event_count') \
         .select(['file', 'dbs_file_ds_id', 'dbs_file_size', 'dbs_file_event_count'])
 
-    dbs_datasets = spark.read.format('avro').load(hdfs_paths['DATASETS'])
+    dbs_datasets = csvreader.schema(schema_datasets()).load(hdfs_paths['DATASETS'])
+    dbs_datasets_cols = {}
+    for c in dbs_datasets.columns:
+        dbs_datasets_cols[c] = c[2:]
+    dbs_datasets = dbs_datasets.withColumnsRenamed(dbs_datasets_cols)
 
-    df_dbs_ds_files = dbs_files.join(dbs_datasets.select(['DATASET_ID', 'DATASET']),
-                                     dbs_files.dbs_file_ds_id == dbs_datasets.DATASET_ID, how='left') \
+    df_dbs_ds_files = dbs_files.join(dbs_datasets.select(['dataset_id', 'dataset']),
+                                     dbs_files.dbs_file_ds_id == dbs_datasets.dataset_id, how='left') \
         .filter(col('file').isNotNull()) \
-        .filter(col('DATASET').isNotNull()) \
+        .filter(col('dataset').isNotNull()) \
         .withColumnRenamed('dbs_file_ds_id', 'dbs_dataset_id') \
-        .withColumnRenamed('DATASET', 'dbs_dataset') \
+        .withColumnRenamed('dataset', 'dbs_dataset') \
         .withColumn('is_d_name_from_dbs', lit(BOOL_STR[True])) \
         .select(['file', 'dbs_dataset', 'is_d_name_from_dbs'])
 
     # Prepare replicas
-    df_replicas = spark.read.format('avro').load(hdfs_paths['REPLICAS']) \
+    df_replicas = spark.read.format('avro').load(hdfs_paths['replicas']) \
         .filter(col("SCOPE") == "cms") \
         .filter(col('STATE') == 'A') \
         .withColumn('replica_rse_id', lower(_hex(col('RSE_ID')))) \
@@ -337,10 +346,10 @@ def create_main_df(spark, hdfs_paths, base_eos_dir, cmsspark_git_tag):
     #          -- ============  Dataset enrichment with Dataset tags  ============ --
 
     # Enrich dbs dataset with names from id properties of other tables
-    dbs_data_tiers = spark.read.format('avro').load(hdfs_paths['DATA_TIERS'])
-    dbs_physics_group = spark.read.format('avro').load(hdfs_paths['PHYSICS_GROUPS'])
-    dbs_acquisition_era = spark.read.format('avro').load(hdfs_paths['ACQUISITION_ERAS'])
-    dbs_dataset_access_type = spark.read.format('avro').load(hdfs_paths['DATASET_ACCESS_TYPES'])
+    dbs_data_tiers = csvreader.schema(schema_data_tiers()).load(hdfs_paths['DATA_TIERS'])
+    dbs_physics_group = csvreader.schema(schema_physics_groups()).load(hdfs_paths['PHYSICS_GROUPS'])
+    dbs_acquisition_era = csvreader.schema(schema_acquisition_eras()).load(hdfs_paths['ACQUISITION_ERAS'])
+    dbs_dataset_access_type = csvreader.schema(schema_dataset_access_types()).load(hdfs_paths['DATASET_ACCESS_TYPES'])
 
     dbs_datasets_enr = dbs_datasets \
         .join(dbs_data_tiers, ['data_tier_id'], how='left') \
@@ -461,18 +470,23 @@ def send_to_amq(data, confs, batch_size, topic, doc_type):
 
 @click.command()
 @click.option("--creds", required=True, help="secrets/cms-rucio-dailystats/creds.json")
-@click.option("--base_hdfs_dir", required=True, help="Base HDFS path that includes Sqoop dumps")
 @click.option("--base_eos_dir", required=True, help="Base EOS path to write Spark job statistics",
               default="/eos/user/c/cmsmonit/www/rucio_daily_ds_stats", )
 @click.option("--cmsspark_git_tag", required=True, help="data.cmsspark_git_tag field for producer versioning")
 @click.option("--amq_batch_size", type=click.INT, required=False, help="AMQ transaction batch size", default=100)
+@click.option("--fdate", required=False, default=dt.today().strftime("%Y-%m-%d"),
+              type=click.DateTime(_VALID_DATE_FORMATS),
+              help="YYYY-MM-DD date of the dbs dump file date. Default is current day.")
 @click.option("--test", is_flag=True, default=False, required=False,
               help="It will send only 10 documents to ElasticSearch. "
                    "[!Attention!] Please provide test/training AMQ topic.")
-def main(creds, base_hdfs_dir, base_eos_dir, amq_batch_size, cmsspark_git_tag, test):
+def main(creds, base_eos_dir, amq_batch_size, cmsspark_git_tag, fdate, test):
+
     tables_hdfs_paths = {}
-    for table in TABLES:
-        tables_hdfs_paths[table] = f"{base_hdfs_dir}/{table}/part*.avro"
+    for table in RUCIO_TABLES:
+        tables_hdfs_paths[table] = f"{RUCIO_HDFS_FOLDER}/{fdate}/{table}/part*.avro"
+    for table in DBS_TABLES:
+        tables_hdfs_paths[table] = f"{CMS_DBS_HDFS_FOLDER}/{fdate}/{table}/*.gz"
 
     spark = get_spark_session("cms-monitoring-rucio-daily-stats")
     creds_json = credentials(f_name=creds)
