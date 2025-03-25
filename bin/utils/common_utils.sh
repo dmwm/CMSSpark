@@ -192,8 +192,8 @@ function util_kerberos_auth_with_keytab() {
 # setup hadoop and spark in k8s
 #######################################
 function util_setup_spark_k8s() {
-    hadoop-set-default-conf.sh analytix
-    source hadoop-setconf.sh analytix 3.3 spark3
+    hadoop-set-default-conf.sh hadoop-analytix
+    source hadoop-setconf.sh hadoop-analytix 3.3 spark3
     # until IT changes this setting, we need to turn off info logs in this way. Don't try spark.sparkContext.setLogLevel('WARN'), doesn't work, since they are not spark logs but spark-submit logs.
     sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' "$SPARK_CONF_DIR"/log4j2.properties
 }
