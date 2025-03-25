@@ -84,7 +84,7 @@ def get_df_dbs_files(spark: SparkSession) -> DataFrame:
     """Create DBS Files table dataframe"""
     return (
         get_csvreader(spark)
-        .schema(dbs_schemas.schema_files())
+        .schema(dbs_schemas.schema_files_dm())
         .load(HDFS_DBS_FILES)
         .filter(col("IS_FILE_VALID") == "1")
         .withColumnRenamed("LOGICAL_FILE_NAME", "FILE_NAME")
@@ -96,7 +96,7 @@ def get_df_dbs_blocks(spark: SparkSession) -> DataFrame:
     """Create DBS Blocks table dataframe"""
     return (
         get_csvreader(spark)
-        .schema(dbs_schemas.schema_blocks())
+        .schema(dbs_schemas.schema_blocks_dm())
         .load(HDFS_DBS_BLOCKS)
         .select(["BLOCK_NAME", "BLOCK_ID", "DATASET_ID", "FILE_COUNT"])
     )
@@ -106,7 +106,7 @@ def get_df_dbs_datasets(spark: SparkSession) -> DataFrame:
     """Create DBS Datasets table dataframe"""
     return (
         get_csvreader(spark)
-        .schema(dbs_schemas.schema_datasets())
+        .schema(dbs_schemas.schema_datasets_dm())
         .load(HDFS_DBS_DATASETS)
         .filter(col("IS_DATASET_VALID") == "1")
         .select(["DATASET_ID", "DATASET"])
