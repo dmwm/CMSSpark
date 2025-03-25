@@ -779,7 +779,7 @@ def send_to_amq(data, confs, batch_size, topic, doc_type):
     "[!Attention!] Please provide test/training AMQ topic.",
 )
 def main(creds, base_eos_dir, amq_batch_size, cmsspark_git_tag, fdate, test):
-
+    fdate = fdate.strftime("%Y-%m-%d")
     tables_hdfs_paths = {}
     for table in RUCIO_TABLES:
         tables_hdfs_paths[table] = f"{RUCIO_HDFS_FOLDER}/{fdate}/{table}/part*.avro"
