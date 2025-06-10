@@ -37,7 +37,7 @@ _BASE_HDFS_CONDOR = '/project/monitoring/archive/condor/raw/metric'
 
 # Bottom to top bar stack order which set same colors for same site always
 _HPC_SITES_STACK_ORDER = ['ANL', 'ANVIL', 'BSC', 'CINECA', 'HOREKA', 'NERSC', 'OSG', 'PSC', 'RWTH', 'SDSC', 'TACC',
-        'VEGA', 'CHULA']
+                          'VEGA']
 
 # For new sites, please check list sizes
 DISCRETE_COLOR_MAP = {site: px.colors.qualitative.Light24[i] for i, site in enumerate(_HPC_SITES_STACK_ORDER)}
