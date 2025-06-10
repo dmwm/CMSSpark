@@ -37,7 +37,7 @@ _BASE_HDFS_CONDOR = '/project/monitoring/archive/condor/raw/metric'
 
 # Bottom to top bar stack order which set same colors for same site always
 _HPC_SITES_STACK_ORDER = ['ANL', 'ANVIL', 'BSC', 'CINECA', 'HOREKA', 'NERSC', 'OSG', 'PSC', 'RWTH', 'SDSC', 'TACC',
-        'VEGA', 'CHULA']
+                          'VEGA']
 
 # For new sites, please check list sizes
 DISCRETE_COLOR_MAP = {site: px.colors.qualitative.Light24[i] for i, site in enumerate(_HPC_SITES_STACK_ORDER)}
@@ -103,7 +103,6 @@ def get_raw_df(spark, start_date, end_date):
             | ((col('Site') == 'T1_DE_KIT') & (col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA'))  # HOREKA
             | ((col('Site') == 'T2_DE_RWTH') & (col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC'))  # RWTH
             | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0') == 'CNAF-VEGA'))  # VEGA
-            | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0') == 'CMSHTPC_T1_IT_CNAF_CHULA_gpu'))  # CHULA
         ).filter(
             col('Status').isin(['Running', 'Completed'])
         ).withColumn(
@@ -123,7 +122,6 @@ def get_raw_df(spark, start_date, end_date):
             .when(col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA', lit("HOREKA"))
             .when(col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC', lit("RWTH"))
             .when(col('MachineAttrCMSSubSiteName0') == 'CNAF-VEGA', lit("VEGA"))
-            .when(col('MachineAttrCMSSubSiteName0') == 'CMSHTPC_T1_IT_CNAF_CHULA_gpu', lit("CHULA"))
         ).withColumn(
             "RequestCpus",
             when(col("RequestCpus").isNotNull(), col("RequestCpus")).otherwise(lit(1)),
