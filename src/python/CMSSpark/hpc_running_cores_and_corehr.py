@@ -103,7 +103,6 @@ def get_raw_df(spark, start_date, end_date):
             | ((col('Site') == 'T1_DE_KIT') & (col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA'))  # HOREKA
             | ((col('Site') == 'T2_DE_RWTH') & (col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC'))  # RWTH
             | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0') == 'CNAF-VEGA'))  # VEGA
-            | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0') == 'CNAF-CHULA'))  # CHULA
         ).filter(
             col('Status').isin(['Running', 'Completed'])
         ).withColumn(
@@ -123,7 +122,6 @@ def get_raw_df(spark, start_date, end_date):
             .when(col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA', lit("HOREKA"))
             .when(col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC', lit("RWTH"))
             .when(col('MachineAttrCMSSubSiteName0') == 'CNAF-VEGA', lit("VEGA"))
-            .when(col('MachineAttrCMSSubSiteName0') == 'CNAF-CHULA', lit("CHULA"))
         ).withColumn(
             "RequestCpus",
             when(col("RequestCpus").isNotNull(), col("RequestCpus")).otherwise(lit(1)),
