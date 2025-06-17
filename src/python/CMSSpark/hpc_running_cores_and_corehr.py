@@ -103,7 +103,7 @@ def get_raw_df(spark, start_date, end_date):
             | ((col('Site') == 'T1_DE_KIT') & (col('MachineAttrCMSSubSiteName0') == 'KIT-HOREKA'))  # HOREKA
             | ((col('Site') == 'T2_DE_RWTH') & (col('MachineAttrCMSSubSiteName0') == 'RWTH-HPC'))  # RWTH
             | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0') == 'CNAF-VEGA'))  # VEGA
-            | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0').contains('CHULA')) # CHULA
+            | ((col('Site') == 'T1_IT_CNAF') & (col('MachineAttrCMSSubSiteName0').contains('CHULA'))) # CHULA
         ).filter(
             col('Status').isin(['Running', 'Completed'])
         ).withColumn(
