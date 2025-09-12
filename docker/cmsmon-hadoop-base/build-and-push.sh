@@ -1,3 +1,5 @@
+# WARNING: THIS SCRIPT IS DEPRECATED AND KEPT FOR LEGACY REASONS. IF YOU WANT TO BUILD AND PUSH THE IMAGE, USE THE build-and-push.sh SCRIPT IN THE PARENT DOCKER DIRECTORY
+
 #!/bin/sh
 # Builds and push cmsmon-hadoop-base image
 # Usage: build-and-push.sh
