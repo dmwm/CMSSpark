@@ -1,33 +1,27 @@
-## cmsmon-hdfs
+# CMS Monitoring Spark base image
 
-Base docker image to run all Hadoop/Spark K8s CronJobs
+Base image for Spark-related Kubernetes CronJobs.
 
-- Analytix cluster 3.2, spark3 and python3.9 will be used. 
-- Base image already contains sqoop.
+- Analytix 3.2 cluster, Spark 3, Python 3.9
+- Includes sqoop, `stomp.py==7.0.0`, `CMSMonitoring/src/python/CMSMonitoring`, selected `CMSSpark` and `CMSMonitoring` trees, plus click, pyspark, pandas, numpy, seaborn, matplotlib, plotly, requests, amtool
+- GitHub workflows build and publish the image
+- For OpenSearch helper usage, see `helpers/osearch/README.md`
 
-Installs:
+## Build and push
 
-- stomp.py==7.0.0 and creates its zip for spark-submit `--py-files` (spark nodes don't have this version yet)
-- Only src/python/CMSMonitoring folder of dmwm/CMSMonitoring repo and creates its zip for spark-submit `--py-files` (WDIR should be in path)
-- dmwm/CMSSpark of `CMSSPARK_TAG` build arg and dmwm/CMSMonitoring of `CMSMON_TAG` of build arg
-- Other PY modules: click pyspark pandas numpy seaborn matplotlib plotly requests
-- amtool
-
-##### Image is built by GH workflow in CMSSpark and CMSMonitoring repository
-
-#### Manual build and push
+Use the shared helper script in `CMSSpark/docker`:
 
 ```shell
-# docker image prune -a OR docker system prune -f -a
-docker_registry=registry.cern.ch/cmsmonitoring
-
-# For CMSSpark
-image_tag=v0.4.1.7
-docker build --build-arg CMSSPARK_TAG="image_tag" -t "${docker_registry}/cmsmon-spark:${image_tag}" .
-
-# For CMSMonitoring
-image_tag=mon-0.0.1
-docker build --build-arg CMSSMON_TAG="image_tag" -t "${docker_registry}/cmsmon-spark:${image_tag}" .
-
-docker push "${docker_registry}/cmsmon-spark:${image_tag}"
+cd CMSSpark/docker
+./build-and-push.sh -f ./cmsmon-spark cmsmon-spark v1.0.0
+# Not specifying any tag defaults to `test`
+./build-and-push.sh -f ./cmsmon-spark cmsmon-spark 
 ```
+
+Run `./build-and-push.sh --help` for options such as custom Dockerfile paths or tags.
+
+## Versioning information
+
+We have tagged the first version after the refactoring of all cron job images as `v1.0.0`, and that is the code hosted here. New versions will follow that numbering.
+
+For information about earlier versions (`v0.5.0.12` and earlier), check out [this folder](https://github.com/dmwm/CMSKubernetes/tree/master/docker/cmsmon-spark) in the CMSKubernetes repository.
