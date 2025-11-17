@@ -1,25 +1,21 @@
-### cmsmon-hadoop-base
+# CMS Monitoring Hadoop base Docker image
 
-This docker image is created as a base image for cern analytix cluster(`hadoop-analytix`); which includes:
+This is the base image for any HDFS related workloads from the CMS Monitoring team. Importantly, it is used as the base for the `cmsmon-spark` image.
 
-- hadoop
-- spark (spark-submit, spark-shell, etc)
-- hbase
-- sqoop
+- Hadoop
+- Spark CLI (submit, shell, etc.)
+- HBase
+- Sqoop
 
-#### How to build
+## Build and push
 
-Image tag will be changed accordingly cern/cc7-base tag and spark cluster version. For example:
-
-- For spark3: `registry.cern.ch/cmsmonitoring-20220401-1-spark3`
-- For spark2: `registry.cern.ch/cmsmonitoring-20220401-1-spark2`
+Use the shared helper script from `CMSSpark/docker`:
 
 ```shell
-# Build for spark2: spark 2.4, hadoop 2.7
-./build-and-push.sh 2
-
-# Build for spark3: spark 3.3, hadoop 3.2 and with Python 3.9.12
-./build-and-push.sh 3 3.9.12
+# Example
+cd CMSSpark/docker/cmsmon-hadoop-base
+../build-and-push.sh cmsmon-hadoop-base-spark3 latest
+../build-and-push.sh cmsmon-hadoop-base-spark3 spark3-YYYYMMDD
 ```
 
-- Images will have `spark(2|3)-YYYYMMDD` and `spark(2|3)-latest` tags.
+Tags typically follow `spark(2|3)-YYYYMMDD` plus `spark(2|3)-latest`.
