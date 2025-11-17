@@ -20,6 +20,9 @@ cd CMSSpark/docker
 
 Run `./build-and-push.sh --help` for options such as custom Dockerfile paths or tags.
 
+Keep in mind that for running the script one must be logged in the [CERN docker registry](https://registry.cern.ch/harbor) by running `docker login registry.cern.ch -u <username>`.
+It will then prompt for a password and you must enter your CLI secret, NOT your CERN password (when using your personal account). This CLI secret can be found in your profile in Harbor.
+
 ## Versioning information
 
 We have tagged the first version after the refactoring of all cron job images as `v1.0.0`, and that is the code hosted here. New versions will follow that numbering.
