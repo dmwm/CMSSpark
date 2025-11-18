@@ -6,7 +6,7 @@ The plots generated are sent to their [respective section](https://cmsdatapop.we
 
 This script will generate two plots, with the following parameters.
 
-|                 | FIG 9                                                        | FIG 10                                                       |
+|                 | [F9](https://cmsdatapop.web.cern.ch/cmsdatapop/EventCountPlots/F9/)                                                        | [F10](https://cmsdatapop.web.cern.ch/cmsdatapop/EventCountPlots/F10/)                                                       |
 | --------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | Tiers           | "GEN" "GEN-SIM" "GEN-RAW" "GEN-SIM-RECO" "AODSIM" "MINIAODSIM" "RAWAODSIM" "NANOAODSIM" "GEN-SIM-DIGI-RAW" "GEN-SIM-RAW" "GEN-SIM-DIGI-RECO" | "RAW" "RECO" "AOD" "RAW-RECO" "USER" "MINIAOD" "NANOAOD"     |
 | Skims           | *DEFAULT*                                                    | "PromptReco" "Parking"                                       |
