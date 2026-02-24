@@ -38,7 +38,7 @@ util4logi "Parameters: KEYTAB_SECRET:${KEYTAB_SECRET} OUTPUT_DIR:${OUTPUT_DIR} P
 util_check_vars PORT1 PORT2 K8SHOST
 util_setup_spark_k8s
 
-KERBEROS_USER=$(util_kerberos_auth_with_keytab "$KEYTAB_SECRET")
+util_kerberos_auth_with_keytab "$KEYTAB_SECRET"
 util4logi "authenticated with Kerberos user: ${KERBEROS_USER}"
 util_check_and_create_dir "$OUTPUT_DIR"
 
