@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- prepared using https://datatables.net/download/ -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/jq-3.6.0/jszip-2.5.0/dt-1.12.1/b-2.2.3/b-colvis-2.2.3/b-html5-2.2.3/b-print-2.2.3/cr-1.5.6/date-1.1.2/kt-2.7.0/rr-1.2.8/sc-2.0.6/sb-1.3.3/sp-2.0.1/sl-1.4.0/sr-1.1.1/datatables.min.css"/>
+
+    <!--  Please do not delete below CSSes, important for pretty view -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.4/css/dataTables.bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.2.2/css/buttons.bootstrap.min.css">
+
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+	        font-family: 'Trebuchet MS', sans-serif;
+        }
+        /* Search bar */
+        .dataTables_filter input {
+          border: 7px solid Tomato;
+          width: 400px;
+          font-size: 14px;
+          font-weight: bold;
+        }
+        table td {
+            word-break: break-all;
+        }
+        /* From 2nd column, align to right */
+        table td:nth-child(n+2) {
+            text-align: right;
+        }
+        /* First row bold */
+        table td:nth-child(1) {
+            font-weight: bold;
+            text-align: center;
+        }
+        /* Different background color for even and odd columns  */
+        #dataframe tr:nth-child(even) {
+          /* background-color: #dddfff; */
+        }
+        /* No carriage return for values, no break lines */
+        #dataframe tr td {
+          width: 1%;
+          white-space: nowrap;
+        }
+        /* button */
+        div.dt-buttons {
+          float: right;
+        }
+        .dt-button.buttons-columnVisibility.active {
+              background: #FF0000 !important;
+              color: white !important;
+              opacity: 0.5;
+           }
+        .dt-button.buttons-columnVisibility {
+              background: black !important;
+              color: white !important;
+              opacity: 1;
+           }
+    </style>
+</head>
+<body>
+    <div class="container-fluid no-padding" style="width: 100%">
+        <div class="row" style="background-color: #ECF2F9">
+            <div class="col-xs-6 col-sm-4">
+                <footer>
+                    <img alt="CERN CMS" src="https://cds.cern.ch/record/1306150/files/cmsLogo_image.jpg"
+                         width="60" height="60">
+                </footer>
+            </div>
+            <div class="col-xs-6 col-sm-4 align-self-center">
+                <h3> CMS HPC Monitoring of Core Hours </h3>
+            </div>
+            <small style="text-align: right;">Last Update: ___UPDATE_TIME___ (excludes last 3 days as safety duration)</small>
+            <div class="col-xs-6 col-sm-4 text-right">
+                <footer>
+                    <img alt="CERN CMS O&C" src="https://cds.cern.ch/record/1306150/files/cmsLogo_image.jpg" style="text-align: right;"
+                         width="60" height="60">
+                </footer>
+            </div>
+        </div>
+        <div id="navbar" class="collapse navbar-collapse">
+          <ul class="nav navbar-nav">
+            <li><div><a href="#" onclick="explainFunction()">&darr; How to interpret this table &darr;</a></div></li>
+            <li style="height: 100%;"> &nbsp; &#9551; &nbsp; </li>
+            <li style="text-align: center;"><div>YEARS: ____YEAR_PLOT_URLS____</div></li>
+            <li style="height: 100%;"> &nbsp; &nbsp; &nbsp; </li>
+            <li style="text-align: center;"><div>SITES: ____SITE_PLOT_URLS____</div></li>
+          </ul>
+        </div><!--/.nav-collapse -->
+        <div class="row" style="background-color: #ECF2F9">
+          </div>
+    </div>
+    <div id="explanations" style="display: none; margin-top: 2%;">
+        <pre>
+    Source code: <a href="https://github.com/dmwm/CMSSpark/blob/master/src/python/CMSSpark/hpc_running_cores_and_corehr.py">CMSSpark/hpc_running_cores_and_corehr.py</a>
+    Source code: <a href="https://github.com/dmwm/CMSSpark/blob/master/bin/cron4hpc_usage.sh">cron4hpc_usage.sh</a>
+    Source code: <a href="https://github.com/dmwm/CMSSpark/blob/master/src/html/hpc/html_template.html">html_template.html</a>
+    This page shows the monthly CoreHrs sum of HPC sites.
+        </pre>
+	</div>
+
+  <div>
+
+  ____MAIN_BLOCK____
+
+  </div>
+    <!-- prepared using https://datatables.net/download/ -->
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.36/pdfmake.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.36/vfs_fonts.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/v/dt/jqc-1.12.4/jszip-2.5.0/dt-1.12.1/af-2.4.0/b-2.2.3/b-colvis-2.2.3/b-html5-2.2.3/b-print-2.2.3/cr-1.5.6/date-1.1.2/fc-4.1.0/fh-3.2.3/r-2.3.0/sb-1.3.3/sp-2.0.1/sl-1.4.0/sr-1.1.1/datatables.min.js"></script>
+    <!-- Please do not delete below JS which is required for footerCallback-->
+    <script type="text/javascript" src="https://cdn.datatables.net/fixedheader/3.2.3/js/dataTables.fixedHeader.min.js"></script>
+    <script>
+        function explainFunction() {
+          var x = document.getElementById("explanations");
+          if (x.style.display === "none") {
+            x.style.display = "block";
+          } else {
+            x.style.display = "none";
+          }
+        }
+    </script>
+    <script>
+        var url = new URL(window.location.href);
+        var searchString = url.searchParams.get("search");
+        if (searchString == null){
+          searchString = ''
+        }
+        //
+        $(document).ready(function () {
+            //
+            function toggleDetails(){
+                var tr = $(this).closest("tr");
+                month_name = $(tr).find("td a.selname").text()
+                d_class="details-show"
+                row = dt.row(tr)
+                if(!row.child.isShown())
+                {
+                    $(tr).addClass(d_class)
+                    row.child("<div id='details_"+month_name+"'>loading</div>").show()
+                    // plots are in ./html subdirectory
+                    $.get("./html/"+month_name+".html", function (response){
+                        var html = response;
+                        $("#details_"+month_name).html(html);
+                    });
+                }else{
+                    $(tr).removeClass(d_class)
+                    row.child.hide()
+                }
+            }
+            $('table#dataframe thead tr').append('<th>Details</th>');
+            $('table#dataframe tbody tr').append('<td><button class="btn-details" style="border-color:#E5B6B6;">Show plots</button></td>');
+            //
+            var dt = $('#dataframe').DataTable( {
+                "orderCellsTop": true,
+                "dom": "fBrtpli",
+                "order": [[ 0, "asc" ]],
+                "pageLength" : 3000,
+                "scrollX": false,
+                "oSearch": { "sSearch": searchString },
+                language: {
+                    search: "_INPUT_",
+                    searchPlaceholder: "--- Search Month ---",
+                },
+                lengthChange: false,
+                "footerCallback": function ( row, data, start, end, display ) {
+                    // Footer callback is used for calculating Totals
+                    var api = this.api(), data;
+                    api.columns('.sum', { page: 'current'}).every( function () {
+                      var sum = this
+                        .data()
+                        .reduce( function (a, b) {
+                            return parseInt(a) + parseInt(b);
+                        }, 0 );
+                        console.log(sum)
+                      this.footer().innerHTML = sum;
+                    } );
+                },
+                buttons: [
+                  {
+                    extend: 'copyHtml5',
+                    exportOptions: {
+                      columns: ':visible'
+                    }
+                  },
+                  {
+                    extend: 'excelHtml5',
+                    exportOptions: {
+                      columns: ':visible'
+                    }
+                  },
+                  {
+                    extend: 'pdfHtml5',
+                    exportOptions: {
+                      columns: ':visible'
+                    }
+                  },
+                  'colvis',
+                  {
+                    text: 'Copy search link to clipboard',
+                    action: function ( e, dt, node, config ) {
+                      url.searchParams.set('search', dt.search());
+                      //window.location.replace(url.href);
+                      navigator.clipboard.writeText(url.href);
+                    }
+                  },
+                ]
+            });
+            //
+            $('table#dataframe tbody tr').on('click','td button.btn-details',toggleDetails)
+            //
+            dt.on('draw', function(){
+                $('table#dataframe tbody tr').off('click').on('click','td button.btn-details',toggleDetails)
+            })
+            dt.buttons().container().appendTo( '#example_wrapper .col-sm-4:eq(0)' );
+        });
+    </script>
+</body>
+<!-- final -->
+</html>
