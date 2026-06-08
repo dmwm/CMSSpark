@@ -45,7 +45,8 @@ util4logi "Parameters: KEYTAB_SECRET:${KEYTAB_SECRET} IS_ITERATIVE:${IS_ITERATIV
 util_check_vars OUTPUT_DIR URL_PREFIX PORT1 PORT2 K8SHOST WDIR
 util_setup_spark_k8s
 
-KERBEROS_USER=$(util_kerberos_auth_with_keytab "$KEYTAB_SECRET")
+util_kerberos_auth_with_keytab "$KEYTAB_SECRET" >/dev/null
+KERBEROS_USER="$UTIL_KERBEROS_USER"
 util4logi "authenticated with Kerberos user: ${KERBEROS_USER}"
 util_check_and_create_dir "$OUTPUT_DIR"
 
@@ -65,7 +66,7 @@ spark_submit_args=(
     --conf "spark.driver.bindAddress=0.0.0.0" --conf "spark.driver.host=${K8SHOST}"
     --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
     --driver-memory=8g --executor-memory=8g
-    --packages org.apache.spark:spark-avro_2.12:3.5.6
+    --packages org.apache.spark:spark-avro_2.12:3.4.0
 )
 py_input_args=(--output_dir "$OUTPUT_DIR" --url_prefix "$URL_PREFIX" --html_template "$HTML_TEMPLATE")
 
