@@ -166,26 +166,37 @@ function util_set_java_home() {
     fi
 }
 
+UTIL_KERBEROS_USER=""
 #######################################
 # Util to authenticate with keytab and to return Kerberos principle name
 #  Arguments:
 #    $1: keytab file
 #  Usage:
-#    principle=$(util_kerberos_auth_with_keytab /foo/keytab)
-#  Returns:
+#    util_kerberos_auth_with_keytab /foo/keytab
+#    KERBEROS_USER=$UTIL_KERBEROS_USER
+#  Do not call inside $() — subshells drop KRB5CCNAME, which EOS access needs.
+#  Returns (stdout):
 #    success: principle name before '@' part. If principle is 'johndoe@cern.ch, will return 'johndoe'
 #    fail   : exits with exit-code 1
 #######################################
 function util_kerberos_auth_with_keytab() {
-    local principle
-    principle=$(klist -k "$1" | tail -1 | awk '{print $2}')
+    local principal krb5ccname
+    # cmsmonit keytabs list cmsmonit@ and cms.monit@; only the former has HDFS ACL access.
+    principal=$(klist -k "$1" | awk 'NR>1 && $2 ~ /@/ {print $2; exit}')
     # run kinit and check if it fails or not
-    if ! kinit "$principle" -k -t "$1" >/dev/null; then
+    if ! kinit "$principal" -k -t "$1" >/dev/null; then
         util4loge "Exiting. Kerberos authentication failed with keytab:$1"
         exit 1
     fi
-    # remove "@" part from the principle name
-    echo "$principle" | grep -o '^[^@]*'
+    # eosxd-csi no longer sets KRB5CCNAME automatically, so set it explicitly.
+    krb5ccname=$(klist | grep "Ticket cache:" | sed -E 's/.*FILE:(\/\/)?//')
+    if [ -z "$krb5ccname" ]; then
+        util4loge "Exiting. Failed to detect Kerberos ticket cache path from klist output."
+        exit 1
+    fi
+    export KRB5CCNAME="$krb5ccname"
+    UTIL_KERBEROS_USER=$(echo "$principal" | grep -o '^[^@]*')
+    echo "$UTIL_KERBEROS_USER"
 }
 
 #######################################
