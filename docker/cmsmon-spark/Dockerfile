@@ -10,6 +10,7 @@ ADD utils $WDIR/utils
 ADD helpers $WDIR/helpers
 
 ENV HADOOP_CONF_DIR=/etc/hadoop/conf
+ENV KRB5CCNAME=/tmp/cmsmon_krb5cc
 ENV PATH="${PATH}:${WDIR}"
 ENV PYTHONPATH="${PYTHONPATH}:${WDIR}"
 
