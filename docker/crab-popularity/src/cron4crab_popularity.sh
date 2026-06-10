@@ -54,9 +54,9 @@ spark_submit_args=(
     --packages org.apache.spark:spark-avro_2.12:3.4.0
 )
 
-# run spark function
+# run spark function (spark-submit output is forwarded to OTEL when enabled)
 function run_spark() {
-    spark-submit "${spark_submit_args[@]}" "$script_dir/dbs_hdfs_crab.py" "$@"
+    util_spark_submit_with_otel_logs "${spark_submit_args[@]}" "$script_dir/dbs_hdfs_crab.py" "$@"
 }
 
 END_DATE="$(date +%Y-%m-01)"
