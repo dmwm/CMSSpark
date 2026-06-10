@@ -52,7 +52,7 @@ spark_submit_args=(
 
 # run spark function
 function run_spark() {
-    spark-submit "${spark_submit_args[@]}" "$script_dir/dbs_event_count_plot.py" "$@"
+    util_spark_submit_with_otel_logs "${spark_submit_args[@]}" "$script_dir/dbs_event_count_plot.py" "$@"
 }
 
 function gen_plot() {
