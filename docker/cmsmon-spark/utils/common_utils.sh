@@ -168,7 +168,6 @@ function util_set_java_home() {
 
 UTIL_KERBEROS_USER=""
 UTIL_KERBEROS_PRINCIPAL=""
-CMSMON_KRB5CCNAME="${KRB5CCNAME:-/tmp/cmsmon_krb5cc}"
 #######################################
 # Util to authenticate with keytab and to return Kerberos principle name
 #  Arguments:
@@ -176,22 +175,28 @@ CMSMON_KRB5CCNAME="${KRB5CCNAME:-/tmp/cmsmon_krb5cc}"
 #  Usage:
 #    util_kerberos_auth_with_keytab /foo/keytab
 #    KERBEROS_USER=$UTIL_KERBEROS_USER
-#    # or: KERBEROS_USER=$(util_kerberos_auth_with_keytab /foo/keytab)
+#  Do not call inside $() — subshells drop KRB5CCNAME, which EOS access needs.
 #  Returns (stdout):
 #    success: principle name before '@' part. If principle is 'johndoe@cern.ch, will return 'johndoe'
 #    fail   : exits with exit-code 1
 #######################################
 function util_kerberos_auth_with_keytab() {
-    local principal
+    local principal krb5ccname
     # cmsmonit keytabs list cmsmonit@ and cms.monit@; only the former has HDFS ACL access.
     principal=$(klist -k "$1" | awk '$2 == "cmsmonit@CERN.CH" {print $2; exit}')
     principal=${principal:-$(klist -k "$1" | awk 'NR>1 && $2 ~ /@/ {print $2; exit}')}
-    # Fixed ccache path (see KRB5CCNAME in Dockerfile) so kinit works from $() subshells too.
-    export KRB5CCNAME="$CMSMON_KRB5CCNAME"
-    if ! kinit -c "$CMSMON_KRB5CCNAME" "$principal" -k -t "$1" >/dev/null; then
+    # run kinit and check if it fails or not
+    if ! kinit "$principal" -k -t "$1" >/dev/null; then
         util4loge "Exiting. Kerberos authentication failed with keytab:$1" >&2
         exit 1
     fi
+    # eosxd-csi no longer sets KRB5CCNAME automatically, so set it explicitly.
+    krb5ccname=$(klist | grep "Ticket cache:" | sed -E 's/.*FILE:(\/\/)?//')
+    if [ -z "$krb5ccname" ]; then
+        util4loge "Exiting. Failed to detect Kerberos ticket cache path from klist output."
+        exit 1
+    fi
+    export KRB5CCNAME="$krb5ccname"
     UTIL_KERBEROS_PRINCIPAL="$principal"
     UTIL_KERBEROS_USER=$(echo "$principal" | grep -o '^[^@]*')
     echo "$UTIL_KERBEROS_USER"
