@@ -49,8 +49,8 @@ spark_submit_args=(
 )
 py_input_args=(--verbose --output "$OUTPUT_DIR" --fdate "$current_date")
 
-# log all to stdout
-spark-submit "${spark_submit_args[@]}" "$script_dir/rucio_daily.py" "${py_input_args[@]}" 2>&1
+# Run (spark-submit output is forwarded to OTEL when enabled)
+util_spark_submit_with_otel_logs "${spark_submit_args[@]}" "$script_dir/rucio_daily.py" "${py_input_args[@]}"
 
 duration=$(($(date +%s) - START_TIME))
 util_cron_send_end "$myname" "1d" 0

@@ -12,6 +12,7 @@ import time
 from datetime import date
 
 import click
+import helpers.otel_setup  # noqa: F401
 import pyspark.sql.functions as fn
 import pyspark.sql.types as types
 from pyspark.sql import SparkSession
@@ -20,7 +21,6 @@ from pyspark.sql import SparkSession
 from helpers import schemas
 
 logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
 
 # global variables
 RUCIO_HDFS_FOLDER = "/project/awg/cms/rucio/{fdate}/replicas/part*.avro"
@@ -76,9 +76,9 @@ def main(fdate, output, verbose):
     # click.DateTime returns date with time
     fdate = fdate.strftime("%Y-%m-%d")
 
-    click.echo('rucio_daily')
-    click.echo('This script dumps Rucio daily data')
-    click.echo(f'Input Arguments: fdate:{fdate}, output:{output}, verbose:{verbose}')
+    logger.info('rucio_daily')
+    logger.info('This script dumps Rucio daily data')
+    logger.info('Input Arguments: fdate:%s, output:%s, verbose:%s', fdate, output, verbose)
     if verbose:
         logger.setLevel(logging.INFO)
     if not output.endswith("/"):
