@@ -49,9 +49,9 @@ spark_submit_args=(
     --conf "spark.driver.port=${PORT1}" --conf "spark.driver.blockManager.port=${PORT2}"
     --packages org.apache.spark:spark-avro_2.12:3.4.0
 )
-# run spark function
+# run spark function (spark-submit output is forwarded to OTEL when enabled)
 function run_spark() {
-    spark-submit "${spark_submit_args[@]}" "$script_dir/condor_crab_unique_users.py" "$@"
+    util_spark_submit_with_otel_logs "${spark_submit_args[@]}" "$script_dir/condor_crab_unique_users.py" "$@"
 }
 
 END_DATE=$(date +%Y-%m-01)
