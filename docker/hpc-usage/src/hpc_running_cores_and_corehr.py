@@ -29,6 +29,7 @@ from pyspark.sql.functions import (
 from pyspark.sql.types import StructType, LongType, StringType, StructField, DoubleType
 
 # CMSSpark modules
+import helpers.otel_setup  # noqa: F401
 from helpers.spark_utils import get_spark_session, get_candidate_files
 
 # global variables
