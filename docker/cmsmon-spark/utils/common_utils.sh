@@ -167,6 +167,7 @@ function util_set_java_home() {
 }
 
 UTIL_KERBEROS_USER=""
+UTIL_KERBEROS_PRINCIPAL=""
 #######################################
 # Util to authenticate with keytab and to return Kerberos principle name
 #  Arguments:
@@ -182,10 +183,11 @@ UTIL_KERBEROS_USER=""
 function util_kerberos_auth_with_keytab() {
     local principal krb5ccname
     # cmsmonit keytabs list cmsmonit@ and cms.monit@; only the former has HDFS ACL access.
-    principal=$(klist -k "$1" | awk 'NR>1 && $2 ~ /@/ {print $2; exit}')
+    principal=$(klist -k "$1" | awk '$2 == "cmsmonit@CERN.CH" {print $2; exit}')
+    principal=${principal:-$(klist -k "$1" | awk 'NR>1 && $2 ~ /@/ {print $2; exit}')}
     # run kinit and check if it fails or not
     if ! kinit "$principal" -k -t "$1" >/dev/null; then
-        util4loge "Exiting. Kerberos authentication failed with keytab:$1"
+        util4loge "Exiting. Kerberos authentication failed with keytab:$1" >&2
         exit 1
     fi
     # eosxd-csi no longer sets KRB5CCNAME automatically, so set it explicitly.
@@ -195,6 +197,7 @@ function util_kerberos_auth_with_keytab() {
         exit 1
     fi
     export KRB5CCNAME="$krb5ccname"
+    UTIL_KERBEROS_PRINCIPAL="$principal"
     UTIL_KERBEROS_USER=$(echo "$principal" | grep -o '^[^@]*')
     echo "$UTIL_KERBEROS_USER"
 }
@@ -207,6 +210,30 @@ function util_setup_spark_k8s() {
     source hadoop-setconf.sh hadoop-analytix 3.3 spark3
     # until IT changes this setting, we need to turn off info logs in this way. Don't try spark.sparkContext.setLogLevel('WARN'), doesn't work, since they are not spark logs but spark-submit logs.
     sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' "$SPARK_CONF_DIR"/log4j2.properties
+}
+
+#######################################
+# Run spark-submit and forward Yarn log lines to OpenTelemetry.
+# Requires OTEL_ENABLED=true and helpers/otel_yarn_logs.py in the image.
+# Preserves spark-submit exit code when pipefail is enabled.
+#######################################
+function util_spark_submit_with_otel_logs() {
+    if [ "${OTEL_ENABLED}" = "true" ] && [ "${OTEL_YARN_LOGS_ENABLED:-true}" = "true" ] \
+        && [ -f "/data/helpers/otel_yarn_logs.py" ]; then
+        set -o pipefail
+        # If SPARK_LOG_FILE is set, tee the output to the file and then pipe to the OpenTelemetry script
+        if [ -n "${SPARK_LOG_FILE:-}" ]; then
+            spark-submit "$@" 2>&1 | tee -a "$SPARK_LOG_FILE" | python3 /data/helpers/otel_yarn_logs.py
+        else
+            spark-submit "$@" 2>&1 | python3 /data/helpers/otel_yarn_logs.py
+        fi
+        return $?
+    fi
+    if [ -n "${SPARK_LOG_FILE:-}" ]; then
+        spark-submit "$@" 2>&1 | tee -a "$SPARK_LOG_FILE"
+        return $?
+    fi
+    spark-submit "$@" 2>&1
 }
 
 #######################################

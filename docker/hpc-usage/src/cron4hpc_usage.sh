@@ -82,8 +82,8 @@ if [[ "$IS_TEST" == 1 ]]; then
     py_input_args=(--start_date "$START_DATE" --end_date "$END_DATE" --output_dir "$OUTPUT_DIR" --url_prefix "$URL_PREFIX" --html_template "$HTML_TEMPLATE")
 fi
 
-# Run
-spark-submit "${spark_submit_args[@]}" "$script_dir/hpc_running_cores_and_corehr.py" "${py_input_args[@]}" 2>&1
+# Run (spark-submit output is forwarded to OTEL when enabled)
+util_spark_submit_with_otel_logs "${spark_submit_args[@]}" "$script_dir/hpc_running_cores_and_corehr.py" "${py_input_args[@]}"
 
 duration=$(($(date +%s) - START_TIME))
 util_cron_send_end "$myname" "1d" 0
