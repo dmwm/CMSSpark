@@ -32,12 +32,38 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from helpers import spark_utils
+import helpers.schemas as schemas
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 _VALID_DATE_FORMATS = ["%Y/%m"]
 _VALID_TYPES = ["pdf", "png", "jpg", "svg"]
+CMS_DBS_HDFS_FOLDER = "/project/awg/cms/dbs/PROD_GLOBAL"
+
+
+def load_dbs_tables(spark, fdate=None):
+    """Load DBS tables from the latest daily PROD_GLOBAL snapshot."""
+    if fdate is None:
+        fdate = datetime.today().strftime("%Y-%m-%d")
+    hdfs_paths = {
+        "DATASETS": f"{CMS_DBS_HDFS_FOLDER}/{fdate}/DATASETS/*.gz",
+        "BLOCKS": f"{CMS_DBS_HDFS_FOLDER}/{fdate}/BLOCKS/*.gz",
+        "FILES": f"{CMS_DBS_HDFS_FOLDER}/{fdate}/FILES/*.gz",
+        "DATA_TIERS": f"{CMS_DBS_HDFS_FOLDER}/{fdate}/DATA_TIERS/*.gz",
+    }
+    logger.info("Loading DBS tables from %s", fdate)
+    csvreader = (
+        spark.read.format("csv").option("nullValue", "null").option("mode", "FAILFAST")
+    )
+    ddf = csvreader.schema(schemas.schema_datasets()).load(hdfs_paths["DATASETS"])
+    ddf.registerTempTable("ddf")
+    bdf = csvreader.schema(schemas.schema_blocks()).load(hdfs_paths["BLOCKS"])
+    bdf.registerTempTable("bdf")
+    fdf = csvreader.schema(schemas.schema_files()).load(hdfs_paths["FILES"])
+    fdf.registerTempTable("fdf")
+    dtf = csvreader.schema(schemas.schema_data_tiers()).load(hdfs_paths["DATA_TIERS"])
+    dtf.registerTempTable("dtf")
+    return {"ddf": ddf, "bdf": bdf, "fdf": fdf, "dtf": dtf}
 
 
 def plot_tiers_month(data, colors_file=None, attributes=None):
@@ -139,7 +165,7 @@ def get_events_by_tier_month(spark, start_date, end_date,
         if remove_raw
         else "^$"
     )
-    tables = spark_utils.dbs_tables(spark, tables=["ddf", "bdf", "fdf", "dtf"])
+    tables = load_dbs_tables(spark)
     if verbose:
         logger.info("remove %s", remove_rlike)
         logger.info("skims %s", skims_rlike)
