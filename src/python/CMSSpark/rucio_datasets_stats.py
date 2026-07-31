@@ -36,6 +36,7 @@ from pyspark.sql.functions import (
     first as _first,
     hex as _hex,
     max as _max,
+    regexp_extract,
     split as _split,
     sum as _sum,
 )
@@ -66,6 +67,14 @@ IS_DATASET_LOCKED = {True: "locked", False: "dynamic"}
 
 # Null string type column values will be replaced with
 NULL_STR_TYPE_COLUMN_VALUE = "UNKNOWN"
+
+# Extracts the NanoAOD data tier version from the processed dataset part of a dataset name.
+# The optional letters cover campaign variants such as "NanoAODAPVv9".
+#   RunIISummer20UL18NanoAODv9-...      -> v9
+#   RunIISummer20UL16NanoAODAPVv9-...   -> v9
+#   Run3Summer22EENanoAODv12-...        -> v12
+#   Run2018A-UL2018_MiniAODv2_NanoAODv9 -> v9   (not v2)
+NANOAOD_VERSION_REGEX = r"NanoAOD[A-Za-z]*(v[0-9]+)"
 
 # To fill null columns of string type. Reason:
 #   {"find": "terms", "field": "data.data_tier_name"} kind of ES queries do not return Null values.
@@ -670,6 +679,14 @@ def create_main_df(spark, hdfs_paths, base_eos_dir, cmsspark_git_tag):
 
     # Add git tag for producer versioning
     df_main = df_main.withColumn("cmsspark_git_tag", lit(cmsspark_git_tag))
+
+    df_main = df_main.withColumn(
+        "dataset_version",
+        regexp_extract(_split(col("dataset"), "/").getItem(2), NANOAOD_VERSION_REGEX, 1),
+    ).withColumn(
+        "dataset_version",
+        when(col("dataset_version") != "", col("dataset_version")),
+    )
 
     # Fill null values of string type columns. Null values is hard to handle in ES queries.
     df_main = df_main.fillna(value=NULL_STR_TYPE_COLUMN_VALUE, subset=STR_TYPE_COLUMNS)
