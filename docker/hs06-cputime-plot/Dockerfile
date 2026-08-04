@@ -1,5 +1,5 @@
 # cmsmon-hs06-cputime-plot
-FROM registry.cern.ch/cmsmonitoring/cmsmon-spark:test
+FROM registry.cern.ch/cmsmonitoring/cmsmon-spark:v1.0.0
 LABEL maintainer="Carlos Borrajo Gomez carlos.borrajo.gomez@cern.ch"
 
 ENV WDIR=/opt/spark-apps/hs06-cputime-plot
