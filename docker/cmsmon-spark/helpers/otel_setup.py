@@ -20,7 +20,6 @@ import functools
 import logging
 import os
 import re
-import uuid
 from typing import Callable, Dict, Optional, Tuple, TypeVar
 
 import opentelemetry
@@ -37,7 +36,7 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.trace import Status, StatusCode, Tracer, format_trace_id
+from opentelemetry.trace import Status, StatusCode, Tracer
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,8 @@ DEFAULT_COLLECTOR_ENDPOINT = (
     "opentelemetry-collector.opentelemetry.svc.cluster.local:4317"
 )
 
-EXECUTION_ID = str(uuid.uuid4())
+# K8s CronJob name (metadata.labels['job-name']); same as working cmsmon-py helpers.
+JOB_ID = os.getenv("JOB_ID")
 _root_span_context = contextvars.ContextVar("root_span_context", default=None)
 
 _otel_initialized = False
@@ -109,33 +109,9 @@ _YARN_LEVEL_MAP = {
 }
 
 
-def get_execution_id() -> str:
-    """Return the current trace ID, or the process execution ID as fallback."""
-    span_context = trace.get_current_span().get_span_context()
-    if span_context and span_context.is_valid:
-        return format_trace_id(span_context.trace_id)
-    return EXECUTION_ID
-
-
 def get_root_span_context():
     """Return the root span context for the current execution context, if any."""
     return _root_span_context.get()
-
-
-class CustomLoggingHandler(LoggingHandler):
-    """LoggingHandler that adds stable service and execution attributes."""
-
-    def __init__(self, service_name: str, service_version: str, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._service_name = service_name
-        self._service_version = service_version
-
-    def _get_attributes(self, record: logging.LogRecord):
-        attributes = super()._get_attributes(record)
-        attributes["service.name"] = self._service_name
-        attributes["service.version"] = self._service_version
-        attributes["execution.id"] = get_execution_id()
-        return attributes
 
 
 class _LoggerMinLevelFilter(logging.Filter):
@@ -247,7 +223,7 @@ def setup_opentelemetry(force: bool = False) -> Tuple[Meter, Tracer]:
         {
             "service.name": config["service_name"],
             "service.version": config["service_version"],
-            "execution.id": EXECUTION_ID,
+            "job.id": JOB_ID,
         }
     )
 
@@ -294,22 +270,19 @@ def setup_opentelemetry(force: bool = False) -> Tuple[Meter, Tracer]:
 
         log_level = getattr(logging, config["log_level"], logging.INFO)
         root_logger = logging.getLogger()
-        otel_handler = CustomLoggingHandler(
-            service_name=config["service_name"],
-            service_version=config["service_version"],
+        otel_handler = LoggingHandler(
             logger_provider=logger_provider,
             level=log_level,
         )
         _attach_otel_log_filters(otel_handler, config)
-        root_logger.addHandler(otel_handler)
+        if not any(isinstance(h, LoggingHandler) for h in root_logger.handlers):
+            root_logger.addHandler(otel_handler)
         root_logger.setLevel(log_level)
 
         yarn_logger = logging.getLogger("cmsmon.yarn")
         yarn_logger.setLevel(logging.DEBUG)
         yarn_logger.propagate = False
-        yarn_otel_handler = CustomLoggingHandler(
-            service_name=config["service_name"],
-            service_version=config["service_version"],
+        yarn_otel_handler = LoggingHandler(
             logger_provider=logger_provider,
             level=logging.DEBUG,
         )
@@ -320,11 +293,11 @@ def setup_opentelemetry(force: bool = False) -> Tuple[Meter, Tracer]:
 
     _otel_initialized = True
     logger.warning(
-        "OpenTelemetry initialized: endpoint=%s, service=%s, version=%s, execution_id=%s",
+        "OpenTelemetry initialized: endpoint=%s, service=%s, version=%s, job_id=%s",
         grpc_endpoint,
         config["service_name"],
         config["service_version"],
-        EXECUTION_ID,
+        JOB_ID,
     )
 
     return meter, tracer
@@ -431,7 +404,6 @@ def trace_span(span_name: Optional[str] = None, **attributes: object) -> Callabl
                     root_token = _root_span_context.set(span.get_span_context())
                 for key, value in attributes.items():
                     span.set_attribute(key, value)
-                span.set_attribute("execution.id", get_execution_id())
                 try:
                     result = func(*args, **kwargs)
                     span.set_status(Status(StatusCode.OK))
