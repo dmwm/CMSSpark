@@ -93,6 +93,7 @@ STR_TYPE_COLUMNS = [
     "prep_id",
     "data_tier_id",
     "data_tier_name",
+    "dataset_version",
     "physics_group_id",
     "physics_group_name",
     "acquisition_era_id",
