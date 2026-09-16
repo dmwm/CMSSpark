@@ -715,37 +715,39 @@ def to_chunks(data, samples=1000):
         yield data[i : i + samples]
 
 
-def send_to_amq(data, confs, batch_size, topic, doc_type):
+def _make_amq(confs, topic):
+    """Build one StompAMQ7 client for a topic (reuse across chunks; send() reconnects)."""
+    return StompAMQ7(
+        username=confs.get("username", ""),
+        password=confs.get("password", ""),
+        producer=confs.get("producer"),
+        topic=topic,
+        key=confs.get("ckey"),
+        cert=confs.get("cert"),
+        validation_schema=None,
+        host_and_ports=[(confs["host"], int(confs["port"]))],
+        loglevel=logging.WARNING,
+        # Disable STOMP heartbeats for this fire-and-forget publisher.
+        send_timeout=0,
+        recv_timeout=0,
+    )
+
+
+def send_to_amq(data, confs, batch_size, topic, doc_type, stomp_amq=None):
     """Sends list of dictionary in chunks"""
     wait_seconds = 0.001
     if confs:
-        username = confs.get("username", "")
-        password = confs.get("password", "")
         producer = confs.get("producer")
         # To differentiate daily, weekly, monthly.
         if not doc_type:
             doc_type = confs.get("type", None)
         if not topic:
             topic = confs.get("topic")
-        host = confs.get("host")
-        port = int(confs.get("port"))
-        cert = confs.get("cert", None)
-        ckey = confs.get("ckey", None)
         # Slow: stomp_amq.send_as_tx(chunk, docType=doc_type)
-        #
+        # send() connects/disconnects internally; reuse one client across chunks.
+        if stomp_amq is None:
+            stomp_amq = _make_amq(confs, topic)
         for chunk in to_chunks(data, batch_size):
-            # After each stomp_amq.send, we need to reconnect with this way.
-            stomp_amq = StompAMQ7(
-                username=username,
-                password=password,
-                producer=producer,
-                topic=topic,
-                key=ckey,
-                cert=cert,
-                validation_schema=None,
-                host_and_ports=[(host, port)],
-                loglevel=logging.WARNING,
-            )
             messages = []
             for msg in chunk:
                 notif, _, _ = stomp_amq.make_notification(
@@ -753,7 +755,14 @@ def send_to_amq(data, confs, batch_size, topic, doc_type):
                 )
                 messages.append(notif)
             if messages:
-                stomp_amq.send(messages)
+                failed = stomp_amq.send(messages)
+                if failed:
+                    logger.warning(
+                        "Failed to send %s of %s messages to AMQ topic %s",
+                        len(failed),
+                        len(messages),
+                        topic,
+                    )
                 time.sleep(wait_seconds)
         time.sleep(1)
         logger.info("Message sending is finished")
@@ -806,6 +815,13 @@ def main(creds, base_eos_dir, amq_batch_size, fdate, test):
     )
     logger.info("Schema: %s", df._jdf.schema().treeString())
     total_size = 0
+    # One StompAMQ7 per topic; topic is bound on the client.
+    amq_clients = {}
+
+    def amq_for(topic):
+        if topic not in amq_clients:
+            amq_clients[topic] = _make_amq(creds_json, topic)
+        return amq_clients[topic]
 
     # Test. Sends only 10 documents to training or test AMQ topic
     if test:
@@ -825,6 +841,7 @@ def main(creds, base_eos_dir, amq_batch_size, fdate, test):
                 batch_size=amq_batch_size,
                 topic=None,
                 doc_type=None,
+                stomp_amq=amq_for(creds_json["topic"]),
             )
             logger.info(
                 "Test successfully finished and sent 10 documents to %s AMQ topic.",
@@ -848,6 +865,7 @@ def main(creds, base_eos_dir, amq_batch_size, fdate, test):
             batch_size=amq_batch_size,
             topic="/topic/cms.rucio.dailystats",
             doc_type="daily_stats",
+            stomp_amq=amq_for("/topic/cms.rucio.dailystats"),
         )
 
         # === WEEKLY : each Thursday ===
@@ -858,6 +876,7 @@ def main(creds, base_eos_dir, amq_batch_size, fdate, test):
                 batch_size=amq_batch_size,
                 topic="/topic/cms.rucio.weeklystats",
                 doc_type="weekly_stats",
+                stomp_amq=amq_for("/topic/cms.rucio.weeklystats"),
             )
 
         # === MONTHLY : each month's 3rd day ===
@@ -868,6 +887,7 @@ def main(creds, base_eos_dir, amq_batch_size, fdate, test):
                 batch_size=amq_batch_size,
                 topic="/topic/cms.rucio.monthlystats",
                 doc_type="monthly_stats",
+                stomp_amq=amq_for("/topic/cms.rucio.monthlystats"),
             )
 
         total_size += part_size
